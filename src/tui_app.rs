@@ -519,13 +519,12 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 let clicked_index = (row - 1) as usize;
                                 
                                 // Direct state update without async tasks
-                                if let Ok(mut state) = state.try_write() {
-                                    if clicked_index < state.service_types.len() {
+                                if let Ok(mut state) = state.try_write()
+                                    && clicked_index < state.service_types.len() {
                                         state.selected_type = clicked_index;
                                         state.selected_service = 0;
                                         state.services_scroll_offset = 0;
                                     }
-                                }
                             } else if column >= left_col_width && row > 1 && row < main_area_height {
                                 // Simple service selection - use top portion of right column
                                 let services_height = main_area_height / 2; // Roughly half for services
