@@ -506,28 +506,34 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                 Event::Mouse(MouseEvent { kind, column, row, .. }) => {
                     match kind {
                         MouseEventKind::Down(_) => {
-                            // Very simple mouse handling - just basic column detection
-                            // Avoid complex state operations that could block the event loop
-                            let _ = (column, row); // Suppress unused warnings for now
+                            // Simple, non-blocking mouse handling
+                            // Avoid terminal.size() and async tasks
+                            let terminal_width = 80; // Conservative assumption
+                            let terminal_height = 24; // Conservative assumption
+                            let left_col_width = terminal_width / 3; // ~33% for service types
+                            let main_area_height = terminal_height - 2; // Account for help line
                             
-                            // Simple approach: just move selection without complex calculations
-                            if column < 24 {
-                                // Left column - move to previous service type if possible
-                                let state_clone = state.clone();
-                                tokio::spawn(async move {
-                                    // Use a separate async task to avoid blocking the main event loop
-                                    if let Ok(mut state) = state_clone.try_write() {
-                                        if state.selected_type > 0 {
-                                            state.selected_type -= 1;
-                                            state.selected_service = 0;
-                                        }
+                            if column < left_col_width && row > 1 && row < main_area_height {
+                                // Simple service type selection
+                                // Account for top border (1 line)
+                                let clicked_index = (row - 1) as usize;
+                                
+                                // Direct state update without async tasks
+                                if let Ok(mut state) = state.try_write() {
+                                    if clicked_index < state.service_types.len() {
+                                        state.selected_type = clicked_index;
+                                        state.selected_service = 0;
+                                        state.services_scroll_offset = 0;
                                     }
-                                });
-                            } else if row < 12 {
-                                // Right column, top half - move to next service if possible
-                                let state_clone = state.clone();
-                                tokio::spawn(async move {
-                                    if let Ok(mut state) = state_clone.try_write() {
+                                }
+                            } else if column >= left_col_width && row > 1 && row < main_area_height {
+                                // Simple service selection - use top portion of right column
+                                let services_height = main_area_height / 2; // Roughly half for services
+                                
+                                if row < 1 + services_height {
+                                    let clicked_index = (row - 1) as usize;
+                                    
+                                    if let Ok(mut state) = state.try_write() {
                                         let selected_type = state.selected_type;
                                         let filtered_count = state
                                             .services
@@ -539,15 +545,16 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                     .is_none_or(|selected_type| service.service_type == *selected_type)
                                             })
                                             .count();
-                                        if state.selected_service < filtered_count.saturating_sub(1) {
-                                            state.selected_service += 1;
+                                        
+                                        if clicked_index < filtered_count {
+                                            state.selected_service = clicked_index;
                                         }
                                     }
-                                });
+                                }
                             }
                         }
                         MouseEventKind::Up(_) => {
-                            // Handle mouse up - could trigger service opening here
+                            // Mouse up - could add double-click detection here
                         }
                         _ => {}
                     }
