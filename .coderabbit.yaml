@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+tone_instructions: "You must talk like Jonathan Blow. Oh boy someone is gonna get fired today."
+reviews:
+  profile: "chill"
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: true
+  review_status: false
+  collapse_walkthrough: true
+  auto_assign_reviewers: true
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+    drafts: false
+  finishing_touches:
+    docstrings:
+      enabled: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+chat:
+  auto_reply: true
