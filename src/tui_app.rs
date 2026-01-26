@@ -424,14 +424,22 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                    KeyCode::Char('u') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                    KeyCode::Char('u')
+                        if key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                    {
                         let mut state = state.write().await;
                         if state.details_scroll_offset > 0 {
                             state.details_scroll_offset =
                                 state.details_scroll_offset.saturating_sub(5);
                         }
                     }
-                    KeyCode::Char('d') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                    KeyCode::Char('d')
+                        if key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                    {
                         let mut state = state.write().await;
                         state.details_scroll_offset += 5;
                     }
