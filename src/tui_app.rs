@@ -192,29 +192,37 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
 
     // Services list - use cached filtered services
     let selected_service_idx = app_state.selected_service;
-    let filtered_indices: Vec<usize> = app_state.get_filtered_services().to_vec();
-    let services_ref = &app_state.services;
+    let services_clone = app_state.services.clone();
+    let filtered_indices = app_state.get_filtered_services();
 
     let service_items: Vec<ListItem> = filtered_indices
         .iter()
         .enumerate()
         .map(|(i, &service_idx)| {
-            let service = &services_ref[service_idx];
+            let service = &services_clone[service_idx];
             let style = if i == selected_service_idx {
                 Style::default().bg(Color::DarkGray).fg(Color::White)
             } else {
                 Style::default()
             };
-
-            // Remove .local. suffix from display name
-            let display_name = service.name.trim_end_matches(".local.");
-            let content = format!(
-                "{}\n  {}:{}",
-                display_name,
-                service.addrs.first().unwrap_or(&"Unknown".to_string()),
-                service.port
-            );
-            ListItem::new(Line::from(Span::styled(content, style)))
+            // Remove _ prefix, .local. suffix, and underscore from _tcp/_udp
+            let display_name = service
+                .name
+                .trim_start_matches('_')
+                .trim_end_matches(".local.")
+                .replace("._tcp", ".tcp")
+                .replace("._udp", ".udp");
+            let display_text = format!("{} ({})", display_name, service.name);
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("{} ", service.port),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(display_text, Style::default()),
+            ]))
+            .style(style)
         })
         .collect();
 
@@ -242,12 +250,12 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
 
     // Service details - use cached filtered services
     let selected_service_idx = app_state.selected_service;
-    let filtered_indices: Vec<usize> = app_state.get_filtered_services().to_vec();
-    let services_ref = &app_state.services;
+    let services_clone = app_state.services.clone();
+    let filtered_indices = app_state.get_filtered_services();
 
     let selected_service = filtered_indices
         .get(selected_service_idx)
-        .map(|&idx| &services_ref[idx]);
+        .map(|&idx| &services_clone[idx]);
 
     if let Some(service) = selected_service {
         let subtype_text = service
