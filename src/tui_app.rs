@@ -1,7 +1,5 @@
 use crossterm::{
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEvent, MouseEventKind,
-    },
+    event::{self, Event, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -37,10 +35,12 @@ struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
     selected_service: usize,
-    selected_type: usize,
+    selected_type: Option<usize>,
     types_scroll_offset: usize,
     services_scroll_offset: usize,
     details_scroll_offset: usize,
+    visible_types: usize,
+    visible_services: usize,
 }
 
 impl AppState {
@@ -49,34 +49,68 @@ impl AppState {
             services: Vec::new(),
             service_types: Vec::new(),
             selected_service: 0,
-            selected_type: 0,
+            selected_type: None, // None indicates "all services"
             types_scroll_offset: 0,
             services_scroll_offset: 0,
             details_scroll_offset: 0,
+            visible_types: 0,
+            visible_services: 0,
         }
+    }
+
+    fn filter_service(&self, service: &ServiceEntry) -> bool {
+        self.selected_type.is_none()
+            || self.service_types.is_empty()
+            || self
+                .selected_type
+                .and_then(|idx| self.service_types.get(idx))
+                .map(|selected_type| service.service_type == *selected_type)
+                .unwrap_or(true)
     }
 }
 
-fn ui(f: &mut Frame, app_state: &AppState) {
+fn ui(f: &mut Frame, app_state: &mut AppState) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(f.area());
 
+    // Calculate visible item counts
+    let visible_types = (chunks[0].height as usize).saturating_sub(2); // Account for borders
+    let services_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(chunks[1]);
+    let visible_services = (services_chunks[0].height as usize).saturating_sub(2); // Account for borders
+
+    // Update state with current visible counts
+    app_state.visible_types = visible_types;
+    app_state.visible_services = visible_services;
+
     // Service types list
-    let type_items: Vec<ListItem> = app_state
-        .service_types
-        .iter()
-        .enumerate()
-        .map(|(i, service_type)| {
-            let style = if i == app_state.selected_type {
-                Style::default().bg(Color::DarkGray).fg(Color::White)
-            } else {
-                Style::default()
-            };
-            ListItem::new(Line::from(Span::styled(service_type.clone(), style)))
-        })
-        .collect();
+    let mut type_items = vec![ListItem::new(Line::from(Span::styled(
+        "All Services".to_string(),
+        if app_state.selected_type.is_none() {
+            Style::default().bg(Color::DarkGray).fg(Color::White)
+        } else {
+            Style::default()
+        },
+    )))];
+
+    type_items.extend(
+        app_state
+            .service_types
+            .iter()
+            .enumerate()
+            .map(|(i, service_type)| {
+                let style = if app_state.selected_type == Some(i) {
+                    Style::default().bg(Color::DarkGray).fg(Color::White)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(Line::from(Span::styled(service_type.clone(), style)))
+            }),
+    );
 
     let visible_types: Vec<ListItem> = type_items
         .into_iter()
@@ -93,26 +127,20 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut list_state = ListState::default();
-    list_state.select(Some(
-        app_state.selected_type - app_state.types_scroll_offset,
-    ));
+    let display_index = match app_state.selected_type {
+        None => 0,
+        Some(idx) => idx + 1,
+    }
+    .saturating_sub(app_state.types_scroll_offset);
+    list_state.select(Some(display_index));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
     // Services list
-    let services_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(chunks[1]);
 
     let service_items: Vec<ListItem> = app_state
         .services
         .iter()
-        .filter(|service| {
-            app_state
-                .service_types
-                .get(app_state.selected_type)
-                .is_none_or(|selected_type| service.service_type == *selected_type)
-        })
+        .filter(|service| app_state.filter_service(service))
         .enumerate()
         .map(|(i, service)| {
             let style = if i == app_state.selected_service {
@@ -148,7 +176,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
 
     let mut services_list_state = ListState::default();
     services_list_state.select(Some(
-        app_state.selected_service - app_state.services_scroll_offset,
+        app_state
+            .selected_service
+            .saturating_sub(app_state.services_scroll_offset),
     ));
     f.render_stateful_widget(services_list, services_chunks[0], &mut services_list_state);
 
@@ -156,12 +186,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     let filtered_services: Vec<_> = app_state
         .services
         .iter()
-        .filter(|service| {
-            app_state
-                .service_types
-                .get(app_state.selected_type)
-                .is_none_or(|selected_type| service.service_type == *selected_type)
-        })
+        .filter(|service| app_state.filter_service(service))
         .collect();
 
     let selected_service = filtered_services.get(app_state.selected_service);
@@ -238,7 +263,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     }
 
     // Help text at the bottom
-    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | g/G/Home/End for details | Click to select";
+    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | g/G/Home/End for details";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
@@ -253,7 +278,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     // Setup terminal for full TUI
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -343,6 +368,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                         state.services.push(entry);
                                     }
 
+                                    // Sort services by hostname (name)
+                                    state.services.sort_by(|a, b| a.name.cmp(&b.name));
+
                                     let _ = update_sender_inner.send("service_updated".to_string());
                                 }
                             }
@@ -368,8 +396,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
         if event::poll(Duration::from_millis(50))? {
             let event = event::read()?;
 
-            match event {
-                Event::Key(key) => match key.code {
+            if let Event::Key(key) = event {
+                match key.code {
                     KeyCode::Char('q') => break Ok(()),
                     KeyCode::Char('k') | KeyCode::Up => {
                         let mut state = state.write().await;
@@ -386,41 +414,66 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         let filtered_count = state
                             .services
                             .iter()
-                            .filter(|service| {
-                                state.service_types.get(state.selected_type).is_none_or(
-                                    |selected_type| service.service_type == *selected_type,
-                                )
-                            })
+                            .filter(|service| state.filter_service(service))
                             .count();
                         if state.selected_service < filtered_count.saturating_sub(1) {
                             state.selected_service += 1;
-                            // Update scroll offset for services list (assuming max visible items around 10)
-                            if state.selected_service >= state.services_scroll_offset + 10 {
-                                state.services_scroll_offset = state.selected_service - 9;
+                            // Update scroll offset for services list using actual visible count
+                            if state.visible_services > 0
+                                && state.selected_service
+                                    >= state.services_scroll_offset + state.visible_services
+                            {
+                                state.services_scroll_offset =
+                                    state.selected_service - state.visible_services + 1;
                             }
                         }
                     }
                     KeyCode::Char('h') | KeyCode::Left => {
                         let mut state = state.write().await;
-                        if state.selected_type > 0 {
-                            state.selected_type -= 1;
-                            state.selected_service = 0;
-                            state.services_scroll_offset = 0;
-                            // Update scroll offset for types list
-                            if state.selected_type < state.types_scroll_offset {
-                                state.types_scroll_offset = state.selected_type;
+                        match state.selected_type {
+                            None => {
+                                // Already at "All Services", can't go further left
+                            }
+                            Some(0) => {
+                                // Move from first service type to "All Services"
+                                state.selected_type = None;
+                                state.selected_service = 0;
+                                state.services_scroll_offset = 0;
+                            }
+                            Some(idx) => {
+                                // Move to previous service type
+                                state.selected_type = Some(idx - 1);
+                                state.selected_service = 0;
+                                state.services_scroll_offset = 0;
+                                // Update scroll offset for types list using actual visible count
+                                if idx - 1 < state.types_scroll_offset {
+                                    state.types_scroll_offset = idx - 1;
+                                }
                             }
                         }
                     }
                     KeyCode::Char('l') | KeyCode::Right => {
                         let mut state = state.write().await;
-                        if state.selected_type < state.service_types.len().saturating_sub(1) {
-                            state.selected_type += 1;
-                            state.selected_service = 0;
-                            state.services_scroll_offset = 0;
-                            // Update scroll offset for types list (assuming max visible items around 15)
-                            if state.selected_type >= state.types_scroll_offset + 15 {
-                                state.types_scroll_offset = state.selected_type - 14;
+                        match state.selected_type {
+                            None => {
+                                // Move from "All Services" to first service type (index 0)
+                                state.selected_type = Some(0);
+                                state.selected_service = 0;
+                                state.services_scroll_offset = 0;
+                            }
+                            Some(idx) if idx < state.service_types.len().saturating_sub(1) => {
+                                state.selected_type = Some(idx + 1);
+                                state.selected_service = 0;
+                                state.services_scroll_offset = 0;
+                                // Update scroll offset for types list using actual visible count
+                                if state.visible_types > 0
+                                    && idx + 1 >= state.types_scroll_offset + state.visible_types
+                                {
+                                    state.types_scroll_offset = idx + 1 - state.visible_types + 1;
+                                }
+                            }
+                            Some(_) => {
+                                // Already at last service type, can't go further right
                             }
                         }
                     }
@@ -474,85 +527,22 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     _ => {}
-                },
-                Event::Mouse(MouseEvent {
-                    kind, column, row, ..
-                }) => {
-                    match kind {
-                        MouseEventKind::Down(_) => {
-                            // Simple, non-blocking mouse handling
-                            // Avoid terminal.size() and async tasks
-                            let terminal_width = 80; // Conservative assumption
-                            let terminal_height = 24; // Conservative assumption
-                            let left_col_width = terminal_width / 3; // ~33% for service types
-                            let main_area_height = terminal_height - 2; // Account for help line
-
-                            if column < left_col_width && row > 1 && row < main_area_height {
-                                // Simple service type selection
-                                // Account for top border (1 line)
-                                let clicked_index = (row - 1) as usize;
-
-                                // Direct state update without async tasks
-                                if let Ok(mut state) = state.try_write()
-                                    && clicked_index < state.service_types.len()
-                                {
-                                    state.selected_type = clicked_index;
-                                    state.selected_service = 0;
-                                    state.services_scroll_offset = 0;
-                                }
-                            } else if column >= left_col_width && row > 1 && row < main_area_height
-                            {
-                                // Simple service selection - use top portion of right column
-                                let services_height = main_area_height / 2; // Roughly half for services
-
-                                if row < 1 + services_height {
-                                    let clicked_index = (row - 1) as usize;
-
-                                    if let Ok(mut state) = state.try_write() {
-                                        let selected_type = state.selected_type;
-                                        let filtered_count = state
-                                            .services
-                                            .iter()
-                                            .filter(|service| {
-                                                state.service_types.get(selected_type).is_none_or(
-                                                    |selected_type| {
-                                                        service.service_type == *selected_type
-                                                    },
-                                                )
-                                            })
-                                            .count();
-
-                                        if clicked_index < filtered_count {
-                                            state.selected_service = clicked_index;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        MouseEventKind::Up(_) => {
-                            // Mouse up - could add double-click detection here
-                        }
-                        _ => {}
-                    }
                 }
-                _ => {}
             }
         }
 
         // Draw UI
-        let state = state.read().await.clone();
-        terminal.draw(|f| ui(f, &state))?;
+        {
+            let mut state = state.write().await;
+            terminal.draw(|f| ui(f, &mut state))?;
+        }
 
         tick.tick().await;
     };
 
     // Restore terminal
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen,)?;
     terminal.show_cursor()?;
 
     result
