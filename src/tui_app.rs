@@ -41,6 +41,8 @@ struct AppState {
     details_scroll_offset: usize,
     visible_types: usize,
     visible_services: usize,
+    cached_filtered_count: usize,
+    cache_dirty: bool,
 }
 
 impl AppState {
@@ -55,6 +57,8 @@ impl AppState {
             details_scroll_offset: 0,
             visible_types: 0,
             visible_services: 0,
+            cached_filtered_count: 0,
+            cache_dirty: true,
         }
     }
 
@@ -67,6 +71,26 @@ impl AppState {
                 .map(|selected_type| service.service_type == *selected_type)
                 .unwrap_or(true)
     }
+
+    fn update_filtered_cache(&mut self) {
+        if self.cache_dirty {
+            self.cached_filtered_count = self
+                .services
+                .iter()
+                .filter(|service| self.filter_service(service))
+                .count();
+            self.cache_dirty = false;
+        }
+    }
+
+    fn mark_cache_dirty(&mut self) {
+        self.cache_dirty = true;
+    }
+
+    fn get_filtered_count(&mut self) -> usize {
+        self.update_filtered_cache();
+        self.cached_filtered_count
+    }
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
@@ -74,7 +98,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(f.area());
-
+    
     // Calculate visible item counts
     let visible_types = (chunks[0].height as usize).saturating_sub(2); // Account for borders
     let services_chunks = Layout::default()
@@ -82,7 +106,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
     let visible_services = (services_chunks[0].height as usize).saturating_sub(2); // Account for borders
-
+    
     // Update state with current visible counts
     app_state.visible_types = visible_types;
     app_state.visible_services = visible_services;
@@ -108,17 +132,23 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
                 } else {
                     Style::default()
                 };
-                ListItem::new(Line::from(Span::styled(service_type.clone(), style)))
+                // Remove _ prefix, .local. suffix, and underscore from _tcp/_udp
+                let display_type = service_type
+                    .trim_start_matches('_')
+                    .trim_end_matches(".local.")
+                    .replace("._tcp", ".tcp")
+                    .replace("._udp", ".udp");
+                ListItem::new(Line::from(Span::styled(display_type.to_string(), style)))
             }),
     );
 
-    let visible_types: Vec<ListItem> = type_items
+    let visible_type_items: Vec<ListItem> = type_items
         .into_iter()
         .skip(app_state.types_scroll_offset)
-        .take(chunks[0].height as usize - 2) // Account for borders
+        .take(visible_types)
         .collect();
 
-    let types_list = List::new(visible_types)
+    let types_list = List::new(visible_type_items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -129,14 +159,12 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     let mut list_state = ListState::default();
     let display_index = match app_state.selected_type {
         None => 0,
-        Some(idx) => idx + 1,
-    }
-    .saturating_sub(app_state.types_scroll_offset);
+        Some(idx) => idx + 1
+    }.saturating_sub(app_state.types_scroll_offset);
     list_state.select(Some(display_index));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
     // Services list
-
     let service_items: Vec<ListItem> = app_state
         .services
         .iter()
@@ -149,24 +177,25 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
                 Style::default()
             };
 
+            // Remove .local. suffix from display name
+            let display_name = service.name.trim_end_matches(".local.");
             let content = format!(
-                "{}\n  {}:{}\n  {}",
-                service.name,
+                "{}\n  {}:{}",
+                display_name,
                 service.addrs.first().unwrap_or(&"Unknown".to_string()),
-                service.port,
-                service.domain
+                service.port
             );
             ListItem::new(Line::from(Span::styled(content, style)))
         })
         .collect();
 
-    let visible_services: Vec<ListItem> = service_items
+    let visible_service_items: Vec<ListItem> = service_items
         .into_iter()
         .skip(app_state.services_scroll_offset)
-        .take(services_chunks[0].height as usize - 2) // Account for borders
+        .take(visible_services)
         .collect();
 
-    let services_list = List::new(visible_services)
+    let services_list = List::new(visible_service_items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -176,9 +205,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
 
     let mut services_list_state = ListState::default();
     services_list_state.select(Some(
-        app_state
-            .selected_service
-            .saturating_sub(app_state.services_scroll_offset),
+        app_state.selected_service.saturating_sub(app_state.services_scroll_offset),
     ));
     f.render_stateful_widget(services_list, services_chunks[0], &mut services_list_state);
 
@@ -305,6 +332,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     if !state.service_types.contains(&service_type) {
                         state.service_types.push(service_type.clone());
                         state.service_types.sort();
+                        // Mark cache as dirty since service types changed
+                        state.mark_cache_dirty();
                     }
                 }
 
@@ -370,6 +399,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
                                     // Sort services by hostname (name)
                                     state.services.sort_by(|a, b| a.name.cmp(&b.name));
+                                    
+                                    // Mark cache as dirty since services changed
+                                    state.mark_cache_dirty();
 
                                     let _ = update_sender_inner.send("service_updated".to_string());
                                 }
@@ -411,20 +443,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     KeyCode::Char('j') | KeyCode::Down => {
                         let mut state = state.write().await;
-                        let filtered_count = state
-                            .services
-                            .iter()
-                            .filter(|service| state.filter_service(service))
-                            .count();
+                        let filtered_count = state.get_filtered_count();
                         if state.selected_service < filtered_count.saturating_sub(1) {
                             state.selected_service += 1;
                             // Update scroll offset for services list using actual visible count
-                            if state.visible_services > 0
-                                && state.selected_service
-                                    >= state.services_scroll_offset + state.visible_services
-                            {
-                                state.services_scroll_offset =
-                                    state.selected_service - state.visible_services + 1;
+                            if state.visible_services > 0 
+                                && state.selected_service >= state.services_scroll_offset + state.visible_services {
+                                state.services_scroll_offset = state.selected_service - state.visible_services + 1;
                             }
                         }
                     }
@@ -439,6 +464,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 state.selected_type = None;
                                 state.selected_service = 0;
                                 state.services_scroll_offset = 0;
+                                // Mark cache as dirty since filter changed
+                                state.mark_cache_dirty();
                             }
                             Some(idx) => {
                                 // Move to previous service type
@@ -449,6 +476,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 if idx - 1 < state.types_scroll_offset {
                                     state.types_scroll_offset = idx - 1;
                                 }
+                                // Mark cache as dirty since filter changed
+                                state.mark_cache_dirty();
                             }
                         }
                     }
@@ -460,17 +489,20 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 state.selected_type = Some(0);
                                 state.selected_service = 0;
                                 state.services_scroll_offset = 0;
+                                // Mark cache as dirty since filter changed
+                                state.mark_cache_dirty();
                             }
                             Some(idx) if idx < state.service_types.len().saturating_sub(1) => {
                                 state.selected_type = Some(idx + 1);
                                 state.selected_service = 0;
                                 state.services_scroll_offset = 0;
                                 // Update scroll offset for types list using actual visible count
-                                if state.visible_types > 0
-                                    && idx + 1 >= state.types_scroll_offset + state.visible_types
-                                {
+                                if state.visible_types > 0 
+                                    && idx + 1 >= state.types_scroll_offset + state.visible_types {
                                     state.types_scroll_offset = idx + 1 - state.visible_types + 1;
                                 }
+                                // Mark cache as dirty since filter changed
+                                state.mark_cache_dirty();
                             }
                             Some(_) => {
                                 // Already at last service type, can't go further right
