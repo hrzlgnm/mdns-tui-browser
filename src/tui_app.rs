@@ -98,7 +98,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(f.area());
-    
+
     // Calculate visible item counts
     let visible_types = (chunks[0].height as usize).saturating_sub(2); // Account for borders
     let services_chunks = Layout::default()
@@ -106,7 +106,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
     let visible_services = (services_chunks[0].height as usize).saturating_sub(2); // Account for borders
-    
+
     // Update state with current visible counts
     app_state.visible_types = visible_types;
     app_state.visible_services = visible_services;
@@ -159,8 +159,9 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     let mut list_state = ListState::default();
     let display_index = match app_state.selected_type {
         None => 0,
-        Some(idx) => idx + 1
-    }.saturating_sub(app_state.types_scroll_offset);
+        Some(idx) => idx + 1,
+    }
+    .saturating_sub(app_state.types_scroll_offset);
     list_state.select(Some(display_index));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
@@ -205,7 +206,9 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
 
     let mut services_list_state = ListState::default();
     services_list_state.select(Some(
-        app_state.selected_service.saturating_sub(app_state.services_scroll_offset),
+        app_state
+            .selected_service
+            .saturating_sub(app_state.services_scroll_offset),
     ));
     f.render_stateful_widget(services_list, services_chunks[0], &mut services_list_state);
 
@@ -399,7 +402,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
                                     // Sort services by hostname (name)
                                     state.services.sort_by(|a, b| a.name.cmp(&b.name));
-                                    
+
                                     // Mark cache as dirty since services changed
                                     state.mark_cache_dirty();
 
@@ -447,9 +450,12 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         if state.selected_service < filtered_count.saturating_sub(1) {
                             state.selected_service += 1;
                             // Update scroll offset for services list using actual visible count
-                            if state.visible_services > 0 
-                                && state.selected_service >= state.services_scroll_offset + state.visible_services {
-                                state.services_scroll_offset = state.selected_service - state.visible_services + 1;
+                            if state.visible_services > 0
+                                && state.selected_service
+                                    >= state.services_scroll_offset + state.visible_services
+                            {
+                                state.services_scroll_offset =
+                                    state.selected_service - state.visible_services + 1;
                             }
                         }
                     }
@@ -497,8 +503,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 state.selected_service = 0;
                                 state.services_scroll_offset = 0;
                                 // Update scroll offset for types list using actual visible count
-                                if state.visible_types > 0 
-                                    && idx + 1 >= state.types_scroll_offset + state.visible_types {
+                                if state.visible_types > 0
+                                    && idx + 1 >= state.types_scroll_offset + state.visible_types
+                                {
                                     state.types_scroll_offset = idx + 1 - state.visible_types + 1;
                                 }
                                 // Mark cache as dirty since filter changed
