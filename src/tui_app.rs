@@ -238,7 +238,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     }
 
     // Help text at the bottom
-    let help_text = "Press 'q' to quit | Arrow keys to navigate | PageUp/PageDown to scroll details | Click to select";
+    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | gg/G/Home/End for details | Click to select";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
@@ -371,7 +371,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 Event::Key(key) => match key.code {
                     KeyCode::Char('q') => break Ok(()),
-                    KeyCode::Up => {
+                    KeyCode::Char('k') | KeyCode::Up => {
                         let mut state = state.write().await;
                         if state.selected_service > 0 {
                             state.selected_service -= 1;
@@ -381,7 +381,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                    KeyCode::Down => {
+                    KeyCode::Char('j') | KeyCode::Down => {
                         let mut state = state.write().await;
                         let filtered_count = state
                             .services
@@ -400,7 +400,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                    KeyCode::Left => {
+                    KeyCode::Char('h') | KeyCode::Left => {
                         let mut state = state.write().await;
                         if state.selected_type > 0 {
                             state.selected_type -= 1;
@@ -412,7 +412,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                    KeyCode::Right => {
+                    KeyCode::Char('l') | KeyCode::Right => {
                         let mut state = state.write().await;
                         if state.selected_type < state.service_types.len().saturating_sub(1) {
                             state.selected_type += 1;
@@ -424,16 +424,36 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                    KeyCode::PageUp => {
+                    KeyCode::Char('u') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                         let mut state = state.write().await;
                         if state.details_scroll_offset > 0 {
                             state.details_scroll_offset =
                                 state.details_scroll_offset.saturating_sub(5);
                         }
                     }
-                    KeyCode::PageDown => {
+                    KeyCode::Char('d') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                         let mut state = state.write().await;
                         state.details_scroll_offset += 5;
+                    }
+                    KeyCode::PageUp | KeyCode::Char('b') => {
+                        let mut state = state.write().await;
+                        if state.details_scroll_offset > 0 {
+                            state.details_scroll_offset =
+                                state.details_scroll_offset.saturating_sub(5);
+                        }
+                    }
+                    KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
+                        let mut state = state.write().await;
+                        state.details_scroll_offset += 5;
+                    }
+                    KeyCode::Char('g') => {
+                        let mut state = state.write().await;
+                        state.details_scroll_offset = 0;
+                    }
+                    KeyCode::Char('G') => {
+                        let mut state = state.write().await;
+                        // Set to a high value, the UI will clamp it
+                        state.details_scroll_offset = 1000;
                     }
                     KeyCode::Home => {
                         let mut state = state.write().await;
