@@ -41,13 +41,13 @@ struct AppState {
     details_scroll_offset: usize,
     visible_types: usize,
     visible_services: usize,
-    cached_filtered_count: usize,
+    cached_filtered_services: Vec<usize>, // Cache indices of filtered services
     cache_dirty: bool,
 }
 
 impl AppState {
     fn new() -> Self {
-        Self {
+        let mut state = Self {
             services: Vec::new(),
             service_types: Vec::new(),
             selected_service: 0,
@@ -57,28 +57,37 @@ impl AppState {
             details_scroll_offset: 0,
             visible_types: 0,
             visible_services: 0,
-            cached_filtered_count: 0,
+            cached_filtered_services: Vec::new(),
             cache_dirty: true,
-        }
+        };
+        state.validate_selected_type();
+        state
     }
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
-        self.selected_type.is_none()
-            || self.service_types.is_empty()
-            || self
-                .selected_type
-                .and_then(|idx| self.service_types.get(idx))
-                .map(|selected_type| service.service_type == *selected_type)
-                .unwrap_or(true)
+        if self.selected_type.is_none() {
+            return true; // "All Services" - show everything
+        }
+        if let Some(idx) = self.selected_type {
+            if let Some(selected_type) = self.service_types.get(idx) {
+                service.service_type == *selected_type
+            } else {
+                // This should never happen if state management is correct
+                false
+            }
+        } else {
+            false
+        }
     }
 
     fn update_filtered_cache(&mut self) {
         if self.cache_dirty {
-            self.cached_filtered_count = self
-                .services
-                .iter()
-                .filter(|service| self.filter_service(service))
-                .count();
+            self.cached_filtered_services.clear();
+            for (idx, service) in self.services.iter().enumerate() {
+                if self.filter_service(service) {
+                    self.cached_filtered_services.push(idx);
+                }
+            }
             self.cache_dirty = false;
         }
     }
@@ -87,13 +96,29 @@ impl AppState {
         self.cache_dirty = true;
     }
 
-    fn get_filtered_count(&mut self) -> usize {
+    fn validate_selected_type(&mut self) {
+        // Ensure selected_type is always valid
+        if let Some(idx) = self.selected_type {
+            if idx >= self.service_types.len() {
+                if self.service_types.is_empty() {
+                    self.selected_type = None;
+                } else {
+                    self.selected_type = Some(self.service_types.len().saturating_sub(1));
+                }
+            }
+        }
+    }
+
+    fn get_filtered_services(&mut self) -> Vec<usize> {
         self.update_filtered_cache();
-        self.cached_filtered_count
+        self.cached_filtered_services.clone()
     }
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
+    // Ensure state is consistent before rendering
+    app_state.validate_selected_type();
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
@@ -165,14 +190,20 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     list_state.select(Some(display_index));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
-    // Services list
-    let service_items: Vec<ListItem> = app_state
-        .services
+    // Services list - use cached filtered services
+    let (filtered_indices, selected_service_idx) = {
+        let filtered = app_state.get_filtered_services();
+        let selected = app_state.selected_service;
+        (filtered, selected)
+    };
+    let services_ref = &app_state.services;
+
+    let service_items: Vec<ListItem> = filtered_indices
         .iter()
-        .filter(|service| app_state.filter_service(service))
         .enumerate()
-        .map(|(i, service)| {
-            let style = if i == app_state.selected_service {
+        .map(|(i, &service_idx)| {
+            let service = &services_ref[service_idx];
+            let style = if i == selected_service_idx {
                 Style::default().bg(Color::DarkGray).fg(Color::White)
             } else {
                 Style::default()
@@ -212,14 +243,17 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     ));
     f.render_stateful_widget(services_list, services_chunks[0], &mut services_list_state);
 
-    // Service details
-    let filtered_services: Vec<_> = app_state
-        .services
-        .iter()
-        .filter(|service| app_state.filter_service(service))
-        .collect();
+    // Service details - use cached filtered services
+    let (filtered_indices, selected_service_idx) = {
+        let filtered = app_state.get_filtered_services();
+        let selected = app_state.selected_service;
+        (filtered, selected)
+    };
+    let services_ref = &app_state.services;
 
-    let selected_service = filtered_services.get(app_state.selected_service);
+    let selected_service = filtered_indices
+        .get(selected_service_idx)
+        .map(|&idx| &services_ref[idx]);
 
     if let Some(service) = selected_service {
         let subtype_text = service
@@ -335,6 +369,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     if !state.service_types.contains(&service_type) {
                         state.service_types.push(service_type.clone());
                         state.service_types.sort();
+                        // Validate selected_type in case it's now out of bounds
+                        state.validate_selected_type();
                         // Mark cache as dirty since service types changed
                         state.mark_cache_dirty();
                     }
@@ -446,8 +482,11 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     KeyCode::Char('j') | KeyCode::Down => {
                         let mut state = state.write().await;
-                        let filtered_count = state.get_filtered_count();
-                        if state.selected_service < filtered_count.saturating_sub(1) {
+                        let filtered_len = {
+                            let filtered = state.get_filtered_services();
+                            filtered.len()
+                        };
+                        if state.selected_service < filtered_len.saturating_sub(1) {
                             state.selected_service += 1;
                             // Update scroll offset for services list using actual visible count
                             if state.visible_services > 0
@@ -492,11 +531,15 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         match state.selected_type {
                             None => {
                                 // Move from "All Services" to first service type (index 0)
-                                state.selected_type = Some(0);
-                                state.selected_service = 0;
-                                state.services_scroll_offset = 0;
-                                // Mark cache as dirty since filter changed
-                                state.mark_cache_dirty();
+                                // Only if service_types is not empty
+                                if !state.service_types.is_empty() {
+                                    state.selected_type = Some(0);
+                                    state.selected_service = 0;
+                                    state.services_scroll_offset = 0;
+                                    // Mark cache as dirty since filter changed
+                                    state.mark_cache_dirty();
+                                    state.validate_selected_type();
+                                }
                             }
                             Some(idx) if idx < state.service_types.len().saturating_sub(1) => {
                                 state.selected_type = Some(idx + 1);
