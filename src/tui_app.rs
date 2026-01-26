@@ -389,133 +389,130 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
         if event::poll(Duration::from_millis(50))? {
             let event = event::read()?;
 
-            match event {
-                Event::Key(key) => match key.code {
-                    KeyCode::Char('q') => break Ok(()),
-                    KeyCode::Char('k') | KeyCode::Up => {
-                        let mut state = state.write().await;
-                        if state.selected_service > 0 {
-                            state.selected_service -= 1;
-                            // Update scroll offset for services list
-                            if state.selected_service < state.services_scroll_offset {
-                                state.services_scroll_offset = state.selected_service;
-                            }
+            if let Event::Key(key) = event { match key.code {
+                KeyCode::Char('q') => break Ok(()),
+                KeyCode::Char('k') | KeyCode::Up => {
+                    let mut state = state.write().await;
+                    if state.selected_service > 0 {
+                        state.selected_service -= 1;
+                        // Update scroll offset for services list
+                        if state.selected_service < state.services_scroll_offset {
+                            state.services_scroll_offset = state.selected_service;
                         }
                     }
-                    KeyCode::Char('j') | KeyCode::Down => {
-                        let mut state = state.write().await;
-                        let filtered_count = state
-                            .services
-                            .iter()
-                            .filter(|service| {
-                                state.selected_type == usize::MAX
-                                    || state.service_types.is_empty()
-                                    || state
-                                        .service_types
-                                        .get(state.selected_type)
-                                        .map(|selected_type| service.service_type == *selected_type)
-                                        .unwrap_or(true)
-                            })
-                            .count();
-                        if state.selected_service < filtered_count.saturating_sub(1) {
-                            state.selected_service += 1;
-                            // Update scroll offset for services list (assuming max visible items around 10)
-                            if state.selected_service >= state.services_scroll_offset + 10 {
-                                state.services_scroll_offset = state.selected_service - 9;
-                            }
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    let mut state = state.write().await;
+                    let filtered_count = state
+                        .services
+                        .iter()
+                        .filter(|service| {
+                            state.selected_type == usize::MAX
+                                || state.service_types.is_empty()
+                                || state
+                                    .service_types
+                                    .get(state.selected_type)
+                                    .map(|selected_type| service.service_type == *selected_type)
+                                    .unwrap_or(true)
+                        })
+                        .count();
+                    if state.selected_service < filtered_count.saturating_sub(1) {
+                        state.selected_service += 1;
+                        // Update scroll offset for services list (assuming max visible items around 10)
+                        if state.selected_service >= state.services_scroll_offset + 10 {
+                            state.services_scroll_offset = state.selected_service - 9;
                         }
                     }
-                    KeyCode::Char('h') | KeyCode::Left => {
-                        let mut state = state.write().await;
-                        if state.selected_type == 0 {
-                            // Move from first service type to "All Services"
-                            state.selected_type = usize::MAX;
-                            state.selected_service = 0;
-                            state.services_scroll_offset = 0;
-                        } else if state.selected_type == usize::MAX {
-                            // Already at "All Services", can't go further left
-                        } else {
-                            // Move to previous service type
-                            state.selected_type -= 1;
-                            state.selected_service = 0;
-                            state.services_scroll_offset = 0;
-                            // Update scroll offset for types list
-                            if state.selected_type < state.types_scroll_offset {
-                                state.types_scroll_offset = state.selected_type;
-                            }
+                }
+                KeyCode::Char('h') | KeyCode::Left => {
+                    let mut state = state.write().await;
+                    if state.selected_type == 0 {
+                        // Move from first service type to "All Services"
+                        state.selected_type = usize::MAX;
+                        state.selected_service = 0;
+                        state.services_scroll_offset = 0;
+                    } else if state.selected_type == usize::MAX {
+                        // Already at "All Services", can't go further left
+                    } else {
+                        // Move to previous service type
+                        state.selected_type -= 1;
+                        state.selected_service = 0;
+                        state.services_scroll_offset = 0;
+                        // Update scroll offset for types list
+                        if state.selected_type < state.types_scroll_offset {
+                            state.types_scroll_offset = state.selected_type;
                         }
                     }
-                    KeyCode::Char('l') | KeyCode::Right => {
-                        let mut state = state.write().await;
-                        if state.selected_type == usize::MAX {
-                            // Move from "All Services" to first service type (index 0)
-                            state.selected_type = 0;
-                            state.selected_service = 0;
-                            state.services_scroll_offset = 0;
-                        } else if state.selected_type < state.service_types.len().saturating_sub(1)
-                        {
-                            state.selected_type += 1;
-                            state.selected_service = 0;
-                            state.services_scroll_offset = 0;
-                            // Update scroll offset for types list (assuming max visible items around 15)
-                            if state.selected_type >= state.types_scroll_offset + 15 {
-                                state.types_scroll_offset = state.selected_type - 14;
-                            }
-                        }
-                    }
-                    KeyCode::Char('u')
-                        if key
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                }
+                KeyCode::Char('l') | KeyCode::Right => {
+                    let mut state = state.write().await;
+                    if state.selected_type == usize::MAX {
+                        // Move from "All Services" to first service type (index 0)
+                        state.selected_type = 0;
+                        state.selected_service = 0;
+                        state.services_scroll_offset = 0;
+                    } else if state.selected_type < state.service_types.len().saturating_sub(1)
                     {
-                        let mut state = state.write().await;
-                        if state.details_scroll_offset > 0 {
-                            state.details_scroll_offset =
-                                state.details_scroll_offset.saturating_sub(5);
+                        state.selected_type += 1;
+                        state.selected_service = 0;
+                        state.services_scroll_offset = 0;
+                        // Update scroll offset for types list (assuming max visible items around 15)
+                        if state.selected_type >= state.types_scroll_offset + 15 {
+                            state.types_scroll_offset = state.selected_type - 14;
                         }
                     }
-                    KeyCode::Char('d')
-                        if key
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                    {
-                        let mut state = state.write().await;
-                        state.details_scroll_offset += 5;
+                }
+                KeyCode::Char('u')
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
+                    let mut state = state.write().await;
+                    if state.details_scroll_offset > 0 {
+                        state.details_scroll_offset =
+                            state.details_scroll_offset.saturating_sub(5);
                     }
-                    KeyCode::PageUp | KeyCode::Char('b') => {
-                        let mut state = state.write().await;
-                        if state.details_scroll_offset > 0 {
-                            state.details_scroll_offset =
-                                state.details_scroll_offset.saturating_sub(5);
-                        }
+                }
+                KeyCode::Char('d')
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
+                    let mut state = state.write().await;
+                    state.details_scroll_offset += 5;
+                }
+                KeyCode::PageUp | KeyCode::Char('b') => {
+                    let mut state = state.write().await;
+                    if state.details_scroll_offset > 0 {
+                        state.details_scroll_offset =
+                            state.details_scroll_offset.saturating_sub(5);
                     }
-                    KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
-                        let mut state = state.write().await;
-                        state.details_scroll_offset += 5;
-                    }
-                    KeyCode::Char('g') => {
-                        let mut state = state.write().await;
-                        state.details_scroll_offset = 0;
-                    }
-                    KeyCode::Char('G') => {
-                        let mut state = state.write().await;
-                        // Set to a high value, the UI will clamp it
-                        state.details_scroll_offset = 1000;
-                    }
-                    KeyCode::Home => {
-                        let mut state = state.write().await;
-                        state.details_scroll_offset = 0;
-                    }
-                    KeyCode::End => {
-                        let mut state = state.write().await;
-                        // Set to a high value, the UI will clamp it
-                        state.details_scroll_offset = 1000;
-                    }
+                }
+                KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
+                    let mut state = state.write().await;
+                    state.details_scroll_offset += 5;
+                }
+                KeyCode::Char('g') => {
+                    let mut state = state.write().await;
+                    state.details_scroll_offset = 0;
+                }
+                KeyCode::Char('G') => {
+                    let mut state = state.write().await;
+                    // Set to a high value, the UI will clamp it
+                    state.details_scroll_offset = 1000;
+                }
+                KeyCode::Home => {
+                    let mut state = state.write().await;
+                    state.details_scroll_offset = 0;
+                }
+                KeyCode::End => {
+                    let mut state = state.write().await;
+                    // Set to a high value, the UI will clamp it
+                    state.details_scroll_offset = 1000;
+                }
 
-                    _ => {}
-                },
                 _ => {}
-            }
+            } }
         }
 
         // Draw UI
