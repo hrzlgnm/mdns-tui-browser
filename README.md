@@ -1,4 +1,4 @@
-# mDNS Service Browser
+# mDNS TUI Browser
 
 A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface.
 
