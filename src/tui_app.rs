@@ -1,6 +1,6 @@
 use crossterm::{
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEvent, MouseEventKind,
+        self, Event, KeyCode,
     },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -49,7 +49,7 @@ impl AppState {
             services: Vec::new(),
             service_types: Vec::new(),
             selected_service: 0,
-            selected_type: 0,
+            selected_type: usize::MAX, // Use MAX to indicate "all services"
             types_scroll_offset: 0,
             services_scroll_offset: 0,
             details_scroll_offset: 0,
@@ -64,19 +64,31 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .split(f.area());
 
     // Service types list
-    let type_items: Vec<ListItem> = app_state
-        .service_types
-        .iter()
-        .enumerate()
-        .map(|(i, service_type)| {
-            let style = if i == app_state.selected_type {
+    let mut type_items = vec![
+        ListItem::new(Line::from(Span::styled(
+            "All Services".to_string(),
+            if app_state.selected_type == usize::MAX {
                 Style::default().bg(Color::DarkGray).fg(Color::White)
             } else {
                 Style::default()
-            };
-            ListItem::new(Line::from(Span::styled(service_type.clone(), style)))
-        })
-        .collect();
+            },
+        )))
+    ];
+    
+    type_items.extend(
+        app_state
+            .service_types
+            .iter()
+            .enumerate()
+            .map(|(i, service_type)| {
+                let style = if i == app_state.selected_type {
+                    Style::default().bg(Color::DarkGray).fg(Color::White)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(Line::from(Span::styled(service_type.clone(), style)))
+            })
+    );
 
     let visible_types: Vec<ListItem> = type_items
         .into_iter()
@@ -93,9 +105,12 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut list_state = ListState::default();
-    list_state.select(Some(
-        app_state.selected_type - app_state.types_scroll_offset,
-    ));
+    let display_index = if app_state.selected_type == usize::MAX {
+        0
+    } else {
+        app_state.selected_type + 1
+    }.saturating_sub(app_state.types_scroll_offset);
+    list_state.select(Some(display_index));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
     // Services list
@@ -108,10 +123,13 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .services
         .iter()
         .filter(|service| {
-            app_state
-                .service_types
-                .get(app_state.selected_type)
-                .is_none_or(|selected_type| service.service_type == *selected_type)
+            app_state.selected_type == usize::MAX || 
+                app_state.service_types.is_empty() || 
+                app_state
+                    .service_types
+                    .get(app_state.selected_type)
+                    .map(|selected_type| service.service_type == *selected_type)
+                    .unwrap_or(true)
         })
         .enumerate()
         .map(|(i, service)| {
@@ -157,10 +175,13 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .services
         .iter()
         .filter(|service| {
-            app_state
-                .service_types
-                .get(app_state.selected_type)
-                .is_none_or(|selected_type| service.service_type == *selected_type)
+            app_state.selected_type == usize::MAX || 
+                app_state.service_types.is_empty() || 
+                app_state
+                    .service_types
+                    .get(app_state.selected_type)
+                    .map(|selected_type| service.service_type == *selected_type)
+                    .unwrap_or(true)
         })
         .collect();
 
@@ -238,7 +259,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     }
 
     // Help text at the bottom
-    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | g/G/Home/End for details | Click to select";
+    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | g/G/Home/End for details";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
@@ -253,7 +274,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     // Setup terminal for full TUI
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -342,6 +363,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     } else {
                                         state.services.push(entry);
                                     }
+                                    
+                                    // Sort services by hostname (name)
+                                    state.services.sort_by(|a, b| a.name.cmp(&b.name));
 
                                     let _ = update_sender_inner.send("service_updated".to_string());
                                 }
@@ -387,9 +411,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             .services
                             .iter()
                             .filter(|service| {
-                                state.service_types.get(state.selected_type).is_none_or(
-                                    |selected_type| service.service_type == *selected_type,
-                                )
+                                state.selected_type == usize::MAX || 
+                                    state.service_types.is_empty() || 
+                                    state
+                                        .service_types
+                                        .get(state.selected_type)
+                                        .map(|selected_type| service.service_type == *selected_type)
+                                        .unwrap_or(true)
                             })
                             .count();
                         if state.selected_service < filtered_count.saturating_sub(1) {
@@ -402,7 +430,15 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     KeyCode::Char('h') | KeyCode::Left => {
                         let mut state = state.write().await;
-                        if state.selected_type > 0 {
+                        if state.selected_type == 0 {
+                            // Move from first service type to "All Services"
+                            state.selected_type = usize::MAX;
+                            state.selected_service = 0;
+                            state.services_scroll_offset = 0;
+                        } else if state.selected_type == usize::MAX {
+                            // Already at "All Services", can't go further left
+                        } else {
+                            // Move to previous service type
                             state.selected_type -= 1;
                             state.selected_service = 0;
                             state.services_scroll_offset = 0;
@@ -414,7 +450,12 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     KeyCode::Char('l') | KeyCode::Right => {
                         let mut state = state.write().await;
-                        if state.selected_type < state.service_types.len().saturating_sub(1) {
+                        if state.selected_type == usize::MAX {
+                            // Move from "All Services" to first service type (index 0)
+                            state.selected_type = 0;
+                            state.selected_service = 0;
+                            state.services_scroll_offset = 0;
+                        } else if state.selected_type < state.service_types.len().saturating_sub(1) {
                             state.selected_type += 1;
                             state.selected_service = 0;
                             state.services_scroll_offset = 0;
@@ -475,66 +516,6 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
                     _ => {}
                 },
-                Event::Mouse(MouseEvent {
-                    kind, column, row, ..
-                }) => {
-                    match kind {
-                        MouseEventKind::Down(_) => {
-                            // Simple, non-blocking mouse handling
-                            // Avoid terminal.size() and async tasks
-                            let terminal_width = 80; // Conservative assumption
-                            let terminal_height = 24; // Conservative assumption
-                            let left_col_width = terminal_width / 3; // ~33% for service types
-                            let main_area_height = terminal_height - 2; // Account for help line
-
-                            if column < left_col_width && row > 1 && row < main_area_height {
-                                // Simple service type selection
-                                // Account for top border (1 line)
-                                let clicked_index = (row - 1) as usize;
-
-                                // Direct state update without async tasks
-                                if let Ok(mut state) = state.try_write()
-                                    && clicked_index < state.service_types.len()
-                                {
-                                    state.selected_type = clicked_index;
-                                    state.selected_service = 0;
-                                    state.services_scroll_offset = 0;
-                                }
-                            } else if column >= left_col_width && row > 1 && row < main_area_height
-                            {
-                                // Simple service selection - use top portion of right column
-                                let services_height = main_area_height / 2; // Roughly half for services
-
-                                if row < 1 + services_height {
-                                    let clicked_index = (row - 1) as usize;
-
-                                    if let Ok(mut state) = state.try_write() {
-                                        let selected_type = state.selected_type;
-                                        let filtered_count = state
-                                            .services
-                                            .iter()
-                                            .filter(|service| {
-                                                state.service_types.get(selected_type).is_none_or(
-                                                    |selected_type| {
-                                                        service.service_type == *selected_type
-                                                    },
-                                                )
-                                            })
-                                            .count();
-
-                                        if clicked_index < filtered_count {
-                                            state.selected_service = clicked_index;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        MouseEventKind::Up(_) => {
-                            // Mouse up - could add double-click detection here
-                        }
-                        _ => {}
-                    }
-                }
                 _ => {}
             }
         }
@@ -551,7 +532,6 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
     )?;
     terminal.show_cursor()?;
 
