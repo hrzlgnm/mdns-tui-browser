@@ -1,4 +1,4 @@
-# Copyright 2025 hrzlgnm
+# Copyright 2026 hrzlgnm
 # SPDX-License-Identifier: MIT-0
 
 name: "Reusable desktop tauri build workflow"
@@ -13,11 +13,6 @@ on:
       tagName:
         required: false
         type: string
-    secrets:
-      TAURI_PRIVATE_KEY:
-        required: true
-      TAURI_KEY_PASSWORD:
-        required: true
 
 jobs:
   build:
@@ -28,7 +23,6 @@ jobs:
           - os: "ubuntu-latest"
             symbol: 🐧
             platform: Linux
-            container_image: ghcr.io/hrzlgnm/mdns-browser-ubuntu-builder:v1@sha256:651fd6a4c45ef96983e0c09c34a819d8f8bd25b7eaad821cbb671a048ea964b7
           - os: "macos-latest"
             args: "--target universal-apple-darwin"
             symbol: 🍏
@@ -39,29 +33,9 @@ jobs:
 
     name: ${{matrix.symbol}}🔨
     runs-on: ${{matrix.os}}
-    container: ${{ contains(matrix.os, 'ubuntu') && matrix.container_image || null }}
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-
-      - name: 📝 Extract version from tauri.conf.json
-        id: get-version
-        shell: bash
-        run: |
-          CURRENT_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
-          echo "current-version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: 🛡️ Verify tag matches version in tauri config (publish only)
-        if: inputs.tagName
-        shell: bash
-        run: |
-          CURRENT_VERSION=${{ steps.get-version.outputs.current-version }}
-          TAG=${GITHUB_REF#refs/tags/}
-          if [[ "$TAG" != *"$CURRENT_VERSION" ]]
-          then
-            echo "The tag name ${TAG} does not match the version ${CURRENT_VERSION} from tauri config"
-            exit 1
-          fi
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
@@ -69,126 +43,14 @@ jobs:
           targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
           save-cache: ${{ inputs.branch == 'main' }}
 
-      - name: 📜 Create and 🔍 scan SBOM for vulnerabilities
-        if: inputs.tagName
-        uses: ./.github/actions/sbom
-        with:
-          artifact-name: "sbom.${{ matrix.platform }}.spdx.json"
-          current-version: ${{ steps.get-version.outputs.current-version }}
-
-      - name: 🛠️🐂
-        uses: ./.github/actions/setup-tauri
-
       - name: 🛠️🚀
         if: (!inputs.tagName)
         uses: ./.github/actions/setup-sccache
 
-      - name: 🔑 Import windows signing certificate (windows only)
-        if: contains(matrix.os, 'windows')
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          New-Item -ItemType directory -Path certificate
-          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE
-          certutil -decode certificate/tempCert.txt certificate/certificate.pfx
-          Remove-Item -path certificate -include tempCert.txt
-          Import-PfxCertificate -FilePath certificate/certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
-
-      - name: 🔨 Build plain executables using tauri action (publish artifacts on release)
-        uses: tauri-apps/tauri-action@73fb865345c54760d875b94642314f8c0c894afa # v0.6.1
-        if: ${{ !contains(matrix.os, 'macos') }}
+      - name: 🔨 Build
+        shell: bash
         env:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-        with:
-          tagName: ${{ inputs.tagName }}
-          releaseDraft: false
-          prerelease: false
-          tauriScript: cargo --locked auditable tauri
-          args: ${{ matrix.args }} --no-bundle
-          retryAttempts: 1
-          uploadPlainBinary: true
-
-      - name: 🔨 Build bundles using tauri action (publish artifacts on release)
-        uses: tauri-apps/tauri-action@73fb865345c54760d875b94642314f8c0c894afa # v0.6.1
-        env:
-          RUSTFLAGS: "-D warnings"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-        with:
-          updaterJsonPreferNsis: true
-          tagName: ${{ inputs.tagName }}
-          releaseDraft: false
-          prerelease: false
-          tauriScript: cargo --locked auditable tauri
-          args: ${{ matrix.args }}
-          retryAttempts: 1
-
-      - name: 📤 Upload build artifacts (push or pr builds only)
-        if: (!inputs.tagName)
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: "bundles-${{matrix.os}}${{matrix.args}}"
-          path: |
-            target/**/release/bundle
-            target/**/release/mdns-browser*
-
-      - name: 📦 Compress debug symbols (windows only)
-        if: contains(matrix.os, 'windows')
-        shell: pwsh
         run: |
-          $pdb = 'target/release/mdns_browser.pdb'
-          $zip = 'target/release/mdns_browser.pdb.zip'
-          if (Test-Path $pdb) {
-            Compress-Archive -Path $pdb -DestinationPath $zip -Force
-            Write-Output "Compressed $pdb -> $zip"
-          } else {
-            Write-Error "PDB file not found: $pdb"
-            exit 1
-          }
-
-      - name: 📤 Upload debug symbols (windows only)
-        if: contains(matrix.os, 'windows')
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: "debug-symbols-${{matrix.os}}${{matrix.args}}"
-          path: |
-            target/release/mdns_browser.pdb.zip
-
-      - name: 📤 Publish debug symbols to release (windows only)
-        if: contains(matrix.os, 'windows') && inputs.tagName
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
-        with:
-          files: target/release/mdns_browser.pdb.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🛡️ Attest build provenance (publish release only)
-        if: inputs.tagName
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
-        with:
-          subject-path: |
-            target/release/bundle/nsis/*
-            target/**/release/bundle/macos/*.tar.gz*
-            target/**/release/bundle/dmg/*.dmg
-            target/release/bundle/deb/*.deb
-            target/release/bundle/rpm/*.rpm
-            target/**/release/mdns-browser
-            target/release/mdns-browser.exe
-            target/release/mdns_browser.pdb
-            target/release/mdns_browser.pdb.zip
-
-      - name: 🛡️ Attest SBOM
-        if: inputs.tagName
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3
-        with:
-          subject-path: ${{
-            contains(matrix.os, 'ubuntu') && 'target/release/mdns-browser' ||
-            contains(matrix.os, 'windows') && 'target/release/mdns-browser.exe' ||
-            contains(matrix.os, 'macos') && 'target/universal-apple-darwin/release/mdns-browser'
-            }}
-          sbom-path: "sbom.spdx.json"
+          cargo build --release
