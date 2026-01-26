@@ -16,7 +16,7 @@ use ratatui::{
         Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, Wrap,
     },
 };
-use std::process::Command;
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, mpsc};
@@ -57,61 +57,7 @@ impl AppState {
     }
 }
 
-fn open_service(service: &ServiceEntry) {
-    let default_addr = "localhost".to_string();
-    let url = match service.service_type.as_str() {
-        "_http._tcp" | "_http._tcp.local." => {
-            let addr = service.addrs.first().unwrap_or(&default_addr);
-            format!("http://{}:{}", addr, service.port)
-        }
-        "_https._tcp" | "_https._tcp.local." => {
-            let addr = service.addrs.first().unwrap_or(&default_addr);
-            format!("https://{}:{}", addr, service.port)
-        }
-        "_ssh._tcp" | "_ssh._tcp.local." => {
-            let addr = service.addrs.first().unwrap_or(&default_addr);
-            format!("ssh://{}:{}", addr, service.port)
-        }
-        "_ftp._tcp" | "_ftp._tcp.local." => {
-            let addr = service.addrs.first().unwrap_or(&default_addr);
-            format!("ftp://{}:{}", addr, service.port)
-        }
-        "_sftp._tcp" | "_sftp._tcp.local." => {
-            let addr = service.addrs.first().unwrap_or(&default_addr);
-            format!("sftp://{}:{}", addr, service.port)
-        }
-        _ => {
-            // For unknown services, try to open the first address
-            if let Some(addr) = service.addrs.first() {
-                format!("http://{}:{}", addr, service.port)
-            } else {
-                return;
-            }
-        }
-    };
 
-    // Try different commands based on the platform
-    #[cfg(target_os = "windows")]
-    {
-        let _ = Command::new("cmd").args(["/C", "start", &url]).spawn();
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let _ = Command::new("open").arg(&url).spawn();
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let _ = Command::new("xdg-open").arg(&url).spawn();
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        // Fallback for other platforms
-        println!("Would open: {}", url);
-    }
-}
 
 fn ui(f: &mut Frame, app_state: &AppState) {
     let chunks = Layout::default()
@@ -294,7 +240,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     }
 
     // Help text at the bottom
-    let help_text = "Press 'q' to quit | Arrow keys to navigate | PageUp/PageDown to scroll details | Click to select | Double-click or Enter to open service";
+    let help_text = "Press 'q' to quit | Arrow keys to navigate | PageUp/PageDown to scroll details | Click to select";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
@@ -500,22 +446,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         // Set to a high value, the UI will clamp it
                         state.details_scroll_offset = 1000;
                     }
-                    KeyCode::Enter => {
-                        let state = state.read().await;
-                        let filtered_services: Vec<_> = state
-                            .services
-                            .iter()
-                            .filter(|service| {
-                                state.service_types.get(state.selected_type).is_none_or(
-                                    |selected_type| service.service_type == *selected_type,
-                                )
-                            })
-                            .collect();
-
-                        if let Some(service) = filtered_services.get(state.selected_service) {
-                            open_service(service);
-                        }
-                    }
+                    
 
                     _ => {}
                 },
