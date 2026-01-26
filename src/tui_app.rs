@@ -57,8 +57,6 @@ impl AppState {
     }
 }
 
-
-
 fn ui(f: &mut Frame, app_state: &AppState) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -446,7 +444,6 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         // Set to a high value, the UI will clamp it
                         state.details_scroll_offset = 1000;
                     }
-                    
 
                     _ => {}
                 },
