@@ -98,13 +98,13 @@ impl AppState {
 
     fn validate_selected_type(&mut self) {
         // Ensure selected_type is always valid
-        if let Some(idx) = self.selected_type {
-            if idx >= self.service_types.len() {
-                if self.service_types.is_empty() {
-                    self.selected_type = None;
-                } else {
-                    self.selected_type = Some(self.service_types.len().saturating_sub(1));
-                }
+        if let Some(idx) = self.selected_type
+            && idx >= self.service_types.len()
+        {
+            if self.service_types.is_empty() {
+                self.selected_type = None;
+            } else {
+                self.selected_type = Some(self.service_types.len().saturating_sub(1));
             }
         }
     }
