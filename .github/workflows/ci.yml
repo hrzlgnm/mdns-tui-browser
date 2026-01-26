@@ -1,0 +1,110 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: "CI"
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  # measure against bitrot
+  # also rotates docker images monthly, by pushing new docker images
+  # the rotation will happen by renovate
+  # rotate the images in the middle of the month,
+  # to avoid duplicate rotations at the beginning of the month,
+  # as the source docker images are also mostly rotated once a month
+  schedule:
+    - cron: "0 0 15 * *"
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+concurrency:
+  # On main, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.ref == 'refs/heads/main' && format('ci-main-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  label-pr:
+    if: github.event_name == 'pull_request'
+    name: "🏷️ Label PR"
+    permissions:
+      contents: read # Needed to read repository contents
+      pull-requests: write # Needed to apply labels
+      issues: write # Needed to create non existing labels
+    runs-on: ubuntu-slim
+
+    steps:
+      - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
+        with:
+          configuration-path: .github/labeler.yml
+
+  changes:
+    name: "🔍 Detect Changes"
+    runs-on: ubuntu-slim
+    outputs:
+      branch: ${{ steps.branch.outputs.branch }}
+      code: ${{ steps.filter.outputs.code }}
+      lint: ${{ steps.filter.outputs.lint }}
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: 🔍 Check for changes
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            code:
+              - '.github/actions/setup-*/**'
+              - 'src/**'
+              - 'src-tauri/Cargo.toml'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            lint:
+              - '.github/workflows/lint-reusable.yml'
+      - name: Output branch name
+        id: branch
+        run: |
+          echo "branch=${{ env.BRANCH_NAME }}" >> $GITHUB_OUTPUT
+
+  typos:
+    name: 📝 Check typos
+    if: always()
+    uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@524b2f6f95f9054736fbf0cd2a623ebac6d64c2a # v1.6.2
+
+  lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.lint == 'true'
+    uses: ./.github/workflows/lint-reusable.yml
+
+  build:
+    name: "build"
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-reusable.yml
+    secrets: inherit
+    with:
+      branch: ${{ needs.changes.outputs.branch }}
+
+  all-required-green: # This job does nothing and is only used for the branch protection
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs:
+      - typos
+      - lint
+      - build
+    if: always()
+    steps:
+      - name: Check whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@2765efec08f0fd63e83ad900f5fd75646be69ff6
+        with:
+          allowed-skips: >-
+            lint,
+            tests,
+            build,
+          jobs: ${{ toJSON(needs) }}
