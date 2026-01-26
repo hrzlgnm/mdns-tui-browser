@@ -23,25 +23,6 @@ jobs:
         shell: bash
         run: |
           cargo fmt -- --check
-          cd src-tauri
-          cargo fmt -- --check
-
-  leptosfmt:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 🔄 Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-
-      - name: 📥 Cached install leptosfmt
-        uses: baptiste0928/cargo-install@b687c656bda5733207e629b50a22bf68974a0305 # v3
-        with:
-          crate: leptosfmt
-          version: 0.1.33
-          locked: true
-
-      - name: 📐 Run leptosfmt and fail if any warnings
-        run: |
-          leptosfmt --check src
 
   clippy:
     strategy:
@@ -51,14 +32,12 @@ jobs:
           - os: "ubuntu-latest"
             symbol: 🐧
             platform: Linux
-            container_image: ghcr.io/hrzlgnm/mdns-browser-ubuntu-builder:v1@sha256:651fd6a4c45ef96983e0c09c34a819d8f8bd25b7eaad821cbb671a048ea964b7
           - os: "macos-latest"
             symbol: 🍏
           - os: "windows-latest"
             symbol: 🪟
     runs-on: ${{matrix.os}}
     name: ${{matrix.symbol}}📎
-    container: ${{ contains(matrix.os, 'ubuntu') && matrix.container_image || null }}
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -67,7 +46,7 @@ jobs:
         uses: ./.github/actions/setup-rust-cache
         with:
           components: clippy
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: 🛠️🚀
         uses: ./.github/actions/setup-sccache
@@ -75,6 +54,4 @@ jobs:
       - name: 📎 Run clippy and fail if any warnings
         shell: bash
         run: |
-          cargo clippy -- -D warnings
-          cd src-tauri
           cargo clippy -- -D warnings
