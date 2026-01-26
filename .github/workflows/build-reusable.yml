@@ -1,0 +1,56 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: "Reusable desktop tauri build workflow"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: false
+        type: string
+        default: ""
+      tagName:
+        required: false
+        type: string
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: "ubuntu-latest"
+            symbol: 🐧
+            platform: Linux
+          - os: "macos-latest"
+            args: "--target universal-apple-darwin"
+            symbol: 🍏
+            platform: macOS
+          - os: "windows-latest"
+            symbol: 🪟
+            platform: Windows
+
+    name: ${{matrix.symbol}}🔨
+    runs-on: ${{matrix.os}}
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: 🦀🚀
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
+          save-cache: ${{ inputs.branch == 'main' }}
+
+      - name: 🛠️🚀
+        if: (!inputs.tagName)
+        uses: ./.github/actions/setup-sccache
+
+      - name: 🔨 Build
+        shell: bash
+        env:
+          RUSTFLAGS: "-D warnings"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cargo build --release

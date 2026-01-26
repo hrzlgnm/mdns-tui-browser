@@ -1,0 +1,11 @@
+[files]
+ignore-files = true
+ignore-hidden = false
+extend-exclude = [".git/"]
+
+[default]
+check-filename = true
+
+[default.extend-words]
+# rattatui crate name
+ratatui = "ratatui"

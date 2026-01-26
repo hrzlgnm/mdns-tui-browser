@@ -1,0 +1,57 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: "Reusable ci lint workflow"
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: 🦀🚀
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          components: rustfmt
+
+      - name: 📐 Run rustfmt and fail if any warnings
+        shell: bash
+        run: |
+          cargo fmt -- --check
+
+  clippy:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: "ubuntu-latest"
+            symbol: 🐧
+            platform: Linux
+          - os: "macos-latest"
+            symbol: 🍏
+          - os: "windows-latest"
+            symbol: 🪟
+    runs-on: ${{matrix.os}}
+    name: ${{matrix.symbol}}📎
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: 🦀🚀
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          components: clippy
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: 🛠️🚀
+        uses: ./.github/actions/setup-sccache
+
+      - name: 📎 Run clippy and fail if any warnings
+        shell: bash
+        run: |
+          cargo clippy -- -D warnings
