@@ -238,7 +238,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     }
 
     // Help text at the bottom
-    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | gg/G/Home/End for details | Click to select";
+    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | g/G/Home/End for details | Click to select";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
