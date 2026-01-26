@@ -1,7 +1,5 @@
 use crossterm::{
-    event::{
-        self, Event, KeyCode,
-    },
+    event::{self, Event, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -64,17 +62,15 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .split(f.area());
 
     // Service types list
-    let mut type_items = vec![
-        ListItem::new(Line::from(Span::styled(
-            "All Services".to_string(),
-            if app_state.selected_type == usize::MAX {
-                Style::default().bg(Color::DarkGray).fg(Color::White)
-            } else {
-                Style::default()
-            },
-        )))
-    ];
-    
+    let mut type_items = vec![ListItem::new(Line::from(Span::styled(
+        "All Services".to_string(),
+        if app_state.selected_type == usize::MAX {
+            Style::default().bg(Color::DarkGray).fg(Color::White)
+        } else {
+            Style::default()
+        },
+    )))];
+
     type_items.extend(
         app_state
             .service_types
@@ -87,7 +83,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
                     Style::default()
                 };
                 ListItem::new(Line::from(Span::styled(service_type.clone(), style)))
-            })
+            }),
     );
 
     let visible_types: Vec<ListItem> = type_items
@@ -109,7 +105,8 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         0
     } else {
         app_state.selected_type + 1
-    }.saturating_sub(app_state.types_scroll_offset);
+    }
+    .saturating_sub(app_state.types_scroll_offset);
     list_state.select(Some(display_index));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
@@ -123,9 +120,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .services
         .iter()
         .filter(|service| {
-            app_state.selected_type == usize::MAX || 
-                app_state.service_types.is_empty() || 
-                app_state
+            app_state.selected_type == usize::MAX
+                || app_state.service_types.is_empty()
+                || app_state
                     .service_types
                     .get(app_state.selected_type)
                     .map(|selected_type| service.service_type == *selected_type)
@@ -175,9 +172,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .services
         .iter()
         .filter(|service| {
-            app_state.selected_type == usize::MAX || 
-                app_state.service_types.is_empty() || 
-                app_state
+            app_state.selected_type == usize::MAX
+                || app_state.service_types.is_empty()
+                || app_state
                     .service_types
                     .get(app_state.selected_type)
                     .map(|selected_type| service.service_type == *selected_type)
@@ -363,7 +360,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     } else {
                                         state.services.push(entry);
                                     }
-                                    
+
                                     // Sort services by hostname (name)
                                     state.services.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -411,9 +408,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             .services
                             .iter()
                             .filter(|service| {
-                                state.selected_type == usize::MAX || 
-                                    state.service_types.is_empty() || 
-                                    state
+                                state.selected_type == usize::MAX
+                                    || state.service_types.is_empty()
+                                    || state
                                         .service_types
                                         .get(state.selected_type)
                                         .map(|selected_type| service.service_type == *selected_type)
@@ -455,7 +452,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             state.selected_type = 0;
                             state.selected_service = 0;
                             state.services_scroll_offset = 0;
-                        } else if state.selected_type < state.service_types.len().saturating_sub(1) {
+                        } else if state.selected_type < state.service_types.len().saturating_sub(1)
+                        {
                             state.selected_type += 1;
                             state.selected_service = 0;
                             state.services_scroll_offset = 0;
@@ -529,10 +527,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
     // Restore terminal
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen,)?;
     terminal.show_cursor()?;
 
     result
