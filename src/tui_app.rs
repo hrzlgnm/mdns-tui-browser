@@ -1,5 +1,7 @@
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEvent, MouseEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEvent, MouseEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -10,11 +12,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap, Scrollbar, ScrollbarOrientation},
+    widgets::{
+        Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, Wrap,
+    },
 };
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
-use std::process::Command;
 use tokio::sync::{RwLock, mpsc};
 
 #[derive(Clone, Debug)]
@@ -91,25 +95,23 @@ fn open_service(service: &ServiceEntry) {
     {
         let _ = Command::new("cmd").args(["/C", "start", &url]).spawn();
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         let _ = Command::new("open").arg(&url).spawn();
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         let _ = Command::new("xdg-open").arg(&url).spawn();
     }
-    
+
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         // Fallback for other platforms
         println!("Would open: {}", url);
     }
 }
-
-
 
 fn ui(f: &mut Frame, app_state: &AppState) {
     let chunks = Layout::default()
@@ -147,7 +149,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut list_state = ListState::default();
-    list_state.select(Some(app_state.selected_type - app_state.types_scroll_offset));
+    list_state.select(Some(
+        app_state.selected_type - app_state.types_scroll_offset,
+    ));
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
     // Services list
@@ -175,7 +179,10 @@ fn ui(f: &mut Frame, app_state: &AppState) {
 
             let content = format!(
                 "{}\n  {}:{}\n  {}",
-                service.name, service.addrs.first().unwrap_or(&"Unknown".to_string()), service.port, service.domain
+                service.name,
+                service.addrs.first().unwrap_or(&"Unknown".to_string()),
+                service.port,
+                service.domain
             );
             ListItem::new(Line::from(Span::styled(content, style)))
         })
@@ -196,7 +203,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut services_list_state = ListState::default();
-    services_list_state.select(Some(app_state.selected_service - app_state.services_scroll_offset));
+    services_list_state.select(Some(
+        app_state.selected_service - app_state.services_scroll_offset,
+    ));
     f.render_stateful_widget(services_list, services_chunks[0], &mut services_list_state);
 
     // Service details
@@ -214,22 +223,24 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     let selected_service = filtered_services.get(app_state.selected_service);
 
     if let Some(service) = selected_service {
-        let subtype_text = service.subtype.as_ref()
+        let subtype_text = service
+            .subtype
+            .as_ref()
             .map(|s| format!("\nSubtype: {}", s))
             .unwrap_or_else(String::new);
-        
+
         let addresses_text = if service.addrs.is_empty() {
             "None".to_string()
         } else {
             service.addrs.join("\n")
         };
-        
+
         let txt_text = if service.txt.is_empty() {
             "None".to_string()
         } else {
             service.txt.join("\n")
         };
-        
+
         let details_text = format!(
             "Name: {}\nType: {}{}\nDomain: {}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
             service.name,
@@ -242,10 +253,10 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         );
 
         let content_lines = details_text.lines().count();
-        let clamped_offset = app_state.details_scroll_offset.min(
-            content_lines.saturating_sub((services_chunks[1].height - 2) as usize)
-        );
-        
+        let clamped_offset = app_state
+            .details_scroll_offset
+            .min(content_lines.saturating_sub((services_chunks[1].height - 2) as usize));
+
         let details = Paragraph::new(details_text.clone())
             .block(
                 Block::default()
@@ -255,7 +266,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
             .wrap(Wrap { trim: true })
             .scroll((clamped_offset as u16, 0));
         f.render_widget(details, services_chunks[1]);
-        
+
         // Render scrollbar for details if content is longer than available space
         let visible_lines = (services_chunks[1].height - 2) as usize;
         if content_lines > visible_lines {
@@ -264,9 +275,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
                 .end_symbol(None)
                 .track_symbol(Some("│"))
                 .thumb_symbol("█");
-            
-            let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(content_lines)
-                .position(clamped_offset);
+
+            let mut scrollbar_state =
+                ratatui::widgets::ScrollbarState::new(content_lines).position(clamped_offset);
             f.render_stateful_widget(
                 scrollbar,
                 services_chunks[1].inner(ratatui::layout::Margin::new(0, 0)),
@@ -340,7 +351,10 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     let entry = ServiceEntry {
                                         name: service_info.get_fullname().to_string(),
                                         service_type: service_type_clone.clone(),
-                                        subtype: service_info.get_subtype().as_ref().map(|s| s.to_string()),
+                                        subtype: service_info
+                                            .get_subtype()
+                                            .as_ref()
+                                            .map(|s| s.to_string()),
                                         domain: "local".to_string(),
                                         addrs: {
                                             let mut addrs: Vec<String> = service_info
@@ -377,8 +391,11 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
                                     let mut state = state_inner.write().await;
 
-                                    // Add service if not already present
-                                    if !state.services.iter().any(|s| s.name == entry.name) {
+                                    if let Some(exist) =
+                                        state.services.iter_mut().find(|s| s.name == entry.name)
+                                    {
+                                        *exist = entry;
+                                    } else {
                                         state.services.push(entry);
                                     }
 
@@ -406,104 +423,105 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
         // Handle events
         if event::poll(Duration::from_millis(50))? {
             let event = event::read()?;
-            
+
             match event {
                 Event::Key(key) => match key.code {
-                KeyCode::Char('q') => break Ok(()),
-                KeyCode::Up => {
-                    let mut state = state.write().await;
-                    if state.selected_service > 0 {
-                        state.selected_service -= 1;
-                        // Update scroll offset for services list
-                        if state.selected_service < state.services_scroll_offset {
-                            state.services_scroll_offset = state.selected_service;
+                    KeyCode::Char('q') => break Ok(()),
+                    KeyCode::Up => {
+                        let mut state = state.write().await;
+                        if state.selected_service > 0 {
+                            state.selected_service -= 1;
+                            // Update scroll offset for services list
+                            if state.selected_service < state.services_scroll_offset {
+                                state.services_scroll_offset = state.selected_service;
+                            }
                         }
                     }
-                }
-                KeyCode::Down => {
-                    let mut state = state.write().await;
-                    let filtered_count = state
-                        .services
-                        .iter()
-                        .filter(|service| {
-                            state
-                                .service_types
-                                .get(state.selected_type)
-                                .is_none_or(|selected_type| service.service_type == *selected_type)
-                        })
-                        .count();
-                    if state.selected_service < filtered_count.saturating_sub(1) {
-                        state.selected_service += 1;
-                        // Update scroll offset for services list (assuming max visible items around 10)
-                        if state.selected_service >= state.services_scroll_offset + 10 {
-                            state.services_scroll_offset = state.selected_service - 9;
+                    KeyCode::Down => {
+                        let mut state = state.write().await;
+                        let filtered_count = state
+                            .services
+                            .iter()
+                            .filter(|service| {
+                                state.service_types.get(state.selected_type).is_none_or(
+                                    |selected_type| service.service_type == *selected_type,
+                                )
+                            })
+                            .count();
+                        if state.selected_service < filtered_count.saturating_sub(1) {
+                            state.selected_service += 1;
+                            // Update scroll offset for services list (assuming max visible items around 10)
+                            if state.selected_service >= state.services_scroll_offset + 10 {
+                                state.services_scroll_offset = state.selected_service - 9;
+                            }
                         }
                     }
-                }
-                KeyCode::Left => {
-                    let mut state = state.write().await;
-                    if state.selected_type > 0 {
-                        state.selected_type -= 1;
-                        state.selected_service = 0;
-                        state.services_scroll_offset = 0;
-                        // Update scroll offset for types list
-                        if state.selected_type < state.types_scroll_offset {
-                            state.types_scroll_offset = state.selected_type;
+                    KeyCode::Left => {
+                        let mut state = state.write().await;
+                        if state.selected_type > 0 {
+                            state.selected_type -= 1;
+                            state.selected_service = 0;
+                            state.services_scroll_offset = 0;
+                            // Update scroll offset for types list
+                            if state.selected_type < state.types_scroll_offset {
+                                state.types_scroll_offset = state.selected_type;
+                            }
                         }
                     }
-                }
-                KeyCode::Right => {
-                    let mut state = state.write().await;
-                    if state.selected_type < state.service_types.len().saturating_sub(1) {
-                        state.selected_type += 1;
-                        state.selected_service = 0;
-                        state.services_scroll_offset = 0;
-                        // Update scroll offset for types list (assuming max visible items around 15)
-                        if state.selected_type >= state.types_scroll_offset + 15 {
-                            state.types_scroll_offset = state.selected_type - 14;
+                    KeyCode::Right => {
+                        let mut state = state.write().await;
+                        if state.selected_type < state.service_types.len().saturating_sub(1) {
+                            state.selected_type += 1;
+                            state.selected_service = 0;
+                            state.services_scroll_offset = 0;
+                            // Update scroll offset for types list (assuming max visible items around 15)
+                            if state.selected_type >= state.types_scroll_offset + 15 {
+                                state.types_scroll_offset = state.selected_type - 14;
+                            }
                         }
                     }
-                }
-                KeyCode::PageUp => {
-                    let mut state = state.write().await;
-                    if state.details_scroll_offset > 0 {
-                        state.details_scroll_offset = state.details_scroll_offset.saturating_sub(5);
+                    KeyCode::PageUp => {
+                        let mut state = state.write().await;
+                        if state.details_scroll_offset > 0 {
+                            state.details_scroll_offset =
+                                state.details_scroll_offset.saturating_sub(5);
+                        }
                     }
-                }
-                KeyCode::PageDown => {
-                    let mut state = state.write().await;
-                    state.details_scroll_offset += 5;
-                }
-                KeyCode::Home => {
-                    let mut state = state.write().await;
-                    state.details_scroll_offset = 0;
-                }
-                KeyCode::End => {
-                    let mut state = state.write().await;
-                    // Set to a high value, the UI will clamp it
-                    state.details_scroll_offset = 1000;
-                }
-                KeyCode::Enter => {
-                    let state = state.read().await;
-                    let filtered_services: Vec<_> = state
-                        .services
-                        .iter()
-                        .filter(|service| {
-                            state
-                                .service_types
-                                .get(state.selected_type)
-                                .is_none_or(|selected_type| service.service_type == *selected_type)
-                        })
-                        .collect();
-                    
-                    if let Some(service) = filtered_services.get(state.selected_service) {
-                        open_service(service);
+                    KeyCode::PageDown => {
+                        let mut state = state.write().await;
+                        state.details_scroll_offset += 5;
                     }
-                }
+                    KeyCode::Home => {
+                        let mut state = state.write().await;
+                        state.details_scroll_offset = 0;
+                    }
+                    KeyCode::End => {
+                        let mut state = state.write().await;
+                        // Set to a high value, the UI will clamp it
+                        state.details_scroll_offset = 1000;
+                    }
+                    KeyCode::Enter => {
+                        let state = state.read().await;
+                        let filtered_services: Vec<_> = state
+                            .services
+                            .iter()
+                            .filter(|service| {
+                                state.service_types.get(state.selected_type).is_none_or(
+                                    |selected_type| service.service_type == *selected_type,
+                                )
+                            })
+                            .collect();
 
-                _ => {}
+                        if let Some(service) = filtered_services.get(state.selected_service) {
+                            open_service(service);
+                        }
+                    }
+
+                    _ => {}
                 },
-                Event::Mouse(MouseEvent { kind, column, row, .. }) => {
+                Event::Mouse(MouseEvent {
+                    kind, column, row, ..
+                }) => {
                     match kind {
                         MouseEventKind::Down(_) => {
                             // Simple, non-blocking mouse handling
@@ -512,39 +530,42 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             let terminal_height = 24; // Conservative assumption
                             let left_col_width = terminal_width / 3; // ~33% for service types
                             let main_area_height = terminal_height - 2; // Account for help line
-                            
+
                             if column < left_col_width && row > 1 && row < main_area_height {
                                 // Simple service type selection
                                 // Account for top border (1 line)
                                 let clicked_index = (row - 1) as usize;
-                                
+
                                 // Direct state update without async tasks
                                 if let Ok(mut state) = state.try_write()
-                                    && clicked_index < state.service_types.len() {
-                                        state.selected_type = clicked_index;
-                                        state.selected_service = 0;
-                                        state.services_scroll_offset = 0;
-                                    }
-                            } else if column >= left_col_width && row > 1 && row < main_area_height {
+                                    && clicked_index < state.service_types.len()
+                                {
+                                    state.selected_type = clicked_index;
+                                    state.selected_service = 0;
+                                    state.services_scroll_offset = 0;
+                                }
+                            } else if column >= left_col_width && row > 1 && row < main_area_height
+                            {
                                 // Simple service selection - use top portion of right column
                                 let services_height = main_area_height / 2; // Roughly half for services
-                                
+
                                 if row < 1 + services_height {
                                     let clicked_index = (row - 1) as usize;
-                                    
+
                                     if let Ok(mut state) = state.try_write() {
                                         let selected_type = state.selected_type;
                                         let filtered_count = state
                                             .services
                                             .iter()
                                             .filter(|service| {
-                                                state
-                                                    .service_types
-                                                    .get(selected_type)
-                                                    .is_none_or(|selected_type| service.service_type == *selected_type)
+                                                state.service_types.get(selected_type).is_none_or(
+                                                    |selected_type| {
+                                                        service.service_type == *selected_type
+                                                    },
+                                                )
                                             })
                                             .count();
-                                        
+
                                         if clicked_index < filtered_count {
                                             state.selected_service = clicked_index;
                                         }
