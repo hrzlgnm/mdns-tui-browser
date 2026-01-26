@@ -109,9 +109,9 @@ impl AppState {
         }
     }
 
-    fn get_filtered_services(&mut self) -> Vec<usize> {
+    fn get_filtered_services(&mut self) -> &[usize] {
         self.update_filtered_cache();
-        self.cached_filtered_services.clone()
+        self.cached_filtered_services.as_slice()
     }
 }
 
@@ -191,11 +191,8 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     f.render_stateful_widget(types_list, chunks[0], &mut list_state);
 
     // Services list - use cached filtered services
-    let (filtered_indices, selected_service_idx) = {
-        let filtered = app_state.get_filtered_services();
-        let selected = app_state.selected_service;
-        (filtered, selected)
-    };
+    let selected_service_idx = app_state.selected_service;
+    let filtered_indices: Vec<usize> = app_state.get_filtered_services().to_vec();
     let services_ref = &app_state.services;
 
     let service_items: Vec<ListItem> = filtered_indices
@@ -244,11 +241,8 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     f.render_stateful_widget(services_list, services_chunks[0], &mut services_list_state);
 
     // Service details - use cached filtered services
-    let (filtered_indices, selected_service_idx) = {
-        let filtered = app_state.get_filtered_services();
-        let selected = app_state.selected_service;
-        (filtered, selected)
-    };
+    let selected_service_idx = app_state.selected_service;
+    let filtered_indices: Vec<usize> = app_state.get_filtered_services().to_vec();
     let services_ref = &app_state.services;
 
     let selected_service = filtered_indices
@@ -482,10 +476,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     KeyCode::Char('j') | KeyCode::Down => {
                         let mut state = state.write().await;
-                        let filtered_len = {
-                            let filtered = state.get_filtered_services();
-                            filtered.len()
-                        };
+                        let filtered = state.get_filtered_services();
+                        let filtered_len = filtered.len();
                         if state.selected_service < filtered_len.saturating_sub(1) {
                             state.selected_service += 1;
                             // Update scroll offset for services list using actual visible count
