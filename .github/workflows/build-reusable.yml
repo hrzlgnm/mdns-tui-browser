@@ -87,7 +87,7 @@ jobs:
         if: inputs.tagName
         shell: bash
         run: |
-          staging="mdns-tui-browser-${{ $inputs.tagName }}-${{ matrix.target }}"
+          staging="mdns-tui-browser-${{ inputs.tagName }}-${{ matrix.target }}"
           mkdir -p "$staging"
           if [ "${{ matrix.os }}" = "windows-latest" ] 
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.exe" "$staging/"
