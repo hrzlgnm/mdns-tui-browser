@@ -114,8 +114,25 @@ impl AppState {
     // Helper methods for service type management
     fn add_service_type(&mut self, service_type: &str) -> bool {
         if !self.service_types.contains(&service_type.to_string()) {
+            // Capture currently selected value before mutation
+            let selected_value = self
+                .selected_type
+                .and_then(|idx| self.service_types.get(idx).cloned());
+
             self.service_types.push(service_type.to_string());
             self.service_types.sort();
+
+            // Re-anchor selection by finding the captured value's new index
+            if let Some(selected_value) = selected_value {
+                if let Some(new_idx) = self.service_types.iter().position(|s| s == &selected_value)
+                {
+                    self.selected_type = Some(new_idx);
+                } else {
+                    // Fallback: if somehow the value is gone, go to None (All Types)
+                    self.selected_type = None;
+                }
+            }
+
             self.invalidate_cache_and_validate();
             true
         } else {
@@ -125,11 +142,42 @@ impl AppState {
 
     fn remove_service_type(&mut self, service_type: &str) -> bool {
         let initial_len = self.service_types.len();
+
+        // Capture currently selected value before mutation
+        let selected_value = self
+            .selected_type
+            .and_then(|idx| self.service_types.get(idx).cloned());
+
         self.service_types.retain(|s| s != service_type);
         let removed = self.service_types.len() < initial_len;
+
         if removed {
+            // Re-anchor selection by finding the captured value's new index
+            if let Some(selected_value) = selected_value {
+                if let Some(new_idx) = self.service_types.iter().position(|s| s == &selected_value)
+                {
+                    self.selected_type = Some(new_idx);
+                } else if selected_value == service_type {
+                    // The selected item was removed - pick nearest valid index
+                    if self.service_types.is_empty() {
+                        self.selected_type = None;
+                    } else {
+                        // Try to use the same index, or clamp to last valid index
+                        let fallback_idx = self
+                            .selected_type
+                            .unwrap_or(0)
+                            .min(self.service_types.len().saturating_sub(1));
+                        self.selected_type = Some(fallback_idx);
+                    }
+                } else {
+                    // Selected value is gone for some other reason
+                    self.selected_type = None;
+                }
+            }
+
             self.invalidate_cache_and_validate();
         }
+
         removed
     }
 
