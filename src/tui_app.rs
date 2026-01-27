@@ -17,7 +17,7 @@ use ratatui::{
 
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
 
 #[derive(Clone, Debug)]
 struct ServiceEntry {
@@ -28,9 +28,9 @@ struct ServiceEntry {
     addrs: Vec<String>,
     port: u16,
     txt: Vec<String>,
+    alive: bool,
 }
 
-#[derive(Clone)]
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -197,11 +197,19 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .enumerate()
         .map(|(i, &service_idx)| {
             let service = &services_clone[service_idx];
-            let style = if i == selected_service_idx {
-                Style::default().bg(Color::DarkGray).fg(Color::White)
+            let foreground = if service.alive {
+                Color::White
             } else {
-                Style::default()
+                Color::LightMagenta
             };
+            let mut style = if i == selected_service_idx {
+                Style::default().bg(Color::DarkGray).fg(foreground)
+            } else {
+                Style::default().fg(foreground)
+            };
+            if !service.alive {
+                style = style.add_modifier(Modifier::ITALIC);
+            }
             // Remove _ prefix, .local. suffix, and underscore from _tcp/_udp
             let display_name = service
                 .name
@@ -343,121 +351,127 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize app state
     let state = Arc::new(RwLock::new(AppState::new()));
-    let (update_sender, mut update_receiver) = mpsc::unbounded_channel();
 
     let mdns = ServiceDaemon::new()?;
 
     // Browse for all service types
     let receiver = mdns.browse("_services._dns-sd._udp.local.")?;
     let state_clone = Arc::clone(&state);
-    let update_sender_clone = update_sender.clone();
 
     let mdns = mdns.clone();
     tokio::spawn(async move {
         while let Ok(event) = receiver.recv_async().await {
-            if let ServiceEvent::ServiceFound(_fullname, fullname) = event {
-                let service_type = fullname.to_string();
-
-                // Add service type to our list
-                {
+            match event {
+                ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_clone.write().await;
-                    if !state.service_types.contains(&service_type) {
-                        state.service_types.push(service_type.clone());
-                        state.service_types.sort();
-                        // Validate selected_type in case it's now out of bounds
-                        state.validate_selected_type();
-                        // Mark cache as dirty since service types changed
-                        state.mark_cache_dirty();
-                    }
+                    state.services.retain(|s| s.name != fullname);
+                    state.mark_cache_dirty();
                 }
+                ServiceEvent::ServiceFound(_fullname, fullname) => {
+                    let service_type = fullname.to_string();
+                    {
+                        let mut state = state_clone.write().await;
+                        if !state.service_types.contains(&service_type) {
+                            state.service_types.push(service_type.clone());
+                            state.service_types.sort();
+                            // Validate selected_type in case it's now out of bounds
+                            state.validate_selected_type();
+                            // Mark cache as dirty since service types changed
+                            state.mark_cache_dirty();
+                        }
+                    }
+                    match mdns.browse(&service_type) {
+                        Ok(service_receiver) => {
+                            let state_inner = Arc::clone(&state_clone);
+                            let service_type_clone = service_type.clone();
 
-                match mdns.browse(&service_type) {
-                    Ok(service_receiver) => {
-                        let state_inner = Arc::clone(&state_clone);
-                        let service_type_clone = service_type.clone();
-                        let update_sender_inner = update_sender_clone.clone();
-
-                        tokio::spawn(async move {
-                            while let Ok(service_event) = service_receiver.recv_async().await {
-                                if let ServiceEvent::ServiceResolved(service_info) = service_event {
-                                    let entry = ServiceEntry {
-                                        name: service_info.get_fullname().to_string(),
-                                        service_type: service_type_clone.clone(),
-                                        subtype: service_info
-                                            .get_subtype()
-                                            .as_ref()
-                                            .map(|s| s.to_string()),
-                                        domain: "local".to_string(),
-                                        addrs: {
-                                            let mut addrs: Vec<String> = service_info
-                                                .get_addresses()
-                                                .iter()
-                                                .map(|ip| ip.to_string())
-                                                .collect();
-                                            addrs.sort();
-                                            addrs
-                                        },
-                                        port: service_info.get_port(),
-                                        txt: {
-                                            let mut txt: Vec<String> = service_info
-                                                .get_properties()
-                                                .iter()
-                                                .filter_map(|prop| {
-                                                    prop.val().map(|val| {
-                                                        format!(
-                                                            "{}={}",
-                                                            prop.key(),
-                                                            String::from_utf8_lossy(val)
-                                                        )
-                                                    })
-                                                })
-                                                .collect();
-                                            txt.sort_by(|a, b| {
-                                                let a_key = a.split('=').next().unwrap_or(a);
-                                                let b_key = b.split('=').next().unwrap_or(b);
-                                                a_key.cmp(b_key)
-                                            });
-                                            txt
-                                        },
-                                    };
-
-                                    let mut state = state_inner.write().await;
-
-                                    if let Some(exist) =
-                                        state.services.iter_mut().find(|s| s.name == entry.name)
-                                    {
-                                        *exist = entry;
-                                    } else {
-                                        state.services.push(entry);
+                            tokio::spawn(async move {
+                                while let Ok(service_event) = service_receiver.recv_async().await {
+                                    match service_event {
+                                        ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                                            let mut state = state_inner.write().await;
+                                            if let Some(entry) = state
+                                                .services
+                                                .iter_mut()
+                                                .find(|s| s.name == fullname)
+                                            {
+                                                entry.alive = false;
+                                            }
+                                            state.mark_cache_dirty();
+                                        }
+                                        ServiceEvent::ServiceResolved(service_info) => {
+                                            let entry = ServiceEntry {
+                                                name: service_info.get_fullname().to_string(),
+                                                service_type: service_type_clone.clone(),
+                                                subtype: service_info
+                                                    .get_subtype()
+                                                    .as_ref()
+                                                    .map(|s| s.to_string()),
+                                                domain: "local".to_string(),
+                                                addrs: {
+                                                    let mut addrs: Vec<String> = service_info
+                                                        .get_addresses()
+                                                        .iter()
+                                                        .map(|ip| ip.to_string())
+                                                        .collect();
+                                                    addrs.sort();
+                                                    addrs
+                                                },
+                                                port: service_info.get_port(),
+                                                txt: {
+                                                    let mut txt: Vec<String> = service_info
+                                                        .get_properties()
+                                                        .iter()
+                                                        .filter_map(|prop| {
+                                                            prop.val().map(|val| {
+                                                                format!(
+                                                                    "{}={}",
+                                                                    prop.key(),
+                                                                    String::from_utf8_lossy(val)
+                                                                )
+                                                            })
+                                                        })
+                                                        .collect();
+                                                    txt.sort_by(|a, b| {
+                                                        let a_key =
+                                                            a.split('=').next().unwrap_or(a);
+                                                        let b_key =
+                                                            b.split('=').next().unwrap_or(b);
+                                                        a_key.cmp(b_key)
+                                                    });
+                                                    txt
+                                                },
+                                                alive: true,
+                                            };
+                                            let mut state = state_inner.write().await;
+                                            if let Some(exist) = state
+                                                .services
+                                                .iter_mut()
+                                                .find(|s| s.name == entry.name)
+                                            {
+                                                *exist = entry;
+                                            } else {
+                                                state.services.push(entry);
+                                            }
+                                            state.services.sort_by(|a, b| a.name.cmp(&b.name));
+                                            state.mark_cache_dirty();
+                                        }
+                                        _ => (),
                                     }
-
-                                    // Sort services by hostname (name)
-                                    state.services.sort_by(|a, b| a.name.cmp(&b.name));
-
-                                    // Mark cache as dirty since services changed
-                                    state.mark_cache_dirty();
-
-                                    let _ = update_sender_inner.send("service_updated".to_string());
                                 }
-                            }
-                        });
+                            });
+                        }
+                        Err(_e) => {}
                     }
-                    Err(_e) => {}
                 }
-
-                let _ = update_sender_clone.send("type_updated".to_string());
+                _ => (),
             }
         }
     });
 
-    let mut tick = tokio::time::interval(Duration::from_millis(100));
+    let mut tick = tokio::time::interval(Duration::from_millis(50));
 
     let result = loop {
-        // Handle updates from mDNS
-        while let Ok(_update) = update_receiver.try_recv() {
-            // Update UI on next tick
-        }
-
         // Handle events
         if event::poll(Duration::from_millis(50))? {
             let event = event::read()?;
@@ -600,7 +614,6 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         // Set to a high value, the UI will clamp it
                         state.details_scroll_offset = 1000;
                     }
-
                     _ => {}
                 }
             }
