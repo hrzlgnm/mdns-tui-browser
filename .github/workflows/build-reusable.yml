@@ -27,6 +27,7 @@ jobs:
             symbol: 🐧
             platform: Linux
             target: aarch64-unknown-linux-gnu
+            dependencies: sudo apt install gcc-aarch64-linux-gnu
           - os: "macos-latest"
             target: universal-apple-darwin
             symbol: 🍏
@@ -46,6 +47,12 @@ jobs:
         with:
           targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || (matrix.target && format('{0}', matrix.target)) }}
           save-cache: ${{ inputs.branch == 'main' }}
+
+      - name: 🛠️ dependencies
+        if: matrix.dependencies
+        shell: bash
+        run: |
+          ${{ matrix.dependencies }}
 
       - name: 🛠️🚀
         if: (!inputs.tagName)
