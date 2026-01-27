@@ -28,7 +28,7 @@ jobs:
             platform: Linux
             target: aarch64-unknown-linux-gnu
           - os: "macos-latest"
-            target: universal-apple-darwin"
+            target: universal-apple-darwin
             symbol: 🍏
             platform: macOS
           - os: "windows-latest"
