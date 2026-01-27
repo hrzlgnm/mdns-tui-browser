@@ -375,6 +375,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ServiceEvent::ServiceFound(_fullname, fullname) => {
                     let service_type = fullname.to_string();
+                    // Poor man's validation of service type format
+                    if !service_type.starts_with('_')
+                        || !service_type.ends_with(".local.")
+                        || service_type.starts_with("_sub.")
+                    {
+                        continue; // invalid service type format
+                    }
                     {
                         let mut state = state_clone.write().await;
                         if !state.service_types.contains(&service_type) {
