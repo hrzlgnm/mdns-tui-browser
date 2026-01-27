@@ -51,7 +51,7 @@ jobs:
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
-          targets: ${{ (matrix.target && format('{0}', matrix.target)) }}
+          targets: ${{ matrix.target || '' }}
           save-cache: ${{ inputs.branch == 'main' }}
 
       - name: 🛠️ dependencies
