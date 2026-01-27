@@ -5,7 +5,7 @@ change-template: "- $TITLE @$AUTHOR #$NUMBER"
 sort-direction: ascending
 
 name-template: "mDNS TUI Browser Release v$RESOLVED_VERSION"
-tag-template: "$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
 tag-prefix: v
 
 category-template: "### $TITLE"
