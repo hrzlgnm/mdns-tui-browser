@@ -23,8 +23,19 @@ jobs:
           - os: "ubuntu-latest"
             symbol: 🐧
             platform: Linux
+          - os: "ubuntu-latest"
+            symbol: 🐧
+            platform: Linux
+            target: aarch64-unknown-linux-gnu
+            dependencies: |
+              sudo apt-get update
+              sudo apt-get -y install gcc-aarch64-linux-gnu
           - os: "macos-latest"
-            args: "--target universal-apple-darwin"
+            target: aarch64-apple-darwin
+            symbol: 🍏
+            platform: macOS
+          - os: "macos-latest"
+            target: x86_64-apple-darwin
             symbol: 🍏
             platform: macOS
           - os: "windows-latest"
@@ -40,8 +51,14 @@ jobs:
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
+          targets: ${{ matrix.target || '' }}
           save-cache: ${{ inputs.branch == 'main' }}
+
+      - name: 🛠️ dependencies
+        if: matrix.dependencies
+        shell: bash
+        run: |
+          ${{ matrix.dependencies }}
 
       - name: 🛠️🚀
         if: (!inputs.tagName)
@@ -53,4 +70,17 @@ jobs:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cargo build --release
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+
+      - name: 📦 Upload artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
+          path: |
+            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/mdns-tui-browser
+            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/mdns-tui-browser.exe
+          retention-days: 30
