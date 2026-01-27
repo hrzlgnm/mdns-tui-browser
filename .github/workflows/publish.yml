@@ -9,13 +9,6 @@ on:
       - published
 
 jobs:
-  source:
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/source-checksums-reusable.yml
-    secrets: inherit
-
   build:
     permissions:
       id-token: write
@@ -26,12 +19,3 @@ jobs:
     secrets: inherit
     with:
       tagName: ${{ github.event.release.tag_name }}
-
-  asset:
-    needs:
-      - build
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/asset-checksums-reusable.yml
-    secrets: inherit
