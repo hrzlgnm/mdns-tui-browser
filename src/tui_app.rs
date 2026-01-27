@@ -373,7 +373,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     state.service_types.retain(|s| s != &fullname);
                     state.mark_cache_dirty();
                 }
-                ServiceEvent::ServiceFound(_fullname, fullname) => {
+                ServiceEvent::ServiceFound(_service_type, fullname) => {
                     let service_type = fullname.to_string();
                     // Poor man's validation of service type format
                     if !service_type.starts_with('_')
