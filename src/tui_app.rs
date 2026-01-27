@@ -145,12 +145,12 @@ impl AppState {
         self.mark_cache_dirty();
         self.validate_selected_type();
     }
+}
 
-    fn is_valid_service_type(service_type: &str) -> bool {
-        service_type.starts_with('_')
-            && service_type.ends_with(".local.")
-            && !service_type.starts_with("_sub.")
-    }
+fn is_valid_service_type(service_type: &str) -> bool {
+    service_type.starts_with('_')
+        && service_type.ends_with(".local.")
+        && !service_type.starts_with("_sub.")
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
@@ -414,7 +414,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ServiceEvent::ServiceFound(_service_type, fullname) => {
                     let service_type = fullname.to_string();
-                    if !AppState::is_valid_service_type(&service_type) {
+                    if !is_valid_service_type(&service_type) {
                         continue; // invalid service type format
                     }
                     {
