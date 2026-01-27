@@ -394,11 +394,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     match mdns.browse(&service_type) {
-                        Err(_) => {
+                        Err(e) => {
                             // if a browse fails, that usually means the service type is invalid and
                             // should be removed from the service types list
+                            eprintln!("Failed to browse {}: {}", service_type, e);
                             let mut state = state_clone.write().await;
                             state.service_types.retain(|s| s != &service_type);
+                            state.validate_selected_type();
                             state.mark_cache_dirty();
                         }
                         Ok(service_receiver) => {
