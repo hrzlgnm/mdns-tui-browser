@@ -209,17 +209,13 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
                 .trim_end_matches(".local.")
                 .replace("._tcp", ".tcp")
                 .replace("._udp", ".udp");
-            let display_text = format!("{} ({})", display_name, service.name);
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("{} ", service.port),
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(display_text, Style::default()),
-            ]))
-            .style(style)
+            let display_text = format!(
+                "{} {}:{}",
+                display_name,
+                service.addrs.first().unwrap(),
+                service.port
+            );
+            ListItem::new(Line::from(Span::styled(display_text, style)))
         })
         .collect();
 
