@@ -30,6 +30,13 @@ jobs:
             dependencies: |
               sudo apt-get update
               sudo apt-get -y install gcc-aarch64-linux-gnu
+          - os: "ubuntu-latest"
+            symbol: 🐧
+            platform: Linux
+            target: arm-unknown-linux-gnueabihf
+            dependencies: |
+              sudo apt-get update
+              sudo apt-get -y install gcc-13-arm-linux-gnueabihf
           - os: "macos-latest"
             target: aarch64-apple-darwin
             symbol: 🍏
