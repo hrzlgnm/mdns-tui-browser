@@ -23,8 +23,12 @@ jobs:
           - os: "ubuntu-latest"
             symbol: 🐧
             platform: Linux
+          - os: "ubuntu-latest"
+            symbol: 🐧
+            platform: Linux
+            target: aarch64-unknown-linux-gnu
           - os: "macos-latest"
-            args: "--target universal-apple-darwin"
+            target: universal-apple-darwin"
             symbol: 🍏
             platform: macOS
           - os: "windows-latest"
@@ -40,7 +44,7 @@ jobs:
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || (matrix.target && format('{0}', matrix.target)) }}
           save-cache: ${{ inputs.branch == 'main' }}
 
       - name: 🛠️🚀
@@ -53,4 +57,19 @@ jobs:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cargo build --release
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+
+      - name: 📦 Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
+          path: |
+            target/${{ matrix.target || '' }}/release/mdns-tui-browser*
+            target/${{ matrix.target || '' }}/release/*.deb
+            target/${{ matrix.target || '' }}/release/*.rpm
+            target/${{ matrix.target || '' }}/release/*.tar.gz
+          retention-days: 30
