@@ -28,8 +28,8 @@ jobs:
             platform: Linux
             target: aarch64-unknown-linux-gnu
             dependencies: |
-                sudo apt-get update 
-                sudo apt-get -y install gcc-aarch64-linux-gnu
+              sudo apt-get update
+              sudo apt-get -y install gcc-aarch64-linux-gnu
           - os: "macos-latest"
             target: aarch64-apple-darwin
             symbol: 🍏
@@ -77,12 +77,10 @@ jobs:
           fi
 
       - name: 📦 Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
           path: |
-            target/${{ matrix.target || '' }}/release/mdns-tui-browser*
-            target/${{ matrix.target || '' }}/release/*.deb
-            target/${{ matrix.target || '' }}/release/*.rpm
-            target/${{ matrix.target || '' }}/release/*.tar.gz
+            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/mdns-tui-browser
+            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/mdns-tui-browser.exe
           retention-days: 30
