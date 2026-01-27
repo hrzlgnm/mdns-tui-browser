@@ -370,7 +370,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_clone.write().await;
-                    state.services.retain(|s| s.name != fullname);
+                    state.service_types.retain(|s| s != &fullname);
                     state.mark_cache_dirty();
                 }
                 ServiceEvent::ServiceFound(_fullname, fullname) => {
@@ -387,6 +387,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     match mdns.browse(&service_type) {
+                        Err(_) => {
+                            // if a browse fails, that usually means the service type is invalid and
+                            // should be removed from the service types list
+                            let mut state = state_clone.write().await;
+                            state.service_types.retain(|s| s != &service_type);
+                            state.mark_cache_dirty();
+                        }
                         Ok(service_receiver) => {
                             let state_inner = Arc::clone(&state_clone);
                             let service_type_clone = service_type.clone();
@@ -468,7 +475,6 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             });
                         }
-                        Err(_e) => {}
                     }
                 }
                 _ => (),
