@@ -65,16 +65,13 @@ impl AppState {
     }
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
-        if self.selected_type.is_none() {
+        if let None = self.selected_type {
             return true; // "All Services" - show everything
         }
-        if let Some(idx) = self.selected_type {
-            if let Some(selected_type) = self.service_types.get(idx) {
-                service.service_type == *selected_type
-            } else {
-                // This should never happen if state management is correct
-                false
-            }
+
+        let idx = self.selected_type.unwrap();
+        if let Some(selected_type) = self.service_types.get(idx) {
+            service.service_type == *selected_type
         } else {
             false
         }
