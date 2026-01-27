@@ -147,9 +147,8 @@ impl AppState {
 }
 
 fn is_valid_service_type(service_type: &str) -> bool {
-    service_type.starts_with('_')
-        && service_type.ends_with(".local.")
-        && !service_type.starts_with("_sub.")
+    // all other cases are caught by ServiceDaemon::browse
+    !service_type.starts_with("_sub.")
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
