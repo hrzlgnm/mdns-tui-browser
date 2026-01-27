@@ -67,7 +67,7 @@ impl AppState {
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
         if self.selected_type.is_none() {
-            return true; // "All Services" - show everything
+            return true; // "All Types" - show everything
         }
 
         let idx = self.selected_type.unwrap();
@@ -136,7 +136,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
 
     // Service types list
     let mut type_items = vec![ListItem::new(Line::from(Span::styled(
-        "All Services".to_string(),
+        "All Types".to_string(),
         if app_state.selected_type.is_none() {
             Style::default().bg(Color::DarkGray).fg(Color::White)
         } else {
@@ -516,10 +516,10 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         let mut state = state.write().await;
                         match state.selected_type {
                             None => {
-                                // Already at "All Services", can't go further left
+                                // Already at "All Types", can't go further left
                             }
                             Some(0) => {
-                                // Move from first service type to "All Services"
+                                // Move from first service type to "All Types"
                                 state.selected_type = None;
                                 state.selected_service = 0;
                                 state.services_scroll_offset = 0;
@@ -544,7 +544,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                         let mut state = state.write().await;
                         match state.selected_type {
                             None => {
-                                // Move from "All Services" to first service type (index 0)
+                                // Move from "All Types" to first service type (index 0)
                                 // Only if service_types is not empty
                                 if !state.service_types.is_empty() {
                                     state.selected_type = Some(0);
