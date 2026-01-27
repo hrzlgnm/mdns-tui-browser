@@ -283,7 +283,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         };
 
         let details_text = format!(
-            "Name: {}\nHost: {}\nameType: {}{}\nDomain: {}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
+            "Name: {}\nHostname: {}\nType: {}{}\nDomain: {}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
             service.name,
             service.host,
             service.service_type,
