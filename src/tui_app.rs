@@ -111,6 +111,46 @@ impl AppState {
         self.update_filtered_cache();
         self.cached_filtered_services.as_slice()
     }
+
+    // Helper methods for service type management
+    fn add_service_type(&mut self, service_type: &str) -> bool {
+        if !self.service_types.contains(&service_type.to_string()) {
+            self.service_types.push(service_type.to_string());
+            self.service_types.sort();
+            self.invalidate_cache_and_validate();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn remove_service_type(&mut self, service_type: &str) -> bool {
+        let initial_len = self.service_types.len();
+        self.service_types.retain(|s| s != service_type);
+        let removed = self.service_types.len() < initial_len;
+        if removed {
+            self.invalidate_cache_and_validate();
+        }
+        removed
+    }
+
+    fn update_service_type_selection(&mut self, new_type: Option<usize>) {
+        self.selected_type = new_type;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn invalidate_cache_and_validate(&mut self) {
+        self.mark_cache_dirty();
+        self.validate_selected_type();
+    }
+
+    fn is_valid_service_type(service_type: &str) -> bool {
+        service_type.starts_with('_')
+            && service_type.ends_with(".local.")
+            && !service_type.starts_with("_sub.")
+    }
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
@@ -370,28 +410,16 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_clone.write().await;
-                    state.service_types.retain(|s| s != &fullname);
-                    state.mark_cache_dirty();
+                    state.remove_service_type(&fullname);
                 }
                 ServiceEvent::ServiceFound(_service_type, fullname) => {
                     let service_type = fullname.to_string();
-                    // Poor man's validation of service type format
-                    if !service_type.starts_with('_')
-                        || !service_type.ends_with(".local.")
-                        || service_type.starts_with("_sub.")
-                    {
+                    if !AppState::is_valid_service_type(&service_type) {
                         continue; // invalid service type format
                     }
                     {
                         let mut state = state_clone.write().await;
-                        if !state.service_types.contains(&service_type) {
-                            state.service_types.push(service_type.clone());
-                            state.service_types.sort();
-                            // Validate selected_type in case it's now out of bounds
-                            state.validate_selected_type();
-                            // Mark cache as dirty since service types changed
-                            state.mark_cache_dirty();
-                        }
+                        state.add_service_type(&service_type);
                     }
                     match mdns.browse(&service_type) {
                         Err(e) => {
@@ -399,9 +427,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             // should be removed from the service types list
                             eprintln!("Failed to browse {}: {}", service_type, e);
                             let mut state = state_clone.write().await;
-                            state.service_types.retain(|s| s != &service_type);
-                            state.validate_selected_type();
-                            state.mark_cache_dirty();
+                            state.remove_service_type(&service_type);
                         }
                         Ok(service_receiver) => {
                             let state_inner = Arc::clone(&state_clone);
@@ -419,7 +445,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                             {
                                                 entry.alive = false;
                                             }
-                                            state.mark_cache_dirty();
+                                            state.invalidate_cache_and_validate();
                                         }
                                         ServiceEvent::ServiceResolved(service_info) => {
                                             let entry = ServiceEntry {
@@ -477,7 +503,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 state.services.push(entry);
                                             }
                                             state.services.sort_by(|a, b| a.name.cmp(&b.name));
-                                            state.mark_cache_dirty();
+                                            state.invalidate_cache_and_validate();
                                         }
                                         _ => (),
                                     }
@@ -529,64 +555,44 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     KeyCode::Char('h') | KeyCode::Left => {
                         let mut state = state.write().await;
-                        match state.selected_type {
-                            None => {
-                                // Already at "All Types", can't go further left
-                            }
-                            Some(0) => {
-                                // Move from first service type to "All Types"
-                                state.selected_type = None;
-                                state.selected_service = 0;
-                                state.services_scroll_offset = 0;
-                                // Mark cache as dirty since filter changed
-                                state.mark_cache_dirty();
-                            }
-                            Some(idx) => {
-                                // Move to previous service type
-                                state.selected_type = Some(idx - 1);
-                                state.selected_service = 0;
-                                state.services_scroll_offset = 0;
-                                // Update scroll offset for types list using actual visible count
-                                if idx - 1 < state.types_scroll_offset {
-                                    state.types_scroll_offset = idx - 1;
-                                }
-                                // Mark cache as dirty since filter changed
-                                state.mark_cache_dirty();
+                        let new_type = match state.selected_type {
+                            None => None,               // Already at "All Types", can't go further left
+                            Some(0) => None, // Move from first service type to "All Types"
+                            Some(idx) => Some(idx - 1), // Move to previous service type
+                        };
+                        if let Some(new_idx) = new_type {
+                            // Update scroll offset for types list using actual visible count
+                            if new_idx < state.types_scroll_offset {
+                                state.types_scroll_offset = new_idx;
                             }
                         }
+                        state.update_service_type_selection(new_type);
                     }
                     KeyCode::Char('l') | KeyCode::Right => {
                         let mut state = state.write().await;
-                        match state.selected_type {
+                        let new_type = match state.selected_type {
                             None => {
                                 // Move from "All Types" to first service type (index 0)
-                                // Only if service_types is not empty
                                 if !state.service_types.is_empty() {
-                                    state.selected_type = Some(0);
-                                    state.selected_service = 0;
-                                    state.services_scroll_offset = 0;
-                                    // Mark cache as dirty since filter changed
-                                    state.mark_cache_dirty();
-                                    state.validate_selected_type();
+                                    Some(0)
+                                } else {
+                                    None
                                 }
                             }
                             Some(idx) if idx < state.service_types.len().saturating_sub(1) => {
-                                state.selected_type = Some(idx + 1);
-                                state.selected_service = 0;
-                                state.services_scroll_offset = 0;
-                                // Update scroll offset for types list using actual visible count
-                                if state.visible_types > 0
-                                    && idx + 1 >= state.types_scroll_offset + state.visible_types
-                                {
-                                    state.types_scroll_offset = idx + 1 - state.visible_types + 1;
-                                }
-                                // Mark cache as dirty since filter changed
-                                state.mark_cache_dirty();
+                                Some(idx + 1)
                             }
-                            Some(_) => {
-                                // Already at last service type, can't go further right
+                            Some(_) => None, // Already at last service type, can't go further right
+                        };
+                        if let Some(new_idx) = new_type {
+                            // Update scroll offset for types list using actual visible count
+                            if state.visible_types > 0
+                                && new_idx >= state.types_scroll_offset + state.visible_types
+                            {
+                                state.types_scroll_offset = new_idx - state.visible_types + 1;
                             }
                         }
+                        state.update_service_type_selection(new_type);
                     }
                     KeyCode::Char('u')
                         if key
