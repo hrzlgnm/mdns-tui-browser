@@ -44,7 +44,7 @@ jobs:
         with:
           repository: ${{ github.repository }}
           tag: ${{ needs.tag.outputs.tag }}
-          fileName: "mdns?browser*"
+          fileName: "mdns*tui*browser*"
       - name: 🔢☑️
         shell: bash
         env:
