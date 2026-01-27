@@ -633,7 +633,10 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             Some(0) => None, // Move from first service type to "All Types"
                             Some(idx) => Some(idx - 1), // Move to previous service type
                         };
-                        if let Some(new_idx) = new_type {
+                        if new_type.is_none() {
+                            // Moving to "All Types" - ensure it's visible at visual index 0
+                            state.types_scroll_offset = 0;
+                        } else if let Some(new_idx) = new_type {
                             // Update scroll offset for types list using actual visible count
                             if new_idx < state.types_scroll_offset {
                                 state.types_scroll_offset = new_idx;
@@ -655,9 +658,12 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             Some(idx) if idx < state.service_types.len().saturating_sub(1) => {
                                 Some(idx + 1)
                             }
-                            Some(_) => None, // Already at last service type, can't go further right
+                            Some(idx) => Some(idx), // Stay at last service type, don't wrap to "All Types"
                         };
-                        if let Some(new_idx) = new_type {
+                        if new_type.is_none() {
+                            // Moving to "All Types" - ensure it's visible at visual index 0
+                            state.types_scroll_offset = 0;
+                        } else if let Some(new_idx) = new_type {
                             // Update scroll offset for types list using actual visible count
                             if state.visible_types > 0
                                 && new_idx >= state.types_scroll_offset + state.visible_types
