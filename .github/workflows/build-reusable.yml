@@ -21,34 +21,34 @@ jobs:
       matrix:
         include:
           - os: "ubuntu-latest"
-            symbol: 🐧
-            platform: Linux
+            symbol: 🐧 x86_64
             target: x86_64-unknown-linux-gnu
+            platform: Linux-x86_64
           - os: "ubuntu-latest"
-            symbol: 🐧
-            platform: Linux
+            symbol: 🐧 aarch64
             target: aarch64-unknown-linux-gnu
+            platform: Linux-aarch64
             dependencies: |
               sudo apt-get update
               sudo apt-get -y install gcc-aarch64-linux-gnu
           - os: "ubuntu-latest"
-            symbol: 🐧
-            platform: Linux
+            symbol: 🐧 arm
             target: arm-unknown-linux-gnueabihf
+            platform: Linux-arm
             dependencies: |
               sudo apt-get update
               sudo apt-get -y install gcc-arm-linux-gnueabihf
           - os: "macos-latest"
+            symbol: 🍏 aarch64
             target: aarch64-apple-darwin
-            symbol: 🍏
-            platform: macOS
+            platform: macOS-aarch64
           - os: "macos-latest"
+            symbol: 🍏 x86_64
             target: x86_64-apple-darwin
-            symbol: 🍏
-            platform: macOS
+            platform: macOS-x86_64
           - os: "windows-latest"
-            symbol: 🪟
-            platform: Windows
+            symbol: 🪟 x86_64
+            platform: Windows-x86_64
             target: x86_64-pc-windows-msvc
 
     name: ${{matrix.symbol}}🔨
@@ -87,7 +87,7 @@ jobs:
         if: inputs.tagName
         shell: bash
         run: |
-          staging="mdns-tui-browser-${{ inputs.tagName }}-${{ matrix.target }}"
+          staging="mdns-tui-browser-${{ inputs.tagName }}-${{ matrix.platform }}"
           mkdir -p "$staging"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.exe" "$staging/"
@@ -105,7 +105,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: mDNS TUI Browser Release v${{ inputs.tagName }}
+          name: mDNS TUI Browser Release ${{ inputs.tagName }}
           append_body: true
           make_latest: false
           generate_release_notes: false
