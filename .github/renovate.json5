@@ -4,6 +4,7 @@
         "config:best-practices",
         "monorepo:tauri",
         "security:openssf-scorecard",
+        ":disableDependencyDashboard",
         ":automergeDigest",
         ":automergeMinor",
         ":automergePr",
