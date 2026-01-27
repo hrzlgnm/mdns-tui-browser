@@ -623,9 +623,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                             } else {
                                                 state.services.push(entry);
                                             }
-                                            state
-                                                .services
-                                                .sort_by(|a, b| a.fullname.cmp(&b.fullname));
+                                            state.services.sort_by(|a, b| a.host.cmp(&b.host));
                                             state.invalidate_cache_and_validate();
                                         }
                                         _ => (),
