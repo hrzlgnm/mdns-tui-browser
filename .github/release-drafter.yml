@@ -1,0 +1,57 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+change-template: "- $TITLE @$AUTHOR #$NUMBER"
+sort-direction: ascending
+
+name-template: "mDNS TUI Browser Release v$RESOLVED_VERSION"
+tag-template: "$RESOLVED_VERSION"
+tag-prefix: v
+
+category-template: "### $TITLE"
+categories:
+  - title: ":boom: Breaking Changes"
+    label: "breaking-change"
+
+  - title: ":sparkles: New Features"
+    label: "enhancement"
+
+  - title: ":bug: Bug Fixes"
+    labels:
+      - "bug"
+      - "bugfix"
+
+  - title: "🧰 Maintenance"
+    label: "chore"
+
+  - title: ":zap: Performance"
+    label: "performance"
+
+  - title: ":recycle: Refactor"
+    label: "refactor"
+
+  - title: ":scroll: Documentation"
+    label: "documentation"
+
+  - title: ":white_check_mark: Test"
+    label: "test"
+
+  - title: ":arrow_up: Dependency Updates"
+    label: "dependencies"
+    collapse-after: 5
+
+exclude-labels:
+  - ignore
+
+header: |
+
+  ## What's Changed
+
+template: |
+
+  $CHANGES
+
+footer: |
+
+  ### Full Changelog
+  [$PREVIOUS_TAG...v$RESOLVED_VERSION](https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
