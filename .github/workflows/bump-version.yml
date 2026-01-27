@@ -29,7 +29,7 @@ jobs:
       version: ${{ steps.semver.outputs.semantic-version }}
     env:
       GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
-      RULESET: repos/${{github.repository}}/rulesets/12155739
+      RULESET: repos/${{ github.repository }}/rulesets/12155739
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -53,7 +53,7 @@ jobs:
           git config --global user.name "hrzlgnm"
           git config --global user.email "hrzlgnm@users.noreply.github.com"
 
-      - name: 🔄Update cargo and tauri versions
+      - name: 🔄Update cargo versions
         run: |
           sed -i '0,/\(version *= *\).*/s//\1"${{ steps.semver.outputs.semantic-version }}"/' Cargo.toml
           sed -i '/name = "mdns-tui-browser"/{N;s/\(version *= *\)".*"/\1"'"${{ steps.semver.outputs.semantic-version }}"'"/;}' Cargo.lock
