@@ -315,9 +315,10 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
     if let Some(service) = selected_service {
         let details_text = create_service_details_text(service);
         let content_lines = details_text.lines().count();
+        let available_height = (area.height as usize).saturating_sub(2);
         let clamped_offset = app_state
             .details_scroll_offset
-            .min(content_lines.saturating_sub((area.height - 2) as usize));
+            .min(content_lines.saturating_sub(available_height));
 
         let details = Paragraph::new(details_text.clone())
             .block(
@@ -330,7 +331,7 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
         f.render_widget(details, area);
 
         // Render scrollbar for details if content is longer than available space
-        let visible_lines = (area.height - 2) as usize;
+        let visible_lines = (area.height as usize).saturating_sub(2);
         if content_lines > visible_lines {
             render_details_scrollbar(f, area, content_lines, clamped_offset);
         }
