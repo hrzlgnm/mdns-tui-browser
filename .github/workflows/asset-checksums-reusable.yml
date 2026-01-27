@@ -27,7 +27,7 @@ jobs:
           if [ -n "${{ github.event.release.name }}" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
           else
-            echo "tag=mdns-browser-v${{ github.event.inputs.semver }}" >> $GITHUB_OUTPUT
+            echo "tag=v${{ github.event.inputs.semver }}" >> $GITHUB_OUTPUT
           fi
 
   generate_checksums:
