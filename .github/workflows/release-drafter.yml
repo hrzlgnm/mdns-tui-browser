@@ -26,10 +26,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 📝 Extract latest version from tauri.conf.json
+      - name: 📝 Extract latest version from Cargo.toml
         id: get-version
         run: |
-          CURRENT_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          CURRENT_VERSION=$(grep '^version =' Cargo.toml | head -n1 | sed -E 's/version = "([^"]+)"/\1/')
           echo "current-version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: 🗒️ Draft a new release
