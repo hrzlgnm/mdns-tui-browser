@@ -65,7 +65,7 @@ impl AppState {
     }
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
-        if let None = self.selected_type {
+        if self.selected_type.is_none() {
             return true; // "All Services" - show everything
         }
 
