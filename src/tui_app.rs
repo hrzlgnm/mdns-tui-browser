@@ -22,6 +22,7 @@ use tokio::sync::RwLock;
 #[derive(Clone, Debug)]
 struct ServiceEntry {
     name: String,
+    host: String,
     service_type: String,
     subtype: Option<String>,
     domain: String,
@@ -158,6 +159,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
                 let display_type = service_type
                     .trim_start_matches('_')
                     .trim_end_matches(".local.")
+                    .trim_end_matches(".")
                     .replace("._tcp", ".tcp")
                     .replace("._udp", ".udp");
                 ListItem::new(Line::from(Span::styled(display_type.to_string(), style)))
@@ -171,11 +173,10 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .collect();
 
     let types_list = List::new(visible_type_items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Service Types (←/→ to navigate)"),
-        )
+        .block(Block::default().borders(Borders::ALL).title(format!(
+            "Service Types [{}] (←/→)",
+            app_state.service_types.len()
+        )))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut list_state = ListState::default();
@@ -191,6 +192,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
     let filtered_indices = app_state.get_filtered_services();
+    let filtered_indices_len = filtered_indices.len();
 
     let service_items: Vec<ListItem> = filtered_indices
         .iter()
@@ -210,16 +212,19 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
             if !service.alive {
                 style = style.add_modifier(Modifier::ITALIC);
             }
-            // Remove _ prefix, .local. suffix, and underscore from _tcp/_udp
+            // .local. suffix and sole . suffix
             let display_name = service
                 .name
-                .trim_start_matches('_')
                 .trim_end_matches(".local.")
-                .replace("._tcp", ".tcp")
-                .replace("._udp", ".udp");
+                .trim_end_matches(".");
+            let display_host = service
+                .host
+                .trim_end_matches(".local.")
+                .trim_end_matches(".");
             let display_text = format!(
-                "{} {}:{}",
+                "{} - {} - {}:{}",
                 display_name,
+                display_host,
                 service.addrs.first().unwrap(),
                 service.port
             );
@@ -234,11 +239,11 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         .collect();
 
     let services_list = List::new(visible_service_items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Services (↑/↓ to navigate)"),
-        )
+        .block(Block::default().borders(Borders::ALL).title(format!(
+            "Services [{}/{}] (↑/↓)",
+            filtered_indices_len,
+            services_clone.len()
+        )))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut services_list_state = ListState::default();
@@ -278,8 +283,9 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         };
 
         let details_text = format!(
-            "Name: {}\nType: {}{}\nDomain: {}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
+            "Name: {}\nHostname: {}\nType: {}{}\nDomain: {}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
             service.name,
+            service.host,
             service.service_type,
             subtype_text,
             service.domain,
@@ -402,6 +408,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                         ServiceEvent::ServiceResolved(service_info) => {
                                             let entry = ServiceEntry {
                                                 name: service_info.get_fullname().to_string(),
+                                                host: service_info.get_hostname().to_string(),
                                                 service_type: service_type_clone.clone(),
                                                 subtype: service_info
                                                     .get_subtype()
