@@ -2,6 +2,7 @@
 name = "mdns-tui-browser"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.80"
 
 [dependencies]
 mdns-sd = "0.17"
