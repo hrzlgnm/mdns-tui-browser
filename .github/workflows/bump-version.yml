@@ -1,0 +1,98 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to bump
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      dry-run:
+        description: dry-run
+        required: true
+        type: boolean
+
+jobs:
+  update_version:
+    permissions:
+      actions: write # to trigger other actions
+      contents: write # to update version and create tag
+    runs-on: ubuntu-slim
+    outputs:
+      version: ${{ steps.semver.outputs.semantic-version }}
+    env:
+      GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
+      RULESET: repos/${{github.repository}}/rulesets/12155739
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - id: semver
+        uses: SOLIDSoftworks/semver-tags@fa8963220fb4913aea2b20cc190004de1b79f395 # v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN}}
+          tag-prefix: "v"
+          incremented-value: ${{ inputs.version }}
+          create-release: false
+          dry-run: true
+
+      - name: ⚙️Set up SSH signing key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_SIGNING_KEY }}" > ~/.ssh/id_ed25519_signing
+          chmod 600 ~/.ssh/id_ed25519_signing
+          git config --global gpg.format ssh
+          git config --global user.signingKey ~/.ssh/id_ed25519_signing
+          git config --global user.name "hrzlgnm"
+          git config --global user.email "hrzlgnm@users.noreply.github.com"
+
+      - name: 🔄Update cargo and tauri versions
+        run: |
+          sed -i '0,/\(version *= *\).*/s//\1"${{ steps.semver.outputs.semantic-version }}"/' Cargo.toml
+          sed -i '/name = "mdns-tui-browser"/{N;s/\(version *= *\)".*"/\1"'"${{ steps.semver.outputs.semantic-version }}"'"/;}' Cargo.lock
+
+      - name: ⏳Temporary disable ruleset enforcement
+        run: |
+          gh api \
+          -H "Accept: application/vnd.github+json" \
+          ${RULESET} | jq '.enforcement = "disabled"' | \
+          gh api \
+          --method PUT \
+          -H "Accept: application/vnd.github+json" \
+          ${RULESET} \
+          --input -
+
+      - name: 💾🏷️⬆️ Commit, tag and push
+        if: ${{ !inputs.dry-run }}
+        run: |
+          git add -A
+          git commit -S -m "Bump version to ${{ steps.semver.outputs.semantic-version }}"
+          git push
+          git tag -s -a v${{ steps.semver.outputs.semantic-version }} -m "mDNS TUI Browser Release v${{ steps.semver.outputs.semantic-version}}"
+          git push --tags
+
+      - name: 👮 Re-enable enforcement of rules
+        if: always()
+        run: |
+          gh api \
+          -H "Accept: application/vnd.github+json" \
+          ${RULESET} | jq '.enforcement = "active"' | \
+          gh api \
+          --method PUT \
+          -H "Accept: application/vnd.github+json" \
+          ${RULESET} \
+          --input -
+
+      - name: Trigger Release Drafter on main
+        if: always()
+        run: |
+          gh workflow run release-drafter.yml -r main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
