@@ -10,7 +10,6 @@ debug = true
 lto = true
 opt-level = 3
 panic = "abort"
-strip = "debuginfo"
 
 [dependencies]
 mdns-sd = "0.17"
