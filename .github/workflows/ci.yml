@@ -59,6 +59,7 @@ jobs:
           filters: |
             code:
               - '.github/actions/setup-*/**'
+              - '.github/workflows/build-reusable.yml'
               - 'src/**'
               - 'src-tauri/Cargo.toml'
               - 'Cargo.toml'
