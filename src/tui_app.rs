@@ -195,8 +195,9 @@ impl AppState {
 }
 
 fn is_valid_service_type(service_type: &str) -> bool {
-    // all other cases are caught by ServiceDaemon::browse
-    !service_type.starts_with("_sub.")
+    // Just ignore subtypes in enumeration, other
+    // invalid types are covered by browse resulting in an error
+    !service_type.contains("_sub.")
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
