@@ -89,7 +89,7 @@ jobs:
         run: |
           staging="mdns-tui-browser-${{ inputs.tagName }}-${{ matrix.target }}"
           mkdir -p "$staging"
-          if [ "${{ matrix.os }}" = "windows-latest" ] 
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.exe" "$staging/"
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> $GITHUB_ENV
