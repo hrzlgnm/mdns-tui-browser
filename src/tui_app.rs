@@ -448,12 +448,14 @@ fn format_service_for_display(service: &ServiceEntry) -> String {
         .host
         .trim_end_matches(".local.")
         .trim_end_matches(".");
+    let address = service
+        .addrs
+        .first()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "<no-addr>".into());
     format!(
         "{} - {} - {}:{}",
-        display_name,
-        display_host,
-        service.addrs.first().unwrap(),
-        service.port
+        display_name, display_host, address, service.port
     )
 }
 
