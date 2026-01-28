@@ -1,5 +1,5 @@
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -238,6 +238,202 @@ impl AppState {
     fn invalidate_cache_and_validate(&mut self) {
         self.mark_cache_dirty();
         self.validate_selected_type();
+    }
+
+    // Key handling methods
+    fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        if self.show_help_popup {
+            self.handle_help_popup_key(key)
+        } else {
+            self.handle_normal_mode_key(key)
+        }
+    }
+
+    fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
+        // Any key just closes the help popup and returns to normal mode
+        self.show_help_popup = false;
+        true // Continue running
+    }
+
+    fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            // Quit actions
+            KeyCode::Char('q') => {
+                false // Signal to quit
+            }
+            KeyCode::Char('c')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                false // Signal to quit
+            }
+
+            // Help toggle
+            KeyCode::Char('?') => {
+                self.toggle_help();
+                true
+            }
+
+            // Service navigation
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.navigate_services_up();
+                true
+            }
+
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.navigate_services_down();
+                true
+            }
+
+            KeyCode::Char('h') | KeyCode::Left => {
+                self.navigate_service_types_up();
+                true
+            }
+
+            KeyCode::Char('l') | KeyCode::Right => {
+                self.navigate_service_types_down();
+                true
+            }
+
+            // Page navigation
+            KeyCode::PageUp | KeyCode::Char('b') => {
+                self.navigate_services_page_up();
+                true
+            }
+
+            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
+                self.navigate_services_page_down();
+                true
+            }
+
+            KeyCode::Home => {
+                self.navigate_services_to_first();
+                true
+            }
+
+            KeyCode::End => {
+                self.navigate_services_to_last();
+                true
+            }
+
+            // Actions
+            KeyCode::Char('d') => {
+                self.remove_dead_services();
+                true
+            }
+
+            _ => true,
+        }
+    }
+
+    fn toggle_help(&mut self) {
+        self.show_help_popup = !self.show_help_popup;
+    }
+
+    fn navigate_services_up(&mut self) {
+        if self.selected_service > 0 {
+            self.selected_service -= 1;
+            self.update_services_scroll_offset();
+        }
+    }
+
+    fn navigate_services_down(&mut self) {
+        let filtered = self.get_filtered_services();
+        let filtered_len = filtered.len();
+        if self.selected_service < filtered_len.saturating_sub(1) {
+            self.selected_service += 1;
+            self.update_services_scroll_offset();
+        }
+    }
+
+    fn navigate_service_types_up(&mut self) {
+        let new_type = match self.selected_type {
+            None => None,               // Already at "All Types", can't go further left
+            Some(0) => None,            // Move from first service type to "All Types"
+            Some(idx) => Some(idx - 1), // Move to previous service type
+        };
+
+        if new_type.is_none() {
+            // Moving to "All Types" - ensure it's visible at visual index 0
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
+            // Update scroll offset for types list using actual visible count
+            if new_idx < self.types_scroll_offset {
+                self.types_scroll_offset = new_idx;
+            }
+        }
+        self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_down(&mut self) {
+        let new_type = match self.selected_type {
+            None => {
+                // Move from "All Types" to first service type (index 0)
+                if !self.service_types.is_empty() {
+                    Some(0)
+                } else {
+                    None
+                }
+            }
+            Some(idx) if idx < self.service_types.len().saturating_sub(1) => Some(idx + 1),
+            Some(idx) => Some(idx), // Stay at last service type, don't wrap to "All Types"
+        };
+
+        if new_type.is_none() {
+            // Moving to "All Types" - ensure it's visible at visual index 0
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
+            // Update scroll offset for types list using actual visible count
+            if self.visible_types > 0 && new_idx >= self.types_scroll_offset + self.visible_types {
+                self.types_scroll_offset = new_idx - self.visible_types + 1;
+            }
+        }
+        self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_services_page_up(&mut self) {
+        let scroll_amount = self.visible_services.saturating_sub(1);
+        if self.selected_service >= scroll_amount {
+            self.selected_service -= scroll_amount;
+        } else {
+            self.selected_service = 0;
+        }
+        self.update_services_scroll_offset();
+    }
+
+    fn navigate_services_page_down(&mut self) {
+        let filtered = self.get_filtered_services();
+        let filtered_len = filtered.len();
+        let scroll_amount = self.visible_services.saturating_sub(1);
+        if self.selected_service + scroll_amount < filtered_len.saturating_sub(1) {
+            self.selected_service += scroll_amount;
+        } else {
+            self.selected_service = filtered_len.saturating_sub(1);
+        }
+        self.update_services_scroll_offset();
+    }
+
+    fn navigate_services_to_first(&mut self) {
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+    }
+
+    fn navigate_services_to_last(&mut self) {
+        let filtered = self.get_filtered_services();
+        let filtered_len = filtered.len();
+        self.selected_service = filtered_len.saturating_sub(1);
+        self.update_services_scroll_offset();
+    }
+
+    fn update_services_scroll_offset(&mut self) {
+        if self.selected_service < self.services_scroll_offset {
+            self.services_scroll_offset = self.selected_service;
+        } else if self.visible_services > 0
+            && self.selected_service >= self.services_scroll_offset + self.visible_services
+        {
+            self.services_scroll_offset = self.selected_service - self.visible_services + 1;
+        }
     }
 }
 
@@ -776,212 +972,14 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     continue;
                                 }
                             }
-                            match key.code {
-                            KeyCode::Char('q') => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                    let _ = notification_sender.send(Notification::UserInput);
-                                } else {
-                                    break Ok(());
-                                }
-                            }
-                            KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                    let _ = notification_sender.send(Notification::UserInput);
-                                } else {
-                                    break Ok(());
-                                }
-                            }
-                            KeyCode::Char('?') => {
-                                let mut state = state.write().await;
-                                state.show_help_popup = !state.show_help_popup;
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('k') | KeyCode::Up => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else if state.selected_service > 0 {
-                                    state.selected_service -= 1;
-                                    // Update scroll offset for services list
-                                    if state.selected_service < state.services_scroll_offset {
-                                        state.services_scroll_offset = state.selected_service;
-                                    }
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('j') | KeyCode::Down => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    let filtered = state.get_filtered_services();
-                                    let filtered_len = filtered.len();
-                                    if state.selected_service < filtered_len.saturating_sub(1) {
-                                        state.selected_service += 1;
-                                        // Update scroll offset for services list using actual visible count
-                                        if state.visible_services > 0
-                                            && state.selected_service
-                                                >= state.services_scroll_offset + state.visible_services
-                                        {
-                                            state.services_scroll_offset =
-                                                state.selected_service - state.visible_services + 1;
-                                        }
-                                    }
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('h') | KeyCode::Left => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    let new_type = match state.selected_type {
-                                        None => None,               // Already at "All Types", can't go further left
-                                        Some(0) => None, // Move from first service type to "All Types"
-                                        Some(idx) => Some(idx - 1), // Move to previous service type
-                                    };
-                                    if new_type.is_none() {
-                                        // Moving to "All Types" - ensure it's visible at visual index 0
-                                        state.types_scroll_offset = 0;
-                                    } else if let Some(new_idx) = new_type {
-                                        // Update scroll offset for types list using actual visible count
-                                        if new_idx < state.types_scroll_offset {
-                                            state.types_scroll_offset = new_idx;
-                                        }
-                                    }
-                                    state.update_service_type_selection(new_type);
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('l') | KeyCode::Right => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    let new_type = match state.selected_type {
-                                        None => {
-                                            // Move from "All Types" to first service type (index 0)
-                                            if !state.service_types.is_empty() {
-                                                Some(0)
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        Some(idx) if idx < state.service_types.len().saturating_sub(1) => {
-                                            Some(idx + 1)
-                                        }
-                                        Some(idx) => Some(idx), // Stay at last service type, don't wrap to "All Types"
-                                    };
-                                    if new_type.is_none() {
-                                        // Moving to "All Types" - ensure it's visible at visual index 0
-                                        state.types_scroll_offset = 0;
-                                    } else if let Some(new_idx) = new_type {
-                                        // Update scroll offset for types list using actual visible count
-                                        if state.visible_types > 0
-                                            && new_idx >= state.types_scroll_offset + state.visible_types
-                                        {
-                                            state.types_scroll_offset = new_idx - state.visible_types + 1;
-                                        }
-                                    }
-                                    state.update_service_type_selection(new_type);
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
 
-                            KeyCode::PageUp | KeyCode::Char('b') => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    let scroll_amount = state.visible_services.saturating_sub(1);
-                                    if state.selected_service >= scroll_amount {
-                                        state.selected_service -= scroll_amount;
-                                    } else {
-                                        state.selected_service = 0;
-                                    }
-                                    // Update scroll offset for services list
-                                    if state.selected_service < state.services_scroll_offset {
-                                        state.services_scroll_offset = state.selected_service;
-                                    }
-                                }
+                            let mut state = state.write().await;
+                            let should_continue = state.handle_key_event(key);
+                            if should_continue {
                                 let _ = notification_sender.send(Notification::UserInput);
+                            } else {
+                                break Ok(());
                             }
-                            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    let filtered = state.get_filtered_services();
-                                    let filtered_len = filtered.len();
-                                    let scroll_amount = state.visible_services.saturating_sub(1);
-                                    if state.selected_service + scroll_amount < filtered_len.saturating_sub(1) {
-                                        state.selected_service += scroll_amount;
-                                    } else {
-                                        state.selected_service = filtered_len.saturating_sub(1);
-                                    }
-                                    // Update scroll offset for services list using actual visible count
-                                    if state.visible_services > 0
-                                        && state.selected_service
-                                            >= state.services_scroll_offset + state.visible_services
-                                    {
-                                        state.services_scroll_offset =
-                                            state.selected_service - state.visible_services + 1;
-                                    }
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-
-                            KeyCode::Home => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    state.selected_service = 0;
-                                    state.services_scroll_offset = 0;
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::End => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                } else {
-                                    let filtered = state.get_filtered_services();
-                                    let filtered_len = filtered.len();
-                                    state.selected_service = filtered_len.saturating_sub(1);
-                                    // Update scroll offset for services list using actual visible count
-                                    if state.visible_services > 0
-                                        && state.selected_service
-                                            >= state.services_scroll_offset + state.visible_services
-                                    {
-                                        state.services_scroll_offset =
-                                            state.selected_service - state.visible_services + 1;
-                                    }
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('d') => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                    let _ = notification_sender.send(Notification::UserInput);
-                                } else {
-                                    state.remove_dead_services();
-                                    let _ = notification_sender.send(Notification::ServiceChanged);
-                                }
-                            }
-                            _ => {
-                                let mut state = state.write().await;
-                                if state.show_help_popup {
-                                    state.show_help_popup = false;
-                                    let _ = notification_sender.send(Notification::UserInput);
-                                }
-                            }
-                        }
                         }
                         Event::Resize(_, _) => {
                             // Trigger a redraw on terminal resize
