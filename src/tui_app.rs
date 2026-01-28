@@ -657,6 +657,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(event) = event_result {
                     match event {
                         Event::Key(key) => {
+                            #[cfg(target_os = "windows")]
+                            {
+                                // On Windows, ignore key release events to prevent duplicate handling
+                                if key.kind == crossterm::event::KeyEventKind::Release {
+                                    continue;
+                                }
+                            }
                             match key.code {
                             KeyCode::Char('q') => break Ok(()),
                             KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => break Ok(()),
