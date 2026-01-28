@@ -1,7 +1,7 @@
 # Copyright 2026 hrzlgnm
 # SPDX-License-Identifier: MIT-0
 
-name: "Reusable desktop tauri build workflow"
+name: "Reusable build workflow"
 
 on:
   workflow_call:
