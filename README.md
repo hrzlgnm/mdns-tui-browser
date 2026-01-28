@@ -1,4 +1,10 @@
 [![Scc Count Badge](https://sloc.xyz/github/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/hrzlgnm/mdns-tui-browser/total)
+[![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/hrzlgnm/mdns-tui-browser/latest/total)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
+[![GitHub Release Date](https://img.shields.io/github/release-date/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/hrzlgnm/mdns-tui-browser/ci.yml)](https://github.com/hrzlgnm/mdns-tui-browser/actio
 # mDNS TUI Browser
 
 A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface.
