@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "mdns-tui-browser"
-version = "1.1.5"
+version = "1.2.0"
 dependencies = [
  "crossterm",
  "flume 0.12.0",
