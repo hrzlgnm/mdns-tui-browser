@@ -657,14 +657,31 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // Initial render to show the UI immediately
+    {
+        let mut state = state.write().await;
+        terminal.draw(|f| ui(f, &mut state))?;
+    }
+
     let result = loop {
         tokio::select! {
             // Handle user input events
             event_result = async {
-                if event::poll(Duration::from_millis(50)).ok()? {
-                    event::read().ok()
-                } else {
-                    None
+                match event::poll(Duration::from_millis(50)) {
+                    Ok(true) => {
+                        match event::read() {
+                            Ok(event) => Some(event),
+                            Err(e) => {
+                                eprintln!("Error reading event: {}", e);
+                                None
+                            }
+                        }
+                    }
+                    Ok(false) => None,
+                    Err(e) => {
+                        eprintln!("Error polling for events: {}", e);
+                        None
+                    }
                 }
             } => {
                 if let Some(Event::Key(key)) = event_result {
