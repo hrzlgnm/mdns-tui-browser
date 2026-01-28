@@ -38,7 +38,7 @@ mdns-tui-browser -h
 - <kbd>←</kbd>/<kbd>→</kbd> or <kbd>h</kbd>/<kbd>l</kbd> - Switch between service types  
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
-- <kbd>d</kbd> - Remove dead services and clean up empty service types
+- <kbd>d</kbd> - Remove dead services
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
 
@@ -66,8 +66,8 @@ The application is built with:
 
 ```
 src/
-├── main.rs       # Entry point with feature gating
-├── tui_app.rs    # Full TUI implementation (optional)
+├── main.rs       # Entry point with cli argument handling
+├── tui_app.rs    # Full TUI implementation
 └── README.md     # This file
 ```
 
