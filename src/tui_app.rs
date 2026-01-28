@@ -387,7 +387,7 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
 }
 
 fn render_help_section(f: &mut Frame, area: ratatui::layout::Rect) {
-    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f/g/G/Home/End for services list";
+    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/b/f/Space/Home/End for services list";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
@@ -658,7 +658,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     match event {
                         Event::Key(key) => {
                             match key.code {
-                            KeyCode::Char('q') | KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => break Ok(()),
+                            KeyCode::Char('q') => break Ok(()),
+                            KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => break Ok(()),
                             KeyCode::Char('k') | KeyCode::Up => {
                                 let mut state = state.write().await;
                                 if state.selected_service > 0 {
@@ -736,48 +737,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 state.update_service_type_selection(new_type);
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
-                            KeyCode::Char('u')
-                                if key
-                                    .modifiers
-                                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                            {
-                                let mut state = state.write().await;
-                                let scroll_amount = state.visible_services.saturating_sub(1);
-                                if state.selected_service >= scroll_amount {
-                                    state.selected_service -= scroll_amount;
-                                } else {
-                                    state.selected_service = 0;
-                                }
-                                // Update scroll offset for services list
-                                if state.selected_service < state.services_scroll_offset {
-                                    state.services_scroll_offset = state.selected_service;
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('d')
-                                if key
-                                    .modifiers
-                                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                            {
-                                let mut state = state.write().await;
-                                let filtered = state.get_filtered_services();
-                                let filtered_len = filtered.len();
-                                let scroll_amount = state.visible_services.saturating_sub(1);
-                                if state.selected_service + scroll_amount < filtered_len.saturating_sub(1) {
-                                    state.selected_service += scroll_amount;
-                                } else {
-                                    state.selected_service = filtered_len.saturating_sub(1);
-                                }
-                                // Update scroll offset for services list using actual visible count
-                                if state.visible_services > 0
-                                    && state.selected_service
-                                        >= state.services_scroll_offset + state.visible_services
-                                {
-                                    state.services_scroll_offset =
-                                        state.selected_service - state.visible_services + 1;
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
+                            
                             KeyCode::PageUp | KeyCode::Char('b') => {
                                 let mut state = state.write().await;
                                 let scroll_amount = state.visible_services.saturating_sub(1);
@@ -812,27 +772,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
-                            KeyCode::Char('g') => {
-                                let mut state = state.write().await;
-                                state.selected_service = 0;
-                                state.services_scroll_offset = 0;
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
-                            KeyCode::Char('G') => {
-                                let mut state = state.write().await;
-                                let filtered = state.get_filtered_services();
-                                let filtered_len = filtered.len();
-                                state.selected_service = filtered_len.saturating_sub(1);
-                                // Update scroll offset for services list using actual visible count
-                                if state.visible_services > 0
-                                    && state.selected_service
-                                        >= state.services_scroll_offset + state.visible_services
-                                {
-                                    state.services_scroll_offset =
-                                        state.selected_service - state.visible_services + 1;
-                                }
-                                let _ = notification_sender.send(Notification::UserInput);
-                            }
+                            
                             KeyCode::Home => {
                                 let mut state = state.write().await;
                                 state.selected_service = 0;
