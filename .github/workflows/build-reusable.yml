@@ -120,9 +120,5 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
           path: |
-            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/mdns-tui-browser
-            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/*.pdb
-            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/*.dwp
-            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/*.dSYM
-            target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release/mdns-tui-browser.exe
+            ${{ env.ASSET }}
           retention-days: 30
