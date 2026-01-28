@@ -208,6 +208,9 @@ impl AppState {
         let removed_count = initial_len - self.services.len();
 
         if removed_count > 0 {
+            // Refresh cache immediately after retain to ensure filtered services are up-to-date
+            self.invalidate_cache_and_validate();
+
             // Check if any service types should be removed (no active services of that type)
             let mut types_to_remove = Vec::new();
             for service_type in service_types_to_check {
@@ -229,8 +232,6 @@ impl AppState {
             self.selected_service = self
                 .selected_service
                 .min(self.get_filtered_services().len().saturating_sub(1));
-
-            self.invalidate_cache_and_validate();
         }
     }
 
