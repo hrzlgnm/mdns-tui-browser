@@ -141,6 +141,9 @@ impl AppState {
     }
 
     fn remove_service_type(&mut self, service_type: &str) -> bool {
+        if self.services.iter().any(|s| s.service_type == service_type) {
+            return false; // Still in use
+        }
         let initial_len = self.service_types.len();
 
         // Capture currently selected value before mutation
