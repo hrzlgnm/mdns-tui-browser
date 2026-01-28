@@ -38,7 +38,11 @@ mdns-tui-browser -h
 - <kbd>←</kbd>/<kbd>→</kbd> or <kbd>h</kbd>/<kbd>l</kbd> - Switch between service types  
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
+- <kbd>d</kbd> - Remove dead services and clean up empty service types
+- <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
+
+Press any key to close the help popup.
 
 
 
