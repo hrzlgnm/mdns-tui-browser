@@ -18,3 +18,4 @@ mdns-sd = "0.17"
 tokio = { version = "1.0", features = ["full"] }
 ratatui = "0.30"
 crossterm = "0.29"
+flume = "0.11"
