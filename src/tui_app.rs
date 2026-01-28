@@ -974,7 +974,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     let _ = notification_sender.send(Notification::ServiceChanged);
                                 }
                             }
-                            _ => {}
+                            _ => {
+                                let mut state = state.write().await;
+                                if state.show_help_popup {
+                                    state.show_help_popup = false;
+                                    let _ = notification_sender.send(Notification::UserInput);
+                                }
+                            }
                         }
                         }
                         Event::Resize(_, _) => {
