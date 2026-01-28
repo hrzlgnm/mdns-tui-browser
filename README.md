@@ -20,6 +20,18 @@ cargo run
 cargo build --release
 ```
 
+### CLI Options
+
+```bash
+# Show version
+mdns-tui-browser --version
+mdns-tui-browser -V
+
+# Show help
+mdns-tui-browser --help
+mdns-tui-browser -h
+```
+
 ## Controls (TUI Mode)
 
 - <kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>j</kbd>/<kbd>k</kbd> - Navigate services list
@@ -40,6 +52,7 @@ The application is built with:
 - **crossterm** - Terminal handling
 - **flume** - Async channel library for communication
 - **mdns-sd** - mDNS service discovery library
+- **clap** - Command line argument parsing library
 
 ### Features
 
