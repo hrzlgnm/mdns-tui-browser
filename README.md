@@ -20,11 +20,25 @@ cargo run
 cargo build --release
 ```
 
+### CLI Options
+
+```bash
+# Show version
+mdns-tui-browser --version
+mdns-tui-browser -V
+
+# Show help
+mdns-tui-browser --help
+mdns-tui-browser -h
+```
+
 ## Controls (TUI Mode)
 
-- `↑/↓` - Navigate services list
-- `←/→` - Switch between service types  
-- `q` - Quit the application
+- <kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>j</kbd>/<kbd>k</kbd> - Navigate services list
+- <kbd>←</kbd>/<kbd>→</kbd> or <kbd>h</kbd>/<kbd>l</kbd> - Switch between service types  
+- <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
+- <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
+- <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
 
 
 
@@ -36,6 +50,9 @@ The application is built with:
 - **ratatui** - Terminal UI framework
 - **tokio** - Async runtime
 - **crossterm** - Terminal handling
+- **flume** - Async channel library for communication
+- **mdns-sd** - mDNS service discovery library
+- **clap** - Command line argument parsing library
 
 ### Features
 
