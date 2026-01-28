@@ -249,20 +249,10 @@ impl AppState {
         }
     }
 
-    fn handle_help_popup_key(&mut self, key: KeyEvent) -> bool {
-        match key.code {
-            KeyCode::Char('q') | KeyCode::Char('c')
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
-                false // Signal to quit
-            }
-            _ => {
-                self.show_help_popup = false;
-                true // Continue running
-            }
-        }
+    fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
+        // Any key just closes the help popup and returns to normal mode
+        self.show_help_popup = false;
+        true // Continue running
     }
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
