@@ -91,13 +91,13 @@ jobs:
           mkdir -p "$staging"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.exe" "$staging/"
-            cp "target/${{ matrix.target }}/release/*.pdb" "$staging/"
+            cp "target/${{ matrix.target }}/release/mdns_tui_browser.pdb" "$staging/"
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> $GITHUB_ENV
           else
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
-            cp "target/${{ matrix.target }}/release/*.dwp" "$staging/" || true
-            cp -ar "target/${{ matrix.target }}/release/*.dSYM" "$staging/" || true
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
+            cp -ar "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
           fi
