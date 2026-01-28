@@ -38,6 +38,8 @@ The application is built with:
 - **ratatui** - Terminal UI framework
 - **tokio** - Async runtime
 - **crossterm** - Terminal handling
+- **flume** - Async channel library for communication
+- **mdns-sd** - mDNS service discovery library
 
 ### Features
 
