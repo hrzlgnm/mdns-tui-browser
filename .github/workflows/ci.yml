@@ -74,7 +74,7 @@ jobs:
   typos:
     name: 📝 Check typos
     if: always()
-    uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@524b2f6f95f9054736fbf0cd2a623ebac6d64c2a # v1.6.2
+    uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@e8cd94e4ec1cdb9588d493e982c1f3be319e02c4 # v1.6.3
 
   lint:
     needs: changes
