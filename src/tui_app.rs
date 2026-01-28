@@ -684,8 +684,10 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             } => {
-                if let Some(Event::Key(key)) = event_result {
-                        match key.code {
+                if let Some(event) = event_result {
+                    match event {
+                        Event::Key(key) => {
+                            match key.code {
                             KeyCode::Char('q') => break Ok(()),
                             KeyCode::Char('k') | KeyCode::Up => {
                                 let mut state = state.write().await;
@@ -822,6 +824,13 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
                             _ => {}
                         }
+                        }
+                        Event::Resize(_, _) => {
+                            // Trigger a redraw on terminal resize
+                            let _ = notification_sender.send(Notification::UserInput);
+                        }
+                        _ => {}
+                    }
                 }
             }
 
