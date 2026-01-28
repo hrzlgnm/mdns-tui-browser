@@ -6,10 +6,12 @@ rust-version = "1.85"
 
 [profile.release]
 codegen-units = 1
-debug = true
 lto = true
-opt-level = 3
+opt-level = "z"
 panic = "abort"
+debug = true
+split-debuginfo = "packed"
+strip = true
 
 [dependencies]
 mdns-sd = "0.17"
