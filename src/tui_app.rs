@@ -737,7 +737,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 state.update_service_type_selection(new_type);
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
-                            
+
                             KeyCode::PageUp | KeyCode::Char('b') => {
                                 let mut state = state.write().await;
                                 let scroll_amount = state.visible_services.saturating_sub(1);
@@ -772,7 +772,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
-                            
+
                             KeyCode::Home => {
                                 let mut state = state.write().await;
                                 state.selected_service = 0;
