@@ -548,8 +548,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_clone.write().await;
-                    state.remove_service_type(&fullname);
-                    let _ = notification_sender_clone.send(Notification::ServiceChanged);
+                    if state.remove_service_type(&fullname) {
+                        let _ = notification_sender_clone.send(Notification::ServiceChanged);
+                    }
                 }
                 ServiceEvent::ServiceFound(_service_type, fullname) => {
                     let service_type = fullname.to_string();
@@ -558,16 +559,19 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     {
                         let mut state = state_clone.write().await;
-                        state.add_service_type(&service_type);
-                        let _ = notification_sender_clone.send(Notification::ServiceChanged);
+                        if state.add_service_type(&service_type) {
+                            let _ = notification_sender_clone.send(Notification::ServiceChanged);
+                        }
                     }
                     match mdns.browse(&service_type) {
                         Err(_) => {
                             // if a browse fails, that usually means the service type is invalid and
                             // should be removed from the service types list
                             let mut state = state_clone.write().await;
-                            state.remove_service_type(&service_type);
-                            let _ = notification_sender_clone.send(Notification::ServiceChanged);
+                            if state.remove_service_type(&service_type) {
+                                let _ =
+                                    notification_sender_clone.send(Notification::ServiceChanged);
+                            }
                         }
                         Ok(service_receiver) => {
                             let state_inner = Arc::clone(&state_clone);
@@ -576,7 +580,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             tokio::spawn(async move {
                                 while let Ok(service_event) = service_receiver.recv_async().await {
                                     match service_event {
-                                        ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                                        ServiceEvent::ServiceRemoved(service_type, fullname) => {
                                             let mut state = state_inner.write().await;
                                             if let Some(entry) = state
                                                 .services
@@ -584,10 +588,11 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 .find(|s| s.fullname == fullname)
                                             {
                                                 entry.alive = false;
+                                                state.invalidate_cache_and_validate();
+                                                state.remove_service_type(&service_type);
+                                                let _ = notification_sender_inner
+                                                    .send(Notification::ServiceChanged);
                                             }
-                                            state.invalidate_cache_and_validate();
-                                            let _ = notification_sender_inner
-                                                .send(Notification::ServiceChanged);
                                         }
                                         ServiceEvent::ServiceResolved(service_info) => {
                                             let entry = ServiceEntry {
