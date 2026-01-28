@@ -251,7 +251,11 @@ impl AppState {
 
     fn handle_help_popup_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+            KeyCode::Char('q') | KeyCode::Char('c')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 false // Signal to quit
             }
             _ => {
@@ -267,64 +271,68 @@ impl AppState {
             KeyCode::Char('q') => {
                 false // Signal to quit
             }
-            KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+            KeyCode::Char('c')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 false // Signal to quit
             }
-            
+
             // Help toggle
             KeyCode::Char('?') => {
                 self.toggle_help();
                 true
             }
-            
+
             // Service navigation
             KeyCode::Char('k') | KeyCode::Up => {
                 self.navigate_services_up();
                 true
             }
-            
+
             KeyCode::Char('j') | KeyCode::Down => {
                 self.navigate_services_down();
                 true
             }
-            
+
             KeyCode::Char('h') | KeyCode::Left => {
                 self.navigate_service_types_up();
                 true
             }
-            
+
             KeyCode::Char('l') | KeyCode::Right => {
                 self.navigate_service_types_down();
                 true
             }
-            
+
             // Page navigation
             KeyCode::PageUp | KeyCode::Char('b') => {
                 self.navigate_services_page_up();
                 true
             }
-            
+
             KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
                 self.navigate_services_page_down();
                 true
             }
-            
+
             KeyCode::Home => {
                 self.navigate_services_to_first();
                 true
             }
-            
+
             KeyCode::End => {
                 self.navigate_services_to_last();
                 true
             }
-            
+
             // Actions
             KeyCode::Char('d') => {
                 self.remove_dead_services();
                 true
             }
-            
+
             _ => true,
         }
     }
@@ -352,10 +360,10 @@ impl AppState {
     fn navigate_service_types_up(&mut self) {
         let new_type = match self.selected_type {
             None => None,               // Already at "All Types", can't go further left
-            Some(0) => None,           // Move from first service type to "All Types"
+            Some(0) => None,            // Move from first service type to "All Types"
             Some(idx) => Some(idx - 1), // Move to previous service type
         };
-        
+
         if new_type.is_none() {
             // Moving to "All Types" - ensure it's visible at visual index 0
             self.types_scroll_offset = 0;
@@ -378,12 +386,10 @@ impl AppState {
                     None
                 }
             }
-            Some(idx) if idx < self.service_types.len().saturating_sub(1) => {
-                Some(idx + 1)
-            }
+            Some(idx) if idx < self.service_types.len().saturating_sub(1) => Some(idx + 1),
             Some(idx) => Some(idx), // Stay at last service type, don't wrap to "All Types"
         };
-        
+
         if new_type.is_none() {
             // Moving to "All Types" - ensure it's visible at visual index 0
             self.types_scroll_offset = 0;
@@ -433,8 +439,9 @@ impl AppState {
     fn update_services_scroll_offset(&mut self) {
         if self.selected_service < self.services_scroll_offset {
             self.services_scroll_offset = self.selected_service;
-        } else if self.visible_services > 0 
-            && self.selected_service >= self.services_scroll_offset + self.visible_services {
+        } else if self.visible_services > 0
+            && self.selected_service >= self.services_scroll_offset + self.visible_services
+        {
             self.services_scroll_offset = self.selected_service - self.visible_services + 1;
         }
     }
@@ -975,7 +982,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     continue;
                                 }
                             }
-                            
+
                             let mut state = state.write().await;
                             let should_continue = state.handle_key_event(key);
                             if should_continue {
