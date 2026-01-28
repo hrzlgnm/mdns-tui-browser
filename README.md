@@ -1,3 +1,4 @@
+[![Scc Count Badge](https://sloc.xyz/github/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser)
 # mDNS TUI Browser
 
 A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface.
