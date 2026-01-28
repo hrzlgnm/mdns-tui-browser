@@ -96,7 +96,7 @@ jobs:
           else
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
-            cp -R "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
+            cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
           fi
