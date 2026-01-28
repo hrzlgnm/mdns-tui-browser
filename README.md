@@ -22,9 +22,13 @@ cargo build --release
 
 ## Controls (TUI Mode)
 
-- `↑/↓` - Navigate services list
-- `←/→` - Switch between service types  
-- `q` - Quit the application
+- `↑/↓` or `j/k` - Navigate services list
+- `←/→` or `h/l` - Switch between service types  
+- `PageUp/PageDown` or `Ctrl+u/Ctrl+d` - Scroll services list by page
+- `b/f` or `Space` - Scroll services list by page
+- `g/Home` - Jump to first service in list
+- `G/End` - Jump to last service in list
+- `q` or `Ctrl+C` - Quit the application
 
 
 

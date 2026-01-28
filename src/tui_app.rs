@@ -10,9 +10,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, Wrap,
-    },
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 use std::sync::Arc;
@@ -38,7 +36,6 @@ struct AppState {
     selected_type: Option<usize>,
     types_scroll_offset: usize,
     services_scroll_offset: usize,
-    details_scroll_offset: usize,
     visible_types: usize,
     visible_services: usize,
     cached_filtered_services: Vec<usize>,
@@ -54,7 +51,6 @@ impl AppState {
             selected_type: None,
             types_scroll_offset: 0,
             services_scroll_offset: 0,
-            details_scroll_offset: 0,
             visible_types: 0,
             visible_services: 0,
             cached_filtered_services: Vec::new(),
@@ -372,27 +368,14 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
 
     if let Some(service) = selected_service {
         let details_text = create_service_details_text(service);
-        let content_lines = details_text.lines().count();
-        let available_height = (area.height as usize).saturating_sub(2);
-        let clamped_offset = app_state
-            .details_scroll_offset
-            .min(content_lines.saturating_sub(available_height));
-
         let details = Paragraph::new(details_text.clone())
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title("Service Details"),
             )
-            .wrap(Wrap { trim: true })
-            .scroll((clamped_offset as u16, 0));
+            .wrap(Wrap { trim: true });
         f.render_widget(details, area);
-
-        // Render scrollbar for details if content is longer than available space
-        let visible_lines = (area.height as usize).saturating_sub(2);
-        if content_lines > visible_lines {
-            render_details_scrollbar(f, area, content_lines, clamped_offset);
-        }
     } else {
         let details = Paragraph::new("No service selected").block(
             Block::default()
@@ -404,7 +387,7 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
 }
 
 fn render_help_section(f: &mut Frame, area: ratatui::layout::Rect) {
-    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f to scroll | g/G/Home/End for details";
+    let help_text = "Press 'q' to quit | hjkl/Arrows to navigate | PageUp/PageDown/Ctrl-u/Ctrl-d/b/f/g/G/Home/End for services list";
     let help = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
     f.render_widget(
         help,
@@ -498,27 +481,6 @@ fn create_service_details_text(service: &ServiceEntry) -> String {
         addresses_text,
         txt_text
     )
-}
-
-fn render_details_scrollbar(
-    f: &mut Frame,
-    area: ratatui::layout::Rect,
-    content_lines: usize,
-    position: usize,
-) {
-    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(None)
-        .end_symbol(None)
-        .track_symbol(Some("│"))
-        .thumb_symbol("█");
-
-    let mut scrollbar_state =
-        ratatui::widgets::ScrollbarState::new(content_lines).position(position);
-    f.render_stateful_widget(
-        scrollbar,
-        area.inner(ratatui::layout::Margin::new(0, 0)),
-        &mut scrollbar_state,
-    );
 }
 
 pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
@@ -696,7 +658,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     match event {
                         Event::Key(key) => {
                             match key.code {
-                            KeyCode::Char('q') => break Ok(()),
+                            KeyCode::Char('q') | KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => break Ok(()),
                             KeyCode::Char('k') | KeyCode::Up => {
                                 let mut state = state.write().await;
                                 if state.selected_service > 0 {
@@ -780,9 +742,15 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
                             {
                                 let mut state = state.write().await;
-                                if state.details_scroll_offset > 0 {
-                                    state.details_scroll_offset =
-                                        state.details_scroll_offset.saturating_sub(5);
+                                let scroll_amount = state.visible_services.saturating_sub(1);
+                                if state.selected_service >= scroll_amount {
+                                    state.selected_service -= scroll_amount;
+                                } else {
+                                    state.selected_service = 0;
+                                }
+                                // Update scroll offset for services list
+                                if state.selected_service < state.services_scroll_offset {
+                                    state.services_scroll_offset = state.selected_service;
                                 }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
@@ -792,42 +760,98 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
                             {
                                 let mut state = state.write().await;
-                                state.details_scroll_offset += 5;
+                                let filtered = state.get_filtered_services();
+                                let filtered_len = filtered.len();
+                                let scroll_amount = state.visible_services.saturating_sub(1);
+                                if state.selected_service + scroll_amount < filtered_len.saturating_sub(1) {
+                                    state.selected_service += scroll_amount;
+                                } else {
+                                    state.selected_service = filtered_len.saturating_sub(1);
+                                }
+                                // Update scroll offset for services list using actual visible count
+                                if state.visible_services > 0
+                                    && state.selected_service
+                                        >= state.services_scroll_offset + state.visible_services
+                                {
+                                    state.services_scroll_offset =
+                                        state.selected_service - state.visible_services + 1;
+                                }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             KeyCode::PageUp | KeyCode::Char('b') => {
                                 let mut state = state.write().await;
-                                if state.details_scroll_offset > 0 {
-                                    state.details_scroll_offset =
-                                        state.details_scroll_offset.saturating_sub(5);
+                                let scroll_amount = state.visible_services.saturating_sub(1);
+                                if state.selected_service >= scroll_amount {
+                                    state.selected_service -= scroll_amount;
+                                } else {
+                                    state.selected_service = 0;
+                                }
+                                // Update scroll offset for services list
+                                if state.selected_service < state.services_scroll_offset {
+                                    state.services_scroll_offset = state.selected_service;
                                 }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
                                 let mut state = state.write().await;
-                                state.details_scroll_offset += 5;
+                                let filtered = state.get_filtered_services();
+                                let filtered_len = filtered.len();
+                                let scroll_amount = state.visible_services.saturating_sub(1);
+                                if state.selected_service + scroll_amount < filtered_len.saturating_sub(1) {
+                                    state.selected_service += scroll_amount;
+                                } else {
+                                    state.selected_service = filtered_len.saturating_sub(1);
+                                }
+                                // Update scroll offset for services list using actual visible count
+                                if state.visible_services > 0
+                                    && state.selected_service
+                                        >= state.services_scroll_offset + state.visible_services
+                                {
+                                    state.services_scroll_offset =
+                                        state.selected_service - state.visible_services + 1;
+                                }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             KeyCode::Char('g') => {
                                 let mut state = state.write().await;
-                                state.details_scroll_offset = 0;
+                                state.selected_service = 0;
+                                state.services_scroll_offset = 0;
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             KeyCode::Char('G') => {
                                 let mut state = state.write().await;
-                                // Set to a high value, the UI will clamp it
-                                state.details_scroll_offset = 1000;
+                                let filtered = state.get_filtered_services();
+                                let filtered_len = filtered.len();
+                                state.selected_service = filtered_len.saturating_sub(1);
+                                // Update scroll offset for services list using actual visible count
+                                if state.visible_services > 0
+                                    && state.selected_service
+                                        >= state.services_scroll_offset + state.visible_services
+                                {
+                                    state.services_scroll_offset =
+                                        state.selected_service - state.visible_services + 1;
+                                }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             KeyCode::Home => {
                                 let mut state = state.write().await;
-                                state.details_scroll_offset = 0;
+                                state.selected_service = 0;
+                                state.services_scroll_offset = 0;
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             KeyCode::End => {
                                 let mut state = state.write().await;
-                                // Set to a high value, the UI will clamp it
-                                state.details_scroll_offset = 1000;
+                                let filtered = state.get_filtered_services();
+                                let filtered_len = filtered.len();
+                                state.selected_service = filtered_len.saturating_sub(1);
+                                // Update scroll offset for services list using actual visible count
+                                if state.visible_services > 0
+                                    && state.selected_service
+                                        >= state.services_scroll_offset + state.visible_services
+                                {
+                                    state.services_scroll_offset =
+                                        state.selected_service - state.visible_services + 1;
+                                }
                                 let _ = notification_sender.send(Notification::UserInput);
                             }
                             _ => {}
