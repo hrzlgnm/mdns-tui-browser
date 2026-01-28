@@ -84,7 +84,6 @@ jobs:
           cargo build --release --target ${{ matrix.target }}
 
       - name: 📦 Build archive
-        if: inputs.tagName
         shell: bash
         run: |
           staging="mdns-tui-browser-${{ inputs.tagName }}-${{ matrix.platform }}"
