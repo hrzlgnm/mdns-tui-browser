@@ -803,13 +803,11 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                 let mut state = state.write().await;
                                 if state.show_help_popup {
                                     state.show_help_popup = false;
-                                } else {
-                                    if state.selected_service > 0 {
-                                        state.selected_service -= 1;
-                                        // Update scroll offset for services list
-                                        if state.selected_service < state.services_scroll_offset {
-                                            state.services_scroll_offset = state.selected_service;
-                                        }
+                                } else if state.selected_service > 0 {
+                                    state.selected_service -= 1;
+                                    // Update scroll offset for services list
+                                    if state.selected_service < state.services_scroll_offset {
+                                        state.services_scroll_offset = state.selected_service;
                                     }
                                 }
                                 let _ = notification_sender.send(Notification::UserInput);
