@@ -1247,7 +1247,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
             _notification = notification_receiver.recv_async() => {
                 // Draw UI only when there's a notification
                 {
-                    let mut state = state.write().await;
+                    let _state = state.write().await;
 
                     // Force complete redraw after resume
                     #[cfg(unix)]
