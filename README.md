@@ -64,6 +64,7 @@ The application is built with:
 - **flume** - Async channel library for communication
 - **mdns-sd** - mDNS service discovery library
 - **clap** - Command line argument parsing library
+- **chrono** - Date and time handling for local timestamp display
 
 ### Features
 
