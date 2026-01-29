@@ -810,7 +810,6 @@ dependencies = [
  "mdns-sd",
  "nix",
  "ratatui",
- "signal-hook",
  "tokio",
 ]
 

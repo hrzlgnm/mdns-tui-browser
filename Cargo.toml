@@ -24,4 +24,3 @@ chrono = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["process", "signal"] }
-signal-hook = "0.3"

@@ -54,6 +54,7 @@ struct AppState {
     cached_filtered_services: Vec<usize>,
     cache_dirty: bool,
     show_help_popup: bool,
+    last_error: Option<String>,
 }
 
 impl AppState {
@@ -70,6 +71,7 @@ impl AppState {
             cached_filtered_services: Vec::new(),
             cache_dirty: true,
             show_help_popup: false,
+            last_error: None,
         };
         state.validate_selected_type();
         state
@@ -305,7 +307,7 @@ impl AppState {
     fn handle_normal_mode_key(
         &mut self,
         key: KeyEvent,
-        notification_sender: Option<flume::Sender<Notification>>,
+        _notification_sender: Option<flume::Sender<Notification>>,
     ) -> bool {
         match key.code {
             // Quit actions
@@ -328,10 +330,11 @@ impl AppState {
                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
             {
                 // Suspend the process (resume is handled inline in suspend_process)
-                if let Err(e) = suspend_process() {
-                    eprintln!("Failed to suspend process: {}", e);
+                let mut state_for_suspend = state.write().await;
+                if let Err(_) = suspend_process(&mut state_for_suspend) {
+                    // Error is already stored in state, just trigger redraw to show it
                 } else {
-                    // Trigger immediate complete redraw
+                    // Trigger immediate complete redraw to show any error or clear previous error
                     if let Some(sender) = notification_sender {
                         let _ = sender.send(Notification::ForceRedraw);
                     }
@@ -390,6 +393,10 @@ impl AppState {
             // Actions
             KeyCode::Char('d') => {
                 self.remove_dead_services();
+                true
+            }
+            KeyCode::Char('c') => {
+                self.clear_error();
                 true
             }
 
@@ -505,6 +512,10 @@ impl AppState {
             self.services_scroll_offset = self.selected_service - self.visible_services + 1;
         }
     }
+
+    fn clear_error(&mut self) {
+        self.last_error = None;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -528,19 +539,39 @@ fn current_timestamp_micros() -> u64 {
 }
 
 #[cfg(unix)]
-fn suspend_process() -> Result<(), Box<dyn std::error::Error>> {
+fn suspend_process(state: &mut AppState) -> Result<(), Box<dyn std::error::Error>> {
     use std::io::{Write, stdout};
 
     // Disable raw mode and restore terminal before suspending
-    disable_raw_mode()?;
-    execute!(stdout(), LeaveAlternateScreen)?;
-    stdout().flush()?;
+    if let Err(e) = disable_raw_mode() {
+        state.last_error = Some(format!("Failed to disable raw mode: {}", e));
+        return Err(e.into());
+    }
+    
+    if let Err(e) = execute!(stdout(), LeaveAlternateScreen) {
+        state.last_error = Some(format!("Failed to leave alternate screen: {}", e));
+        return Err(e.into());
+    }
+    
+    if let Err(e) = stdout().flush() {
+        state.last_error = Some(format!("Failed to flush stdout: {}", e));
+        return Err(e.into());
+    }
 
     // Send SIGTSTP to the current process using nix
-    nix::sys::signal::kill(nix::unistd::getpid(), Signal::SIGTSTP)?;
+    if let Err(e) = nix::sys::signal::kill(nix::unistd::getpid(), Signal::SIGTSTP) {
+        state.last_error = Some(format!("Failed to send suspend signal: {}", e));
+        return Err(e.into());
+    }
 
     // This code won't execute until after resume
-    resume_after_suspend()?;
+    if let Err(e) = resume_after_suspend() {
+        state.last_error = Some(format!("Failed to resume after suspend: {}", e));
+        return Err(e.into());
+    }
+
+    // Clear error on successful resume
+    state.last_error = None;
 
     Ok(())
 }
@@ -580,8 +611,25 @@ fn resume_after_suspend() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(unix)]
-fn setup_signal_handler() -> Result<(), Box<dyn std::error::Error>> {
-    // No signal handler needed - we'll handle resume inline
+fn recreate_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<(), Box<dyn std::error::Error>> {
+    use crossterm::terminal::{Clear, ClearType};
+    use crossterm::cursor;
+    use ratatui::layout::Rect;
+    
+    // Completely flush and clear terminal
+    terminal.clear()?;
+    execute!(
+        terminal.backend_mut(),
+        Clear(ClearType::All),
+        cursor::MoveTo(0, 0)
+    )?;
+    terminal.flush()?;
+    
+    // Force a resize to trigger complete redraw
+    let size = terminal.size()?;
+    let rect = Rect::new(0, 0, size.width, size.height);
+    terminal.resize(rect)?;
+    
     Ok(())
 }
 
@@ -769,8 +817,24 @@ fn render_services_list(
 fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui::layout::Rect) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
-    let filtered_indices = app_state.get_filtered_services();
+    let error_to_display = app_state.last_error.clone();
+    
+    // Check if there's an error to display
+    if let Some(error) = error_to_display {
+        let error_text = format!("Error: {}", error);
+        let error_details = Paragraph::new(error_text)
+            .style(Style::default().fg(Color::Red))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Error"),
+            )
+            .wrap(Wrap { trim: true });
+        f.render_widget(error_details, area);
+        return;
+    }
 
+    let filtered_indices = app_state.get_filtered_services();
     let selected_service = filtered_indices
         .get(selected_service_idx)
         .map(|&idx| &services_clone[idx]);
@@ -807,6 +871,7 @@ fn render_help_popup(f: &mut Frame) {
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove dead services"),
+        Line::from("   c                   - Clear error message"),
         Line::from("   ?                   - Toggle this help popup"),
         Line::from("   q or Ctrl+C         - Quit the application"),
         #[cfg(unix)]
@@ -994,11 +1059,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     // Create notification channels
     let (notification_sender, notification_receiver) = flume::unbounded::<Notification>();
 
-    #[cfg(unix)]
-    {
-        // Set up signal handler for SIGCONT (continue after suspension)
-        setup_signal_handler()?;
-    }
+
 
     let mdns = ServiceDaemon::new()?;
 
