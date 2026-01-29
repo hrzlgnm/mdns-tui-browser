@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 #[derive(Clone, Debug)]
@@ -27,6 +27,14 @@ struct ServiceEntry {
     port: u16,
     txt: Vec<String>,
     alive: bool,
+    timestamp_micros: u64,
+}
+
+impl ServiceEntry {
+    fn die_at(&mut self, timestamp_micros: u64) {
+        self.alive = false;
+        self.timestamp_micros = timestamp_micros;
+    }
 }
 
 struct AppState {
@@ -479,6 +487,13 @@ fn is_valid_service_type(service_type: &str) -> bool {
     !service_type.contains("_sub.")
 }
 
+fn current_timestamp_micros() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as u64
+}
+
 fn ui(f: &mut Frame, app_state: &mut AppState) {
     // Ensure state is consistent before rendering
     app_state.validate_selected_type();
@@ -790,12 +805,37 @@ fn format_service_for_display(service: &ServiceEntry) -> String {
     )
 }
 
+fn format_timestamp_micros(timestamp_micros: u64) -> String {
+    use chrono::{DateTime, Local, Utc};
+
+    let seconds = timestamp_micros / 1_000_000;
+    let nanoseconds = (timestamp_micros % 1_000_000) * 1000;
+
+    let datetime = DateTime::<Utc>::from_timestamp(seconds as i64, nanoseconds as u32)
+        .unwrap_or_default()
+        .with_timezone(&Local);
+
+    datetime.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
+}
+
 fn create_service_details_text(service: &ServiceEntry) -> String {
     let subtype_text = service
         .subtype
         .as_ref()
         .map(|s| format!("\nSubtype: {}", s))
         .unwrap_or_default();
+
+    let status_text = if service.alive {
+        format!(
+            "Alive since: {}",
+            format_timestamp_micros(service.timestamp_micros)
+        )
+    } else {
+        format!(
+            "Dead since: {}",
+            format_timestamp_micros(service.timestamp_micros)
+        )
+    };
 
     let addresses_text = if service.addrs.is_empty() {
         "None".to_string()
@@ -810,7 +850,8 @@ fn create_service_details_text(service: &ServiceEntry) -> String {
     };
 
     format!(
-        "Fullname: {}\nHostname: {}\nType: {}{}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
+        "{}\n\nFullname: {}\nHostname: {}\nType: {}{}\nPort: {}\n\nAddresses:\n{}\n\nTXT Records:\n{}",
+        status_text,
         service.fullname,
         service.host,
         service.service_type,
@@ -887,7 +928,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 .iter_mut()
                                                 .find(|s| s.fullname == fullname)
                                             {
-                                                entry.alive = false;
+                                                entry.die_at(current_timestamp_micros());
                                                 state.invalidate_cache_and_validate();
                                                 state.remove_service_type(&service_type);
                                                 let _ = notification_sender_inner
@@ -937,6 +978,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                     txt
                                                 },
                                                 alive: true,
+                                                timestamp_micros: current_timestamp_micros(),
                                             };
                                             let mut state = state_inner.write().await;
                                             if let Some(exist) = state
