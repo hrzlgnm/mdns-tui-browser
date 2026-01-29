@@ -194,6 +194,9 @@ impl AppState {
         let mut service_types_to_check: std::collections::HashSet<String> =
             std::collections::HashSet::new();
 
+        // Capture initial filtered length for scroll logic
+        let initial_filtered_len = self.get_filtered_services().len();
+
         // Remove dead services and track their types
         let initial_len = self.services.len();
         self.services.retain(|service| {
@@ -228,10 +231,37 @@ impl AppState {
                 self.remove_service_type(&service_type);
             }
 
-            // Adjust selection indices
-            self.selected_service = self
-                .selected_service
-                .min(self.get_filtered_services().len().saturating_sub(1));
+            let new_filtered_len = self.get_filtered_services().len();
+
+            // Adjust selection indices - if user was at the end, keep them at the end
+            if new_filtered_len > 0 {
+                // If we were at or near the end (within 2 items), position at the new end
+                if self.selected_service >= initial_filtered_len.saturating_sub(2)
+                    || self.selected_service >= new_filtered_len
+                {
+                    self.selected_service = new_filtered_len.saturating_sub(1);
+                } else {
+                    // Otherwise, keep the same position but cap it to the new maximum
+                    self.selected_service = self
+                        .selected_service
+                        .min(new_filtered_len.saturating_sub(1));
+                }
+            } else {
+                self.selected_service = 0;
+            }
+
+            // Adjust scroll offset - if we're at the end, position selected item at bottom of view
+            if new_filtered_len > 0 && self.selected_service >= new_filtered_len.saturating_sub(2) {
+                // Position selected item at or near the bottom of the visible area
+                if self.visible_services > 0 {
+                    self.services_scroll_offset = self
+                        .selected_service
+                        .saturating_sub(self.visible_services - 1);
+                }
+            } else {
+                // Otherwise, just ensure it's visible
+                self.update_services_scroll_offset();
+            }
         }
     }
 
