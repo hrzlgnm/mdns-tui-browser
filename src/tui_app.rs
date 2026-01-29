@@ -522,6 +522,7 @@ impl AppState {
 enum Notification {
     UserInput,
     ServiceChanged,
+    #[cfg(unix)]
     ForceRedraw,
 }
 
