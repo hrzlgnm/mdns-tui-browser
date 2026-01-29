@@ -307,7 +307,7 @@ impl AppState {
     fn handle_normal_mode_key(
         &mut self,
         key: KeyEvent,
-        _notification_sender: Option<flume::Sender<Notification>>,
+        notification_sender: Option<flume::Sender<Notification>>,
     ) -> bool {
         match key.code {
             // Quit actions
@@ -330,13 +330,10 @@ impl AppState {
                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
             {
                 // Suspend the process (resume is handled inline in suspend_process)
-                let mut state_for_suspend = state.write().await;
-                if let Err(_) = suspend_process(&mut state_for_suspend) {
-                    // Error is already stored in state, just trigger redraw to show it
-                } else {
-                    // Trigger immediate complete redraw to show any error or clear previous error
-                    if let Some(sender) = notification_sender {
-                        let _ = sender.send(Notification::ForceRedraw);
+                {
+                    let mut state_for_suspend = state.write().await;
+                    if let Err(_) = suspend_process(&mut state_for_suspend) {
+                        // Error is already stored in state
                     }
                 }
                 true // Continue running after resume
@@ -609,55 +606,7 @@ fn resume_after_suspend() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(unix)]
-fn recreate_terminal(
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use crossterm::cursor;
-    use crossterm::terminal::{Clear, ClearType};
-    use ratatui::layout::Rect;
 
-    // Completely flush and clear terminal
-    terminal.clear()?;
-    execute!(
-        terminal.backend_mut(),
-        Clear(ClearType::All),
-        cursor::MoveTo(0, 0)
-    )?;
-    terminal.flush()?;
-
-    // Force a resize to trigger complete redraw
-    let size = terminal.size()?;
-    let rect = Rect::new(0, 0, size.width, size.height);
-    terminal.resize(rect)?;
-
-    Ok(())
-}
-
-#[cfg(unix)]
-fn recreate_terminal(
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use crossterm::cursor;
-    use crossterm::terminal::{Clear, ClearType};
-    use ratatui::layout::Rect;
-
-    // Completely flush and clear terminal
-    terminal.clear()?;
-    execute!(
-        terminal.backend_mut(),
-        Clear(ClearType::All),
-        cursor::MoveTo(0, 0)
-    )?;
-    terminal.flush()?;
-
-    // Force a resize to trigger complete redraw
-    let size = terminal.size()?;
-    let rect = Rect::new(0, 0, size.width, size.height);
-    terminal.resize(rect)?;
-
-    Ok(())
-}
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
     // Ensure state is consistent before rendering
