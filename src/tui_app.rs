@@ -13,6 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
@@ -49,10 +50,12 @@ struct AppState {
     cached_filtered_services: Vec<usize>,
     cache_dirty: bool,
     show_help_popup: bool,
+    show_metrics_popup: bool,
+    metrics: BTreeMap<String, u64>,
 }
 
 impl AppState {
-    fn new() -> Self {
+fn new() -> Self {
         let mut state = Self {
             services: Vec::new(),
             service_types: Vec::new(),
@@ -65,6 +68,8 @@ impl AppState {
             cached_filtered_services: Vec::new(),
             cache_dirty: true,
             show_help_popup: false,
+            show_metrics_popup: false,
+            metrics: BTreeMap::new(),
         };
         state.validate_selected_type();
         state
@@ -279,17 +284,25 @@ impl AppState {
     }
 
     // Key handling methods
-    fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         if self.show_help_popup {
             self.handle_help_popup_key(key)
+        } else if self.show_metrics_popup {
+            self.handle_metrics_popup_key(key)
         } else {
             self.handle_normal_mode_key(key)
         }
     }
 
-    fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
+fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
         // Any key just closes the help popup and returns to normal mode
         self.show_help_popup = false;
+        true // Continue running
+    }
+
+    fn handle_metrics_popup_key(&mut self, _key: KeyEvent) -> bool {
+        // Any key just closes the metrics popup and returns to normal mode
+        self.show_metrics_popup = false;
         true // Continue running
     }
 
@@ -307,9 +320,15 @@ impl AppState {
                 false // Signal to quit
             }
 
-            // Help toggle
+// Help toggle
             KeyCode::Char('?') => {
                 self.toggle_help();
+                true
+            }
+
+            // Metrics toggle
+            KeyCode::Char('m') => {
+                self.toggle_metrics();
                 true
             }
 
@@ -365,8 +384,30 @@ impl AppState {
         }
     }
 
-    fn toggle_help(&mut self) {
+fn toggle_help(&mut self) {
         self.show_help_popup = !self.show_help_popup;
+    }
+
+    fn update_metric(&mut self, key: &str) {
+        *self.metrics.entry(key.to_string()).or_insert(0) += 1;
+    }
+
+    fn update_daemon_metrics(&mut self, daemon_metrics: &std::collections::HashMap<String, i64>) -> bool {
+        let mut metrics_updated = false;
+        for (key, value) in daemon_metrics.iter() {
+            let metric_key = format!("daemon_{}", key.replace('-', "_"));
+            let current_value = *self.metrics.entry(metric_key.clone()).or_insert(0);
+            if current_value != *value as u64 {
+                *self.metrics.get_mut(&metric_key).unwrap() = *value as u64;
+                metrics_updated = true;
+            }
+        }
+        // Return whether metrics changed
+        metrics_updated
+    }
+
+    fn toggle_metrics(&mut self) {
+        self.show_metrics_popup = !self.show_metrics_popup;
     }
 
     fn navigate_services_up(&mut self) {
@@ -479,6 +520,7 @@ impl AppState {
 enum Notification {
     UserInput,
     ServiceChanged,
+    MetricsUpdated,
 }
 
 fn is_valid_service_type(service_type: &str) -> bool {
@@ -509,9 +551,11 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     render_services_list(f, app_state, layout.services_area, visible_counts.services);
     render_service_details(f, app_state, layout.details_area);
 
-    // Render help popup if active
+// Render popups if active
     if app_state.show_help_popup {
         render_help_popup(f);
+    } else if app_state.show_metrics_popup {
+        render_metrics_popup(f, app_state);
     }
 }
 
@@ -689,8 +733,9 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from(" "),
-        Line::from(" Actions:"),
+Line::from(" Actions:"),
         Line::from("   d                   - Remove dead services"),
+        Line::from("   m                   - Show service metrics"),
         Line::from("   ?                   - Toggle this help popup"),
         Line::from("   q or Ctrl+C         - Quit the application"),
         Line::from(" "),
@@ -725,6 +770,90 @@ fn render_help_popup(f: &mut Frame) {
     let border_block = Block::default()
         .borders(Borders::ALL)
         .title("Key Bindings")
+        .title_style(Style::default().add_modifier(Modifier::BOLD));
+f.render_widget(border_block, popup_area);
+}
+
+fn render_metrics_popup(f: &mut Frame, app_state: &AppState) {
+    let mut metrics_content: Vec<Line> = vec![
+        Line::from(""),
+        Line::from(" Service Discovery Metrics:"),
+        Line::from(" "),
+    ];
+
+    // Separate custom metrics from daemon metrics
+    let mut custom_metrics = Vec::new();
+    let mut daemon_metrics = Vec::new();
+
+    for (key, value) in app_state.metrics.iter() {
+        if *value > 0 {
+            if key.starts_with("daemon_") {
+                let clean_key = key.strip_prefix("daemon_").unwrap().replace('_', " ");
+                daemon_metrics.push((clean_key, *value));
+            } else {
+                let formatted_key = key.replace('_', " ");
+                custom_metrics.push((formatted_key, *value));
+            }
+        }
+    }
+
+    // Sort both alphabetically
+    custom_metrics.sort_by(|a, b| a.0.cmp(&b.0));
+    daemon_metrics.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Display custom metrics first
+    if !custom_metrics.is_empty() {
+        metrics_content.push(Line::from(" Custom Metrics:"));
+        for (key, value) in &custom_metrics {
+            metrics_content.push(Line::from(format!("   {}: {}", key, value)));
+        }
+        metrics_content.push(Line::from(" "));
+    }
+
+    // Display daemon metrics
+    if !daemon_metrics.is_empty() {
+        metrics_content.push(Line::from(" Daemon Metrics (from ServiceDaemon):"));
+        for (key, value) in &daemon_metrics {
+            metrics_content.push(Line::from(format!("   {}: {}", key, value)));
+        }
+        metrics_content.push(Line::from(" "));
+    }
+
+    if custom_metrics.is_empty() && daemon_metrics.is_empty() {
+        metrics_content.push(Line::from("   No metrics collected yet"));
+    }
+
+    metrics_content.push(Line::from(" "));
+    metrics_content.push(Line::from(" Press any key to close"));
+
+    let popup_area = create_centered_popup(f.area(), 60, 70);
+
+    // Clear the background first
+    f.render_widget(ratatui::widgets::Clear, popup_area);
+
+    // Create a solid background block to ensure readability
+    let background_block =
+        ratatui::widgets::Block::default().style(Style::default().bg(ratatui::style::Color::Black));
+    f.render_widget(background_block, popup_area);
+
+    // Create inner area with padding by reducing the popup area
+    let inner_area = ratatui::layout::Rect::new(
+        popup_area.x + 1,
+        popup_area.y + 1,
+        popup_area.width.saturating_sub(2),
+        popup_area.height.saturating_sub(2),
+    );
+
+    let metrics_paragraph = Paragraph::new(metrics_content)
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(metrics_paragraph, inner_area);
+
+    // Render border on top
+    let border_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Service Metrics")
         .title_style(Style::default().add_modifier(Modifier::BOLD));
     f.render_widget(border_block, popup_area);
 }
@@ -883,6 +1012,33 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     let state_clone = Arc::clone(&state);
     let notification_sender_clone = notification_sender.clone();
 
+let mdns_for_metrics = mdns.clone();
+    
+    // Start background task to periodically collect ServiceDaemon metrics
+    let state_for_metrics = Arc::clone(&state);
+    let notification_sender_for_metrics = notification_sender.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+        loop {
+            interval.tick().await;
+            
+            match mdns_for_metrics.get_metrics() {
+                Ok(metrics_receiver) => {
+                    if let Ok(daemon_metrics) = metrics_receiver.recv_async().await {
+                        let mut state = state_for_metrics.write().await;
+                        if state.update_daemon_metrics(&daemon_metrics) {
+                            // Metrics changed, trigger UI refresh
+                            let _ = notification_sender_for_metrics.send(Notification::MetricsUpdated);
+                        }
+                    }
+                }
+                Err(_) => {
+                    // If we can't get metrics, just continue
+                }
+            }
+        }
+    });
+
     let mdns = mdns.clone();
     tokio::spawn(async move {
         while let Ok(event) = receiver.recv_async().await {
@@ -898,18 +1054,20 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                     if !is_valid_service_type(&service_type) {
                         continue; // invalid service type format
                     }
-                    {
+{
                         let mut state = state_clone.write().await;
                         if state.add_service_type(&service_type) {
+                            state.update_metric("service_types_discovered");
                             let _ = notification_sender_clone.send(Notification::ServiceChanged);
                         }
                     }
                     match mdns.browse(&service_type) {
                         Err(_) => {
-                            // if a browse fails, that usually means the service type is invalid and
+// if a browse fails, that usually means the service type is invalid and
                             // should be removed from the service types list
                             let mut state = state_clone.write().await;
                             if state.remove_service_type(&service_type) {
+                                state.update_metric("browse_failures");
                                 let _ =
                                     notification_sender_clone.send(Notification::ServiceChanged);
                             }
@@ -921,7 +1079,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             tokio::spawn(async move {
                                 while let Ok(service_event) = service_receiver.recv_async().await {
                                     match service_event {
-                                        ServiceEvent::ServiceRemoved(service_type, fullname) => {
+ServiceEvent::ServiceRemoved(service_type, fullname) => {
                                             let mut state = state_inner.write().await;
                                             if let Some(entry) = state
                                                 .services
@@ -929,6 +1087,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 .find(|s| s.fullname == fullname)
                                             {
                                                 entry.die_at(current_timestamp_micros());
+                                                state.update_metric("services_removed");
                                                 state.invalidate_cache_and_validate();
                                                 state.remove_service_type(&service_type);
                                                 let _ = notification_sender_inner
@@ -987,8 +1146,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 .find(|s| s.fullname == entry.fullname)
                                             {
                                                 *exist = entry;
-                                            } else {
+} else {
                                                 state.services.push(entry);
+                                                state.update_metric("services_discovered");
                                             }
                                             state.services.sort_by(|a, b| a.host.cmp(&b.host));
                                             state.invalidate_cache_and_validate();
