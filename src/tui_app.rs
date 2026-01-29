@@ -490,7 +490,7 @@ fn is_valid_service_type(service_type: &str) -> bool {
 fn current_timestamp_micros() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_micros() as u64
 }
 
