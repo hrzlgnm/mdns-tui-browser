@@ -235,10 +235,10 @@ impl AppState {
 
             // Adjust selection indices - if user was at the end, keep them at the end
             if new_filtered_len > 0 {
-                // If we were at or near the end (within 2 items), position at the new end
-                if self.selected_service >= initial_filtered_len.saturating_sub(2)
-                    || self.selected_service >= new_filtered_len
-                {
+                let was_near_end = initial_filtered_len > 0
+                    && (self.selected_service >= initial_filtered_len.saturating_sub(2)
+                        || self.selected_service >= new_filtered_len);
+                if was_near_end {
                     self.selected_service = new_filtered_len.saturating_sub(1);
                 } else {
                     // Otherwise, keep the same position but cap it to the new maximum
