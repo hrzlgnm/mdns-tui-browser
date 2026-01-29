@@ -522,8 +522,6 @@ impl AppState {
 enum Notification {
     UserInput,
     ServiceChanged,
-    #[cfg(unix)]
-    ForceRedraw,
 }
 
 fn is_valid_service_type(service_type: &str) -> bool {
@@ -1248,17 +1246,14 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
             _notification = notification_receiver.recv_async() => {
                 // Draw UI only when there's a notification
                 {
-                    let _state = state.write().await;
+                    let mut state = state.write().await;
 
-                    // Force complete redraw after resume
+                    // Draw UI only when there's a notification
+                    // Recreate terminal state completely on Unix for all notifications after suspend
                     #[cfg(unix)]
-                    if matches!(_notification, Ok(Notification::ForceRedraw)) {
-                        // Recreate terminal state completely
-                        recreate_terminal(&mut terminal)?;
-                        terminal.draw(|f| ui(f, &mut state))?;
-                    } else {
-                        terminal.draw(|f| ui(f, &mut state))?;
-                    }
+                    recreate_terminal(&mut terminal)?;
+                    
+                    terminal.draw(|f| ui(f, &mut state))?;
                 }
             }
         }
