@@ -1,9 +1,14 @@
+#![forbid(unsafe_code)]
+
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+
 use mdns_sd::{ServiceDaemon, ServiceEvent};
+#[cfg(unix)]
+use nix::sys::signal::Signal;
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -279,11 +284,15 @@ impl AppState {
     }
 
     // Key handling methods
-    fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+    fn handle_key_event(
+        &mut self,
+        key: KeyEvent,
+        notification_sender: Option<flume::Sender<Notification>>,
+    ) -> bool {
         if self.show_help_popup {
             self.handle_help_popup_key(key)
         } else {
-            self.handle_normal_mode_key(key)
+            self.handle_normal_mode_key(key, notification_sender)
         }
     }
 
@@ -293,7 +302,11 @@ impl AppState {
         true // Continue running
     }
 
-    fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
+    fn handle_normal_mode_key(
+        &mut self,
+        key: KeyEvent,
+        notification_sender: Option<flume::Sender<Notification>>,
+    ) -> bool {
         match key.code {
             // Quit actions
             KeyCode::Char('q') => {
@@ -305,6 +318,25 @@ impl AppState {
                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
             {
                 false // Signal to quit
+            }
+
+            // Suspend action (Unix only)
+            #[cfg(unix)]
+            KeyCode::Char('z')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                // Suspend the process (resume is handled inline in suspend_process)
+                if let Err(e) = suspend_process() {
+                    eprintln!("Failed to suspend process: {}", e);
+                } else {
+                    // Trigger immediate complete redraw
+                    if let Some(sender) = notification_sender {
+                        let _ = sender.send(Notification::ForceRedraw);
+                    }
+                }
+                true // Continue running after resume
             }
 
             // Help toggle
@@ -479,6 +511,7 @@ impl AppState {
 enum Notification {
     UserInput,
     ServiceChanged,
+    ForceRedraw,
 }
 
 fn is_valid_service_type(service_type: &str) -> bool {
@@ -492,6 +525,89 @@ fn current_timestamp_micros() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_micros() as u64
+}
+
+#[cfg(unix)]
+fn suspend_process() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{Write, stdout};
+
+    // Disable raw mode and restore terminal before suspending
+    disable_raw_mode()?;
+    execute!(stdout(), LeaveAlternateScreen)?;
+    stdout().flush()?;
+
+    // Send SIGTSTP to the current process using nix
+    nix::sys::signal::kill(nix::unistd::getpid(), Signal::SIGTSTP)?;
+
+    // This code won't execute until after resume
+    resume_after_suspend()?;
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn resume_after_suspend() -> Result<(), Box<dyn std::error::Error>> {
+    use crossterm::cursor;
+    use crossterm::execute;
+    use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode};
+    use std::io::{Write, stdout};
+
+    // Complete terminal reset sequence
+    execute!(
+        stdout(),
+        LeaveAlternateScreen,
+        Clear(ClearType::All),
+        cursor::MoveTo(0, 0)
+    )?;
+    stdout().flush()?;
+
+    // Disable raw mode completely
+    disable_raw_mode()?;
+
+    // Restart TUI mode fresh
+    execute!(
+        stdout(),
+        EnterAlternateScreen,
+        Clear(ClearType::All),
+        cursor::MoveTo(0, 0)
+    )?;
+    stdout().flush()?;
+
+    // Re-enable raw mode
+    enable_raw_mode()?;
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn setup_signal_handler() -> Result<(), Box<dyn std::error::Error>> {
+    // No signal handler needed - we'll handle resume inline
+    Ok(())
+}
+
+#[cfg(unix)]
+fn recreate_terminal(
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crossterm::cursor;
+    use crossterm::terminal::{Clear, ClearType};
+    use ratatui::layout::Rect;
+
+    // Completely flush and clear terminal
+    terminal.clear()?;
+    execute!(
+        terminal.backend_mut(),
+        Clear(ClearType::All),
+        cursor::MoveTo(0, 0)
+    )?;
+    terminal.flush()?;
+
+    // Force a resize to trigger complete redraw
+    let size = terminal.size()?;
+    let rect = Rect::new(0, 0, size.width, size.height);
+    terminal.resize(rect)?;
+
+    Ok(())
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
@@ -693,6 +809,8 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   d                   - Remove dead services"),
         Line::from("   ?                   - Toggle this help popup"),
         Line::from("   q or Ctrl+C         - Quit the application"),
+        #[cfg(unix)]
+        Line::from("   Ctrl+Z              - Suspend the application (Unix only)"),
         Line::from(" "),
         Line::from(" Press any key to close this help"),
     ];
@@ -876,6 +994,12 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     // Create notification channels
     let (notification_sender, notification_receiver) = flume::unbounded::<Notification>();
 
+    #[cfg(unix)]
+    {
+        // Set up signal handler for SIGCONT (continue after suspension)
+        setup_signal_handler()?;
+    }
+
     let mdns = ServiceDaemon::new()?;
 
     // Browse for all service types
@@ -1046,7 +1170,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             }
 
                             let mut state = state.write().await;
-                            let should_continue = state.handle_key_event(key);
+                            let should_continue = state.handle_key_event(key, Some(notification_sender.clone()));
                             if should_continue {
                                 let _ = notification_sender.send(Notification::UserInput);
                             } else {
@@ -1067,7 +1191,16 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                 // Draw UI only when there's a notification
                 {
                     let mut state = state.write().await;
-                    terminal.draw(|f| ui(f, &mut state))?;
+
+                    // Force complete redraw after resume
+                    #[cfg(unix)]
+                    if matches!(_notification, Ok(Notification::ForceRedraw)) {
+                        // Recreate terminal state completely
+                        recreate_terminal(&mut terminal)?;
+                        terminal.draw(|f| ui(f, &mut state))?;
+                    } else {
+                        terminal.draw(|f| ui(f, &mut state))?;
+                    }
                 }
             }
         }

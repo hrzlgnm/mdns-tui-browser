@@ -7,7 +7,7 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/hrzlgnm/mdns-tui-browser/ci.yml)](https://github.com/hrzlgnm/mdns-tui-browser/actions)
 # mDNS TUI Browser
 
-A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface.
+A terminal-based mDNS service browser in safe Rust, using `ratatui` for the TUI interface.
 
 ## Features
 
@@ -47,7 +47,8 @@ mdns-tui-browser -h
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
 - <kbd>d</kbd> - Remove dead services
 - <kbd>?</kbd> - Toggle help popup
-- <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
+- <kbd>q</kbd> or <kbd>Ctrl+C</kbd> - Quit the application
+- <kbd>Ctrl+Z</kbd> - Suspend the application (Unix only)
 
 Press any key to close the help popup.
 
@@ -66,9 +67,15 @@ The application is built with:
 - **clap** - Command line argument parsing library
 - **chrono** - Date and time handling for local timestamp display
 
+### Platform-Specific Features
+
+- **Unix Systems**: Process suspension via <kbd>Ctrl+Z</kbd> is supported using the `nix` and `signal-hook` crates. No unsafe code is used for signal handling.
+- **Non-Unix Systems**: <kbd>Ctrl+Z</kbd> suspension is not available (feature requires Unix signal handling).
+
 ### Features
 
 - **Extensible Design**: Built for real mDNS service discovery
+- **Platform-Aware**: Unix-specific features are properly isolated with cfg flags
 
 ## Project Structure
 
