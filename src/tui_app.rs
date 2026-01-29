@@ -55,7 +55,7 @@ struct AppState {
 }
 
 impl AppState {
-fn new() -> Self {
+    fn new() -> Self {
         let mut state = Self {
             services: Vec::new(),
             service_types: Vec::new(),
@@ -284,7 +284,7 @@ fn new() -> Self {
     }
 
     // Key handling methods
-fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+    fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         if self.show_help_popup {
             self.handle_help_popup_key(key)
         } else if self.show_metrics_popup {
@@ -294,7 +294,7 @@ fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         }
     }
 
-fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
+    fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
         // Any key just closes the help popup and returns to normal mode
         self.show_help_popup = false;
         true // Continue running
@@ -320,7 +320,7 @@ fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
                 false // Signal to quit
             }
 
-// Help toggle
+            // Help toggle
             KeyCode::Char('?') => {
                 self.toggle_help();
                 true
@@ -384,7 +384,7 @@ fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
         }
     }
 
-fn toggle_help(&mut self) {
+    fn toggle_help(&mut self) {
         self.show_help_popup = !self.show_help_popup;
     }
 
@@ -392,7 +392,10 @@ fn toggle_help(&mut self) {
         *self.metrics.entry(key.to_string()).or_insert(0) += 1;
     }
 
-    fn update_daemon_metrics(&mut self, daemon_metrics: &std::collections::HashMap<String, i64>) -> bool {
+    fn update_daemon_metrics(
+        &mut self,
+        daemon_metrics: &std::collections::HashMap<String, i64>,
+    ) -> bool {
         let mut metrics_updated = false;
         for (key, value) in daemon_metrics.iter() {
             let metric_key = format!("daemon_{}", key.replace('-', "_"));
@@ -551,7 +554,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     render_services_list(f, app_state, layout.services_area, visible_counts.services);
     render_service_details(f, app_state, layout.details_area);
 
-// Render popups if active
+    // Render popups if active
     if app_state.show_help_popup {
         render_help_popup(f);
     } else if app_state.show_metrics_popup {
@@ -733,7 +736,7 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from(" "),
-Line::from(" Actions:"),
+        Line::from(" Actions:"),
         Line::from("   d                   - Remove dead services"),
         Line::from("   m                   - Show service metrics"),
         Line::from("   ?                   - Toggle this help popup"),
@@ -771,7 +774,7 @@ Line::from(" Actions:"),
         .borders(Borders::ALL)
         .title("Key Bindings")
         .title_style(Style::default().add_modifier(Modifier::BOLD));
-f.render_widget(border_block, popup_area);
+    f.render_widget(border_block, popup_area);
 }
 
 fn render_metrics_popup(f: &mut Frame, app_state: &AppState) {
@@ -1012,8 +1015,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
     let state_clone = Arc::clone(&state);
     let notification_sender_clone = notification_sender.clone();
 
-let mdns_for_metrics = mdns.clone();
-    
+    let mdns_for_metrics = mdns.clone();
+
     // Start background task to periodically collect ServiceDaemon metrics
     let state_for_metrics = Arc::clone(&state);
     let notification_sender_for_metrics = notification_sender.clone();
@@ -1021,14 +1024,15 @@ let mdns_for_metrics = mdns.clone();
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
         loop {
             interval.tick().await;
-            
+
             match mdns_for_metrics.get_metrics() {
                 Ok(metrics_receiver) => {
                     if let Ok(daemon_metrics) = metrics_receiver.recv_async().await {
                         let mut state = state_for_metrics.write().await;
                         if state.update_daemon_metrics(&daemon_metrics) {
                             // Metrics changed, trigger UI refresh
-                            let _ = notification_sender_for_metrics.send(Notification::MetricsUpdated);
+                            let _ =
+                                notification_sender_for_metrics.send(Notification::MetricsUpdated);
                         }
                     }
                 }
@@ -1054,7 +1058,7 @@ let mdns_for_metrics = mdns.clone();
                     if !is_valid_service_type(&service_type) {
                         continue; // invalid service type format
                     }
-{
+                    {
                         let mut state = state_clone.write().await;
                         if state.add_service_type(&service_type) {
                             state.update_metric("service_types_discovered");
@@ -1063,7 +1067,7 @@ let mdns_for_metrics = mdns.clone();
                     }
                     match mdns.browse(&service_type) {
                         Err(_) => {
-// if a browse fails, that usually means the service type is invalid and
+                            // if a browse fails, that usually means the service type is invalid and
                             // should be removed from the service types list
                             let mut state = state_clone.write().await;
                             if state.remove_service_type(&service_type) {
@@ -1079,7 +1083,7 @@ let mdns_for_metrics = mdns.clone();
                             tokio::spawn(async move {
                                 while let Ok(service_event) = service_receiver.recv_async().await {
                                     match service_event {
-ServiceEvent::ServiceRemoved(service_type, fullname) => {
+                                        ServiceEvent::ServiceRemoved(service_type, fullname) => {
                                             let mut state = state_inner.write().await;
                                             if let Some(entry) = state
                                                 .services
@@ -1146,7 +1150,7 @@ ServiceEvent::ServiceRemoved(service_type, fullname) => {
                                                 .find(|s| s.fullname == entry.fullname)
                                             {
                                                 *exist = entry;
-} else {
+                                            } else {
                                                 state.services.push(entry);
                                                 state.update_metric("services_discovered");
                                             }
