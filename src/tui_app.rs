@@ -547,12 +547,12 @@ fn suspend_process(state: &mut AppState) -> Result<(), Box<dyn std::error::Error
         state.last_error = Some(format!("Failed to disable raw mode: {}", e));
         return Err(e.into());
     }
-    
+
     if let Err(e) = execute!(stdout(), LeaveAlternateScreen) {
         state.last_error = Some(format!("Failed to leave alternate screen: {}", e));
         return Err(e.into());
     }
-    
+
     if let Err(e) = stdout().flush() {
         state.last_error = Some(format!("Failed to flush stdout: {}", e));
         return Err(e.into());
@@ -611,11 +611,13 @@ fn resume_after_suspend() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(unix)]
-fn recreate_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<(), Box<dyn std::error::Error>> {
-    use crossterm::terminal::{Clear, ClearType};
+fn recreate_terminal(
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     use crossterm::cursor;
+    use crossterm::terminal::{Clear, ClearType};
     use ratatui::layout::Rect;
-    
+
     // Completely flush and clear terminal
     terminal.clear()?;
     execute!(
@@ -624,12 +626,12 @@ fn recreate_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>)
         cursor::MoveTo(0, 0)
     )?;
     terminal.flush()?;
-    
+
     // Force a resize to trigger complete redraw
     let size = terminal.size()?;
     let rect = Rect::new(0, 0, size.width, size.height);
     terminal.resize(rect)?;
-    
+
     Ok(())
 }
 
@@ -818,17 +820,13 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
     let error_to_display = app_state.last_error.clone();
-    
+
     // Check if there's an error to display
     if let Some(error) = error_to_display {
         let error_text = format!("Error: {}", error);
         let error_details = Paragraph::new(error_text)
             .style(Style::default().fg(Color::Red))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Error"),
-            )
+            .block(Block::default().borders(Borders::ALL).title("Error"))
             .wrap(Wrap { trim: true });
         f.render_widget(error_details, area);
         return;
@@ -1058,8 +1056,6 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create notification channels
     let (notification_sender, notification_receiver) = flume::unbounded::<Notification>();
-
-
 
     let mdns = ServiceDaemon::new()?;
 
