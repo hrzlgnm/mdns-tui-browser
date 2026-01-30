@@ -48,6 +48,7 @@ jobs:
       branch: ${{ steps.branch.outputs.branch }}
       code: ${{ steps.filter.outputs.code }}
       lint: ${{ steps.filter.outputs.lint }}
+      tests: ${{ steps.filter.outputs.tests }}
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -66,6 +67,9 @@ jobs:
               - 'Cargo.lock'
             lint:
               - '.github/workflows/lint-reusable.yml'
+            tests:
+              - '.github/workflows/test-reusable.yml'
+              - '.config/nextest.toml'
       - name: Output branch name
         id: branch
         run: |
@@ -80,6 +84,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.lint == 'true'
     uses: ./.github/workflows/lint-reusable.yml
+
+  tests:
+    permissions:
+      checks: write # required for action-junit-report annotation
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tests == 'true'
+    uses: ./.github/workflows/test-reusable.yml
 
   build:
     name: "build"
@@ -96,9 +107,10 @@ jobs:
     name: CI Status
     runs-on: ubuntu-latest
     needs:
-      - typos
-      - lint
       - build
+      - lint
+      - tests
+      - typos
     if: always()
     steps:
       - name: Check whether the needed jobs succeeded or failed
