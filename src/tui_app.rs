@@ -116,18 +116,17 @@ impl AppState {
             let query = self.filter_query.to_lowercase();
 
             // Search in all service fields case-insensitively
-            let search_text = format!(
-                "{} {} {} {} {} {} {}",
-                service.fullname,
-                service.host,
-                service.service_type,
+            let search_text = [
+                service.fullname.clone(),
+                service.host.clone(),
+                service.service_type.clone(),
                 service.addrs.join(" "),
                 service.port.to_string(),
                 service.txt.join(" "),
-                service.subtype.as_ref().unwrap_or(&String::new())
-            )
+                service.subtype.as_ref().unwrap_or(&String::new()).clone(),
+            ]
+            .join(" ")
             .to_lowercase();
-
             search_text.contains(&query)
         } else {
             true // Show all services if query is empty
