@@ -435,7 +435,6 @@ impl AppState {
     }
 
     fn invalidate_cache_and_validate(&mut self) {
-        self.update_metric("cache_invalidations");
         self.mark_cache_dirty();
         self.cached_sorted = false;
         self.validate_selected_type();
