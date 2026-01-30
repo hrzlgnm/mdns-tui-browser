@@ -55,14 +55,17 @@ impl ServiceEntry {
 }
 
 impl From<ResolvedService> for ServiceEntry {
-    fn from(service_info: ResolvedService) -> Self {
+    fn from(resolved_service: ResolvedService) -> Self {
         Self {
-            fullname: service_info.get_fullname().to_string(),
-            host: service_info.get_hostname().to_string(),
-            service_type: service_info.ty_domain.to_string(),
-            subtype: service_info.get_subtype().as_ref().map(|s| s.to_string()),
+            fullname: resolved_service.get_fullname().to_string(),
+            host: resolved_service.get_hostname().to_string(),
+            service_type: resolved_service.ty_domain.to_string(),
+            subtype: resolved_service
+                .get_subtype()
+                .as_ref()
+                .map(|s| s.to_string()),
             addrs: {
-                let mut addrs: Vec<String> = service_info
+                let mut addrs: Vec<String> = resolved_service
                     .get_addresses()
                     .iter()
                     .map(|ip| ip.to_string())
@@ -70,9 +73,9 @@ impl From<ResolvedService> for ServiceEntry {
                 addrs.sort();
                 addrs
             },
-            port: service_info.get_port(),
+            port: resolved_service.get_port(),
             txt: {
-                let mut txt: Vec<String> = service_info
+                let mut txt: Vec<String> = resolved_service
                     .get_properties()
                     .iter()
                     .filter_map(|prop| {
@@ -1524,8 +1527,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                     .send(Notification::ServiceChanged);
                                             }
                                         }
-                                        ServiceEvent::ServiceResolved(service_info) => {
-                                            let entry = ServiceEntry::from(*service_info);
+                                        ServiceEvent::ServiceResolved(resolved_service) => {
+                                            let entry = ServiceEntry::from(*resolved_service);
                                             let mut state = state_inner.write().await;
                                             state.add_or_update_service(entry);
                                             state.services.sort_by(|a, b| a.host.cmp(&b.host));
