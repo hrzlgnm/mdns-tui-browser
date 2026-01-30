@@ -1423,9 +1423,15 @@ mod tests {
     #[test]
     fn test_navigate_services_up() {
         let mut state = AppState::new();
-        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.services.push(create_test_service("test3", "_http._tcp.local.", 82));
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("test3", "_http._tcp.local.", 82));
         state.selected_service = 2;
 
         state.navigate_services_up();
@@ -1442,9 +1448,15 @@ mod tests {
     #[test]
     fn test_navigate_services_down() {
         let mut state = AppState::new();
-        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.services.push(create_test_service("test3", "_http._tcp.local.", 82));
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("test3", "_http._tcp.local.", 82));
         state.selected_service = 0;
 
         state.navigate_services_down();
@@ -1497,8 +1509,12 @@ mod tests {
     #[test]
     fn test_navigate_services_to_first() {
         let mut state = AppState::new();
-        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 81));
         state.selected_service = 1;
         state.services_scroll_offset = 1;
 
@@ -1510,9 +1526,15 @@ mod tests {
     #[test]
     fn test_navigate_services_to_last() {
         let mut state = AppState::new();
-        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.services.push(create_test_service("test3", "_http._tcp.local.", 82));
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("test3", "_http._tcp.local.", 82));
         state.selected_service = 0;
 
         state.navigate_services_to_last();
@@ -1523,7 +1545,11 @@ mod tests {
     fn test_navigate_services_page_up() {
         let mut state = AppState::new();
         for i in 0..20 {
-            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
         }
         state.visible_services = 5;
         state.selected_service = 10;
@@ -1542,7 +1568,11 @@ mod tests {
     fn test_navigate_services_page_down() {
         let mut state = AppState::new();
         for i in 0..20 {
-            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
         }
         state.visible_services = 5;
         state.selected_service = 0;
@@ -1712,7 +1742,9 @@ mod tests {
     fn test_filter_cache_invalidation() {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
-        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
 
         // Populate cache
         let filtered = state.get_filtered_services();
@@ -1999,7 +2031,9 @@ mod tests {
         state.selected_type = Some(1); // Select _ssh._tcp.local.
 
         // Add only http service
-        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
 
         let filtered = state.get_filtered_services();
         assert_eq!(filtered.len(), 0); // No ssh services
@@ -2009,7 +2043,11 @@ mod tests {
     fn test_scroll_offset_boundary_conditions() {
         let mut state = AppState::new();
         for i in 0..3 {
-            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
         }
         state.visible_services = 10; // More visible space than services
 
@@ -2025,7 +2063,11 @@ mod tests {
         state.add_service_type("_ssh._tcp.local.");
 
         for i in 0..10 {
-            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
         }
 
         state.selected_service = 5;
