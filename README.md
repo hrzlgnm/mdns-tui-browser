@@ -112,14 +112,11 @@ Build provenance is a cryptographically signed attestation that answers:
 
 ### Verifying Release Assets
 
-You can verify the authenticity of release assets using tools like [Sigstore's `cosign`](https://docs.sigstore.dev/cosign/overview/) or the GitHub CLI:
+You can verify the authenticity of release assets using the GitHub CLI:
 
 ```bash
 # Using GitHub CLI
 gh attestation verify mdns-tui-browser-<version>-Linux-x86_64.tar.gz --repo hrlzgnm/mdns-tui-browser
-
-# Note: cosign verify-attestation is for OCI images (container images only)
-# For release artifacts, use gh attestation verify as shown above
 ```
 
 This ensures that the binaries you download are authentic and haven't been tampered with.
