@@ -57,13 +57,21 @@ jobs:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
-          fetch-depth: 1
+          fetch-depth: ${{ inputs.tagName && '0' || '1' }}
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
           targets: ${{ matrix.target }}
           save-cache: ${{ inputs.branch == 'main' }}
+
+      - name: 🛠️🔐 cargo-auditable
+        if: inputs.tagName
+        uses: baptiste0928/cargo-install@b687c656bda5733207e629b50a22bf68974a0305 # v3
+        with:
+          crate: cargo-auditable
+          version: 0.7.2
+          locked: true
 
       - name: 🛠️ dependencies
         if: matrix.dependencies
@@ -81,7 +89,11 @@ jobs:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cargo build --release --target ${{ matrix.target }}
+          if [ "${{ inputs.tagName }}" ]; then
+            cargo auditable build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: 📦 Build archive
         shell: bash
@@ -101,6 +113,12 @@ jobs:
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
           fi
+
+      - name: 🔐 Generate provenance attestation
+        if: inputs.tagName
+        uses: actions/attest-build-provenance@62fc1d596301d0ab9914e1fec14dc5c8d93f65cd
+        with:
+          subject-path: ${{ env.ASSET }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
