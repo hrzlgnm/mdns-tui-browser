@@ -18,6 +18,22 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortField {
+    Host,
+    ServiceType,
+    Fullname,
+    Port,
+    Address,
+    Timestamp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortDirection {
+    Ascending,
+    Descending,
+}
+
 #[derive(Clone, Debug)]
 struct ServiceEntry {
     fullname: String,
@@ -52,6 +68,8 @@ struct AppState {
     show_help_popup: bool,
     show_metrics_popup: bool,
     metrics: BTreeMap<String, u64>,
+    sort_field: SortField,
+    sort_direction: SortDirection,
 }
 
 impl AppState {
@@ -70,6 +88,8 @@ impl AppState {
             show_help_popup: false,
             show_metrics_popup: false,
             metrics: BTreeMap::new(),
+            sort_field: SortField::Host,
+            sort_direction: SortDirection::Ascending,
         };
         state.validate_selected_type();
         state
@@ -119,7 +139,30 @@ impl AppState {
 
     fn get_filtered_services(&mut self) -> &[usize] {
         self.update_filtered_cache();
+        self.sort_filtered_services();
         self.cached_filtered_services.as_slice()
+    }
+
+    fn sort_filtered_services(&mut self) {
+        let sort_field = self.sort_field;
+        let services = &self.services;
+
+        match self.sort_direction {
+            SortDirection::Ascending => {
+                self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
+                    let service_a = &services[a_idx];
+                    let service_b = &services[b_idx];
+                    compare_services_by_field(service_a, service_b, sort_field)
+                });
+            }
+            SortDirection::Descending => {
+                self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
+                    let service_a = &services[a_idx];
+                    let service_b = &services[b_idx];
+                    compare_services_by_field(service_b, service_a, sort_field)
+                });
+            }
+        }
     }
 
     // Helper methods for service type management
@@ -200,6 +243,44 @@ impl AppState {
         self.selected_service = 0;
         self.services_scroll_offset = 0;
         self.invalidate_cache_and_validate();
+    }
+
+    fn update_sort_field(&mut self, field: SortField) {
+        self.sort_field = field;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn update_sort_direction(&mut self, direction: SortDirection) {
+        self.sort_direction = direction;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn toggle_sort_direction(&mut self) {
+        match self.sort_direction {
+            SortDirection::Ascending => self.update_sort_direction(SortDirection::Descending),
+            SortDirection::Descending => self.update_sort_direction(SortDirection::Ascending),
+        }
+    }
+
+    fn cycle_sort_field(&mut self, forward: bool) {
+        use SortField::*;
+        let fields = [Host, ServiceType, Fullname, Port, Address, Timestamp];
+        let current_idx = fields
+            .iter()
+            .position(|&f| f == self.sort_field)
+            .unwrap_or(0);
+
+        let new_idx = if forward {
+            (current_idx + 1) % fields.len()
+        } else {
+            current_idx.checked_sub(1).unwrap_or(fields.len() - 1)
+        };
+
+        self.update_sort_field(fields[new_idx]);
     }
 
     fn remove_offline_services(&mut self) {
@@ -374,6 +455,22 @@ impl AppState {
                 true
             }
 
+            // Sorting
+            KeyCode::Char('s') => {
+                self.cycle_sort_field(true);
+                true
+            }
+
+            KeyCode::Char('S') => {
+                self.cycle_sort_field(false);
+                true
+            }
+
+            KeyCode::Char('o') => {
+                self.toggle_sort_direction();
+                true
+            }
+
             // Actions
             KeyCode::Char('d') => {
                 self.remove_offline_services();
@@ -516,6 +613,33 @@ impl AppState {
         {
             self.services_scroll_offset = self.selected_service - self.visible_services + 1;
         }
+    }
+}
+
+fn compare_services_by_field(
+    a: &ServiceEntry,
+    b: &ServiceEntry,
+    field: SortField,
+) -> std::cmp::Ordering {
+    match field {
+        SortField::Host => a.host.cmp(&b.host),
+        SortField::ServiceType => a.service_type.cmp(&b.service_type),
+        SortField::Fullname => a.fullname.cmp(&b.fullname),
+        SortField::Port => a.port.cmp(&b.port),
+        SortField::Address => {
+            let a_addr = a
+                .addrs
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "<no-addr>".to_string());
+            let b_addr = b
+                .addrs
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "<no-addr>".to_string());
+            a_addr.cmp(&b_addr)
+        }
+        SortField::Timestamp => a.timestamp_micros.cmp(&b.timestamp_micros),
     }
 }
 
@@ -680,12 +804,36 @@ fn render_services_list(
         .take(visible_services)
         .collect();
 
+    let sort_field_display = format_sort_field_for_display(app_state.sort_field);
+    let sort_dir_display = format_sort_direction_for_display(app_state.sort_direction);
+    let sort_field_highlighted = Span::styled(
+        sort_field_display,
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    );
+    let sort_dir_highlighted = Span::styled(
+        sort_dir_display,
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    let title = Line::from(vec![
+        Span::raw("Services ["),
+        Span::styled(
+            format!("{}/{}", filtered_indices_len, services_clone.len()),
+            Style::default().fg(Color::Green),
+        ),
+        Span::raw("] ["),
+        sort_field_highlighted,
+        Span::raw("/"),
+        sort_dir_highlighted,
+        Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
+    ]);
+
     let services_list = List::new(visible_service_items)
-        .block(Block::default().borders(Borders::ALL).title(format!(
-            "Services [{}/{}] (↑/↓)",
-            filtered_indices_len,
-            services_clone.len()
-        )))
+        .block(Block::default().borders(Borders::ALL).title(title))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut services_list_state = ListState::default();
@@ -741,6 +889,15 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   m                   - Show service metrics"),
         Line::from("   ?                   - Toggle this help popup"),
         Line::from("   q or Ctrl+C         - Quit the application"),
+        Line::from(" "),
+        Line::from(" Sorting:"),
+        Line::from(
+            "   s                   - Cycle sort field: Host → Type → Name → Port → Addr → Time",
+        ),
+        Line::from("   S                   - Cycle sort field backward"),
+        Line::from("   o                   - Toggle sort direction (↑/↓)"),
+        Line::from(" "),
+        Line::from("   Sort field highlighted in yellow, direction in cyan"),
         Line::from(" "),
         Line::from(" Press any key to close this help"),
     ];
@@ -884,6 +1041,24 @@ fn create_centered_popup(
 }
 
 // Helper functions for formatting
+fn format_sort_field_for_display(field: SortField) -> &'static str {
+    match field {
+        SortField::Host => "Host",
+        SortField::ServiceType => "Type",
+        SortField::Fullname => "Name",
+        SortField::Port => "Port",
+        SortField::Address => "Addr",
+        SortField::Timestamp => "Time",
+    }
+}
+
+fn format_sort_direction_for_display(direction: SortDirection) -> &'static str {
+    match direction {
+        SortDirection::Ascending => "↑",
+        SortDirection::Descending => "↓",
+    }
+}
+
 fn format_service_type_for_display(service_type: &str) -> String {
     service_type
         .trim_start_matches('_')
