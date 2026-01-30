@@ -638,10 +638,10 @@ fn compare_services_by_field(
         SortField::Port => a.port.cmp(&b.port),
         SortField::Address => {
             use std::net::IpAddr;
-            
+
             let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
             let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
-            
+
             // Try to parse as IP addresses for numeric comparison, fall back to string comparison
             match (a_addr_str.parse::<IpAddr>(), b_addr_str.parse::<IpAddr>()) {
                 (Ok(a_ip), Ok(b_ip)) => a_ip.cmp(&b_ip),
@@ -2386,8 +2386,8 @@ mod tests {
         service2.addrs = vec!["192.168.1.1".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
-        // "<no-addr>" should be compared as string
-        assert_eq!(result, std::cmp::Ordering::Less);
+        // "<no-addr>" should be compared as string ("<no-addr>" > "192.168.1.1")
+        assert_eq!(result, std::cmp::Ordering::Greater);
     }
 
     #[test]
@@ -2468,9 +2468,11 @@ mod tests {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
         for i in 0..5 {
-            state
-                .services
-                .push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
         }
         state.selected_service = 3;
         state.services_scroll_offset = 2;
@@ -2485,9 +2487,11 @@ mod tests {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
         for i in 0..5 {
-            state
-                .services
-                .push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
         }
         state.selected_service = 3;
         state.services_scroll_offset = 2;
@@ -2503,15 +2507,21 @@ mod tests {
         state.add_service_type("_http._tcp.local.");
 
         // Add services in reverse alphabetical order
-        state.services.push(create_test_service("zebra", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("alpha", "_http._tcp.local.", 81));
-        state.services.push(create_test_service("beta", "_http._tcp.local.", 82));
+        state
+            .services
+            .push(create_test_service("zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 82));
 
         state.sort_field = SortField::Host;
         state.sort_direction = SortDirection::Ascending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         assert_eq!(filtered.len(), 3);
 
         // Verify services are sorted by host in ascending order
@@ -2525,15 +2535,21 @@ mod tests {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
 
-        state.services.push(create_test_service("alpha", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("beta", "_http._tcp.local.", 81));
-        state.services.push(create_test_service("zebra", "_http._tcp.local.", 82));
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("zebra", "_http._tcp.local.", 82));
 
         state.sort_field = SortField::Host;
         state.sort_direction = SortDirection::Descending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         assert_eq!(filtered.len(), 3);
 
         // Verify services are sorted by host in descending order
@@ -2547,15 +2563,21 @@ mod tests {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
 
-        state.services.push(create_test_service("service1", "_http._tcp.local.", 8080));
-        state.services.push(create_test_service("service2", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("service3", "_http._tcp.local.", 443));
+        state
+            .services
+            .push(create_test_service("service1", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("service2", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("service3", "_http._tcp.local.", 443));
 
         state.sort_field = SortField::Port;
         state.sort_direction = SortDirection::Ascending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         assert_eq!(state.services[filtered[0]].port, 80);
         assert_eq!(state.services[filtered[1]].port, 443);
         assert_eq!(state.services[filtered[2]].port, 8080);
@@ -2581,7 +2603,7 @@ mod tests {
         state.sort_direction = SortDirection::Ascending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         assert_eq!(state.services[filtered[0]].timestamp_micros, 1000);
         assert_eq!(state.services[filtered[1]].timestamp_micros, 2000);
         assert_eq!(state.services[filtered[2]].timestamp_micros, 3000);
@@ -2593,10 +2615,18 @@ mod tests {
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
-        state.services.push(create_test_service("http-zebra", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
-        state.services.push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
-        state.services.push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
+        state
+            .services
+            .push(create_test_service("http-zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
+        state
+            .services
+            .push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
 
         // Filter to only HTTP services and sort by host
         state.selected_type = Some(0); // _http._tcp.local.
@@ -2604,7 +2634,7 @@ mod tests {
         state.sort_direction = SortDirection::Ascending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         assert_eq!(filtered.len(), 2); // Only HTTP services
         assert_eq!(state.services[filtered[0]].host, "http-alpha.local.");
         assert_eq!(state.services[filtered[1]].host, "http-zebra.local.");
@@ -2630,7 +2660,7 @@ mod tests {
         state.sort_direction = SortDirection::Ascending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         // All services should be included and sorted, regardless of online status
         assert_eq!(filtered.len(), 3);
         assert!(state.services[filtered[0]].host < state.services[filtered[1]].host);
@@ -2640,7 +2670,10 @@ mod tests {
     #[test]
     fn test_format_sort_field_display() {
         assert_eq!(format_sort_field_for_display(SortField::Host), "Host");
-        assert_eq!(format_sort_field_for_display(SortField::ServiceType), "Type");
+        assert_eq!(
+            format_sort_field_for_display(SortField::ServiceType),
+            "Type"
+        );
         assert_eq!(format_sort_field_for_display(SortField::Fullname), "Name");
         assert_eq!(format_sort_field_for_display(SortField::Port), "Port");
         assert_eq!(format_sort_field_for_display(SortField::Address), "Addr");
@@ -2649,8 +2682,14 @@ mod tests {
 
     #[test]
     fn test_format_sort_direction_display() {
-        assert_eq!(format_sort_direction_for_display(SortDirection::Ascending), "↑");
-        assert_eq!(format_sort_direction_for_display(SortDirection::Descending), "↓");
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Ascending),
+            "↑"
+        );
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Descending),
+            "↓"
+        );
     }
 
     #[test]
@@ -2702,7 +2741,9 @@ mod tests {
     fn test_cache_invalidation_on_sort_change() {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
-        state.services.push(create_test_service("test", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 80));
 
         // Populate cache
         let _ = state.get_filtered_services();
@@ -2721,19 +2762,25 @@ mod tests {
         state.add_service_type("_http._tcp.local.");
 
         // Create services with same port but different names
-        state.services.push(create_test_service("alpha", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("beta", "_http._tcp.local.", 80));
-        state.services.push(create_test_service("gamma", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("gamma", "_http._tcp.local.", 80));
 
         state.sort_field = SortField::Port;
         state.sort_direction = SortDirection::Ascending;
         state.mark_cache_dirty();
 
-        let filtered = state.get_filtered_services();
+        let filtered = state.get_filtered_services().to_vec();
         // All should have same port, so order is determined by the stable sort
         assert_eq!(filtered.len(), 3);
         for idx in filtered {
-            assert_eq!(state.services[*idx].port, 80);
+            assert_eq!(state.services[idx].port, 80);
         }
     }
 
