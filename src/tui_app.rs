@@ -764,11 +764,14 @@ impl AppState {
     }
 
     fn clear_filter(&mut self) {
+        let had_filter = !self.filter_query.is_empty();
         self.filter_query.clear();
         self.filter_input_mode = false;
-        // Reset selection and scroll when clearing filter
-        self.selected_service = 0;
-        self.services_scroll_offset = 0;
+        // Only reset selection and scroll when there was actually a filter
+        if had_filter {
+            self.selected_service = 0;
+            self.services_scroll_offset = 0;
+        }
         self.invalidate_cache_and_validate();
     }
 
