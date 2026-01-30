@@ -69,7 +69,7 @@ When in filter mode (activated with <kbd>/</kbd>):
 
 The application is built with:
 
-- **Rust** - Systems programming language
+- **Rust** - Systems programming language (Safe Rust only - no unsafe blocks allowed)
 - **ratatui** - Terminal UI framework
 - **tokio** - Async runtime
 - **crossterm** - Terminal handling
@@ -77,6 +77,14 @@ The application is built with:
 - **mdns-sd** - mDNS service discovery library
 - **clap** - Command line argument parsing library
 - **chrono** - Date and time handling for local timestamp display
+
+### Safety Policy
+
+This project follows a **Safe Rust Only** policy:
+- **No `unsafe` blocks** are permitted in the codebase
+- All memory safety is guaranteed by Rust's compiler and runtime
+- The codebase is configured to reject unsafe code at the lint level
+- This ensures maximum security and reliability for the mDNS service browser
 
 ### Features
 
