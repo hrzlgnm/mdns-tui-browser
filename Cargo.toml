@@ -21,5 +21,3 @@ crossterm = "0.29"
 flume = "0.12"
 clap = { version = "4", features = ["derive"] }
 chrono = "0.4"
-
-
