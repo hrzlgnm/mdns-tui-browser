@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
     execute,

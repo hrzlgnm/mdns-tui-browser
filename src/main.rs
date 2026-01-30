@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod tui_app;
 
 use clap::Parser;
