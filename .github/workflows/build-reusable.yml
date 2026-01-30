@@ -14,10 +14,6 @@ on:
         required: false
         type: string
 
-permissions:
-  id-token: write
-  attestations: write
-
 jobs:
   build:
     strategy:
