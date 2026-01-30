@@ -1,0 +1,56 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: "Reusable ci test workflow"
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: "ubuntu-latest"
+            symbol: 🐧
+            platform: Linux
+          - os: "macos-latest"
+            symbol: 🍏
+          - os: "windows-latest"
+            symbol: 🪟
+    runs-on: ${{matrix.os}}
+    name: ${{matrix.symbol}}✅
+    container: ${{ contains(matrix.os, 'ubuntu') && matrix.container_image || null }}
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: 🦀🚀
+        uses: ./.github/actions/setup-rust-cache
+
+      - name: 🛠️ nextest
+        uses: baptiste0928/cargo-install@b687c656bda5733207e629b50a22bf68974a0305 # v3
+        with:
+          crate: cargo-nextest
+          version: 0.9.124
+          locked: true
+
+      - name: 🛠️🚀
+        uses: ./.github/actions/setup-sccache
+
+      - name: ✅ Run tests with nextest
+        shell: bash
+        run: |
+          cargo --locked nextest run --profile ci
+
+      - name: 📋 JUnit Report
+        if: always()
+        uses: mikepenz/action-junit-report@a294a61c909bd8a4b563024a2faa28897fd53ebc # v6
+        with:
+          report_paths: "**/junit.xml"
+          fail_on_parse_error: true
+          require_tests: true
+          include_passed: true
+          check_name: "${{ matrix.symbol }} JUnit Report"
