@@ -692,6 +692,7 @@ impl AppState {
     fn clear_filter(&mut self) {
         self.filter_query.clear();
         self.filter_input_mode = false;
+        // Reset selection and scroll when clearing filter
         self.selected_service = 0;
         self.services_scroll_offset = 0;
         self.invalidate_cache_and_validate();
@@ -699,6 +700,7 @@ impl AppState {
 
     fn apply_filter(&mut self) {
         self.filter_input_mode = false;
+        // Reset selection and scroll when exiting filter mode
         self.selected_service = 0;
         self.services_scroll_offset = 0;
         self.invalidate_cache_and_validate();
@@ -706,10 +708,14 @@ impl AppState {
 
     fn add_to_filter(&mut self, ch: char) {
         self.filter_query.push(ch);
+        // Invalidate cache to trigger real-time filtering
+        self.invalidate_cache_and_validate();
     }
 
     fn remove_from_filter(&mut self) {
         self.filter_query.pop();
+        // Invalidate cache to trigger real-time filtering
+        self.invalidate_cache_and_validate();
     }
 }
 
@@ -3010,6 +3016,23 @@ mod tests {
     }
 
     #[test]
+    fn test_add_to_filter_invalidates_cache() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 80));
+
+        // Populate cache first
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+
+        // Adding to filter should invalidate cache
+        state.add_to_filter('t');
+        assert!(state.cache_dirty);
+    }
+
+    #[test]
     fn test_remove_from_filter() {
         let mut state = AppState::new();
         state.filter_query = "abc".to_string();
@@ -3021,6 +3044,24 @@ mod tests {
         assert_eq!(state.filter_query, "");
         state.remove_from_filter(); // Removing from empty string should be safe
         assert_eq!(state.filter_query, "");
+    }
+
+    #[test]
+    fn test_remove_from_filter_invalidates_cache() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 80));
+
+        // Populate cache first
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+
+        // Removing from filter should invalidate cache
+        state.filter_query = "test".to_string();
+        state.remove_from_filter();
+        assert!(state.cache_dirty);
     }
 
     #[test]
