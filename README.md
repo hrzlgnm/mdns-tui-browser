@@ -83,7 +83,7 @@ The application is built with:
 This project follows a **Safe Rust Only** policy:
 - **No `unsafe` blocks** are permitted in the codebase
 - All memory safety is guaranteed by Rust's compiler and runtime
-- The codebase is configured to reject unsafe code at the lint level
+- The codebase is configured to reject unsafe code
 - This ensures maximum security and reliability for the mDNS service browser
 
 ### Features
