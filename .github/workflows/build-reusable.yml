@@ -57,7 +57,7 @@ jobs:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
-          fetch-depth: 1
+          fetch-depth: ${{ inputs.tagName && 0 || 1 }}
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
@@ -101,6 +101,12 @@ jobs:
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
           fi
+
+      - name: 🔐 Generate provenance attestation
+        if: inputs.tagName
+        uses: actions/attest-build-provenance@1c608d7d2625b23825b400879a683065527c95d3 # v2.1.0
+        with:
+          subject-path: ${{ env.ASSET }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
