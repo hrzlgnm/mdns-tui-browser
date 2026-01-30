@@ -3284,6 +3284,532 @@ mod tests {
         assert!(state.filter_service(&service));
     }
 
+    // Test for the filter clear bug fix (regression test)
+    #[test]
+    fn test_clear_filter_when_empty_doesnt_reset_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        // Add multiple services
+        for i in 0..10 {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
+        }
+
+        // Navigate to a specific service
+        state.selected_service = 5;
+        state.services_scroll_offset = 3;
+
+        // Clear filter when it's already empty should NOT reset selection
+        state.clear_filter();
+
+        assert_eq!(state.selected_service, 5);
+        assert_eq!(state.services_scroll_offset, 3);
+    }
+
+    #[test]
+    fn test_clear_filter_when_not_empty_resets_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        // Add multiple services
+        for i in 0..10 {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
+        }
+
+        // Navigate to a specific service and set a filter
+        state.selected_service = 5;
+        state.services_scroll_offset = 3;
+        state.filter_query = "test5".to_string();
+
+        // Clear filter when it has content SHOULD reset selection
+        state.clear_filter();
+
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.filter_query, "");
+    }
+
+    // Test add_or_update_service edge cases
+    #[test]
+    fn test_add_or_update_service_returns_false_for_new_service() {
+        let mut state = AppState::new();
+        let service = create_test_service("test1", "_http._tcp.local.", 80);
+
+        let was_updated = state.add_or_update_service(service);
+
+        assert!(!was_updated);
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.metrics.get("services_discovered"), Some(&1));
+    }
+
+    #[test]
+    fn test_add_or_update_service_returns_true_for_existing_service() {
+        let mut state = AppState::new();
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+
+        // Add initial service
+        state.add_or_update_service(service1.clone());
+
+        // Update same service with different port
+        let mut service2 = service1.clone();
+        service2.port = 8080;
+
+        let was_updated = state.add_or_update_service(service2);
+
+        assert!(was_updated);
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.services[0].port, 8080);
+        assert_eq!(state.metrics.get("services_updated"), Some(&1));
+    }
+
+    #[test]
+    fn test_add_or_update_service_only_updates_on_significant_changes() {
+        let mut state = AppState::new();
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+
+        state.add_or_update_service(service1.clone());
+
+        // Update with same service (no significant changes)
+        let was_updated = state.add_or_update_service(service1.clone());
+
+        assert!(was_updated); // Returns true for existing service
+        assert_eq!(state.services.len(), 1);
+        // Metrics should not increment for non-significant changes
+        assert_eq!(state.metrics.get("services_updated"), None);
+    }
+
+    #[test]
+    fn test_add_or_update_service_detects_online_status_change() {
+        let mut state = AppState::new();
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+
+        state.add_or_update_service(service1.clone());
+
+        // Update service to be offline
+        let mut service2 = service1.clone();
+        service2.online = false;
+
+        let was_updated = state.add_or_update_service(service2);
+
+        assert!(was_updated);
+        assert_eq!(state.services.len(), 1);
+        assert!(!state.services[0].online);
+        assert_eq!(state.metrics.get("services_updated"), Some(&1));
+    }
+
+    #[test]
+    fn test_add_or_update_service_detects_address_change() {
+        let mut state = AppState::new();
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+
+        state.add_or_update_service(service1.clone());
+
+        // Update service with different address
+        let mut service2 = service1.clone();
+        service2.addrs = vec!["192.168.2.100".to_string()];
+
+        let was_updated = state.add_or_update_service(service2);
+
+        assert!(was_updated);
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.services[0].addrs[0], "192.168.2.100");
+        assert_eq!(state.metrics.get("services_updated"), Some(&1));
+    }
+
+    #[test]
+    fn test_add_or_update_service_detects_txt_change() {
+        let mut state = AppState::new();
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+
+        state.add_or_update_service(service1.clone());
+
+        // Update service with different TXT records
+        let mut service2 = service1.clone();
+        service2.txt = vec!["newkey=newvalue".to_string()];
+
+        let was_updated = state.add_or_update_service(service2);
+
+        assert!(was_updated);
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.services[0].txt[0], "newkey=newvalue");
+        assert_eq!(state.metrics.get("services_updated"), Some(&1));
+    }
+
+    #[test]
+    fn test_add_or_update_service_detects_subtype_change() {
+        let mut state = AppState::new();
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+
+        state.add_or_update_service(service1.clone());
+
+        // Update service with subtype
+        let mut service2 = service1.clone();
+        service2.subtype = Some("_printer".to_string());
+
+        let was_updated = state.add_or_update_service(service2);
+
+        assert!(was_updated);
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.services[0].subtype, Some("_printer".to_string()));
+        assert_eq!(state.metrics.get("services_updated"), Some(&1));
+    }
+
+    // Test cache invalidation scenarios
+    #[test]
+    fn test_cache_invalidation_on_service_removal() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+
+        // Populate cache
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+
+        // Remove services should invalidate cache
+        state.remove_offline_services();
+        // After remove_offline_services completes, cache should be clean again
+        assert!(!state.cache_dirty);
+    }
+
+    #[test]
+    fn test_cache_invalidation_on_add_service_type() {
+        let mut state = AppState::new();
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+
+        // Populate cache
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+
+        // Adding service type should invalidate cache
+        state.add_service_type("_http._tcp.local.");
+        assert!(state.cache_dirty);
+    }
+
+    #[test]
+    fn test_cache_invalidation_on_remove_service_type() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        // Populate cache
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+
+        // Removing service type should invalidate cache
+        state.remove_service_type("_ssh._tcp.local.");
+        assert!(state.cache_dirty);
+    }
+
+    #[test]
+    fn test_cache_sorted_flag_on_sort_field_change() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+
+        // Populate and sort cache
+        let _ = state.get_filtered_services();
+        assert!(state.cached_sorted);
+
+        // Changing sort field should invalidate sorted flag
+        state.update_sort_field(SortField::Port);
+        assert!(!state.cached_sorted);
+    }
+
+    // Boundary condition tests
+    #[test]
+    fn test_navigate_services_with_single_service() {
+        let mut state = AppState::new();
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+
+        state.selected_service = 0;
+
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 0);
+
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 0);
+    }
+
+    #[test]
+    fn test_navigate_service_types_with_single_type() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.selected_type = Some(0);
+
+        state.navigate_service_types_down();
+        assert_eq!(state.selected_type, Some(0));
+    }
+
+    #[test]
+    fn test_page_navigation_with_fewer_items_than_page_size() {
+        let mut state = AppState::new();
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 81));
+        state.visible_services = 10; // Page size larger than item count
+
+        state.selected_service = 0;
+        state.navigate_services_page_down();
+        assert_eq!(state.selected_service, 1); // Should go to last item
+
+        state.navigate_services_page_up();
+        assert_eq!(state.selected_service, 0); // Should go to first item
+    }
+
+    #[test]
+    fn test_remove_offline_services_with_all_offline() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.online = false;
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 81);
+        service2.online = false;
+
+        state.services.push(service1);
+        state.services.push(service2);
+
+        state.remove_offline_services();
+
+        assert_eq!(state.services.len(), 0);
+        assert_eq!(state.service_types.len(), 0); // Type should be removed too
+    }
+
+    #[test]
+    fn test_remove_offline_services_updates_metrics() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.online = false;
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 81);
+        service2.online = false;
+        let mut service3 = create_test_service("test3", "_http._tcp.local.", 82);
+        service3.online = false;
+
+        state.services.push(service1);
+        state.services.push(service2);
+        state.services.push(service3);
+
+        state.remove_offline_services();
+
+        assert_eq!(state.metrics.get("offline_services_removed"), Some(&3));
+    }
+
+    #[test]
+    fn test_update_metric_by() {
+        let mut state = AppState::new();
+
+        state.update_metric_by("test_metric", 5);
+        assert_eq!(state.metrics.get("test_metric"), Some(&5));
+
+        state.update_metric_by("test_metric", 3);
+        assert_eq!(state.metrics.get("test_metric"), Some(&8));
+    }
+
+    #[test]
+    fn test_filter_query_with_multiple_words() {
+        let mut state = AppState::new();
+        state.filter_query = "192.168".to_string();
+
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.addrs = vec!["192.168.1.100".to_string()];
+
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_query_partial_match() {
+        let mut state = AppState::new();
+        state.filter_query = "http".to_string();
+
+        let service = create_test_service("test", "_http._tcp.local.", 80);
+
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_with_port_as_string() {
+        let mut state = AppState::new();
+        state.filter_query = "8080".to_string();
+
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_scroll_offset_updates_correctly_on_navigation() {
+        let mut state = AppState::new();
+        for i in 0..10 {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
+        }
+        state.visible_services = 5;
+
+        // Navigate down beyond visible area
+        for _ in 0..7 {
+            state.navigate_services_down();
+        }
+
+        // Scroll offset should be adjusted to keep selected item visible
+        assert!(state.services_scroll_offset > 0);
+        assert!(state.selected_service >= state.services_scroll_offset);
+        assert!(state.selected_service < state.services_scroll_offset + state.visible_services);
+    }
+
+    #[test]
+    fn test_validate_selected_type_with_invalid_index() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.selected_type = Some(10); // Invalid index
+
+        state.validate_selected_type();
+
+        assert_eq!(state.selected_type, Some(0)); // Should clamp to valid index
+    }
+
+    #[test]
+    fn test_service_entry_go_offline_updates_timestamp() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        let original_timestamp = service.timestamp_micros;
+        let new_timestamp = original_timestamp + 1000000;
+
+        service.go_offline_at(new_timestamp);
+
+        assert!(!service.online);
+        assert_eq!(service.timestamp_micros, new_timestamp);
+        assert_ne!(service.timestamp_micros, original_timestamp);
+    }
+
+    #[test]
+    fn test_filter_and_sort_together() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        // Add services with different types and names
+        state
+            .services
+            .push(create_test_service("zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("beta", "_ssh._tcp.local.", 22));
+
+        // Filter to HTTP and sort by host
+        state.selected_type = Some(0); // _http._tcp.local.
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(state.services[filtered[0]].host, "alpha.local.");
+        assert_eq!(state.services[filtered[1]].host, "zebra.local.");
+    }
+
+    #[test]
+    fn test_key_event_ctrl_c() {
+        let mut state = AppState::new();
+
+        let mut key = KeyEvent::from(KeyCode::Char('c'));
+        key.modifiers = crossterm::event::KeyModifiers::CONTROL;
+
+        let should_continue = state.handle_key_event(key);
+
+        assert!(!should_continue); // Should quit
+    }
+
+    #[test]
+    fn test_key_event_remove_offline() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.online = false;
+        state.services.push(service);
+
+        let key = KeyEvent::from(KeyCode::Char('d'));
+        state.handle_key_event(key);
+
+        assert_eq!(state.services.len(), 0);
+    }
+
+    #[test]
+    fn test_multiple_filter_operations() {
+        let mut state = AppState::new();
+
+        // Start filter
+        state.start_filter_input();
+        assert!(state.filter_input_mode);
+
+        // Add characters
+        state.add_to_filter('t');
+        state.add_to_filter('e');
+        state.add_to_filter('s');
+        state.add_to_filter('t');
+        assert_eq!(state.filter_query, "test");
+
+        // Remove one character
+        state.remove_from_filter();
+        assert_eq!(state.filter_query, "tes");
+
+        // Apply filter
+        state.apply_filter();
+        assert!(!state.filter_input_mode);
+        assert_eq!(state.filter_query, "tes");
+    }
+
+    #[test]
+    fn test_empty_services_with_filter() {
+        let mut state = AppState::new();
+        state.filter_query = "nonexistent".to_string();
+
+        let filtered = state.get_filtered_services();
+
+        assert_eq!(filtered.len(), 0);
+    }
+
+    #[test]
+    fn test_service_type_sorting_order() {
+        let mut state = AppState::new();
+
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+
+        // Service types should be sorted alphabetically
+        assert_eq!(state.service_types[0], "_http._tcp.local.");
+        assert_eq!(state.service_types[1], "_printer._tcp.local.");
+        assert_eq!(state.service_types[2], "_ssh._tcp.local.");
+    }
+
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
         ServiceEntry {
