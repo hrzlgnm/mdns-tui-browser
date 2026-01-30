@@ -2089,7 +2089,7 @@ mod tests {
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
         ServiceEntry {
-            fullname: format!("{}_{}", name, service_type),
+            fullname: format!("{}.{}", name, service_type),
             host: format!("{}.local.", name),
             service_type: service_type.to_string(),
             subtype: None,
