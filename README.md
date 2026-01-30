@@ -42,7 +42,7 @@ mdns-tui-browser --help
 mdns-tui-browser -h
 ```
 
-## Controls (TUI Mode)
+## Controls
 
 - <kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>j</kbd>/<kbd>k</kbd> - Navigate services list
 - <kbd>←</kbd>/<kbd>→</kbd> or <kbd>h</kbd>/<kbd>l</kbd> - Switch between service types  
