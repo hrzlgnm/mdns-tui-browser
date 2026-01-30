@@ -149,10 +149,7 @@ You can audit any release binary to verify its dependencies:
 cargo install cargo-audit
 
 # Extract and audit dependencies from a release binary
-cargo audit bin mdns-tui-browser-1.6.0-Linux-x86_64/mdns-tui-browser
-
-# Or audit binary by path
-cargo audit bin path/to/release/binary
+cargo audit bin path/to/mdns-tui-browser
 ```
 
 ### Build Process
