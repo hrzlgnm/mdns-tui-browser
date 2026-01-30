@@ -1244,3 +1244,818 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ServiceEntry tests
+    #[test]
+    fn test_service_entry_die_at() {
+        let mut service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec!["192.168.1.1".to_string()],
+            port: 8080,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        assert!(service.alive);
+        service.die_at(2000);
+        assert!(!service.alive);
+        assert_eq!(service.timestamp_micros, 2000);
+    }
+
+    // AppState initialization tests
+    #[test]
+    fn test_appstate_new() {
+        let state = AppState::new();
+        assert_eq!(state.services.len(), 0);
+        assert_eq!(state.service_types.len(), 0);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.types_scroll_offset, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+        assert!(state.cache_dirty);
+        assert!(!state.show_help_popup);
+        assert!(!state.show_metrics_popup);
+    }
+
+    // Filter service tests
+    #[test]
+    fn test_filter_service_all_types() {
+        let mut state = AppState::new();
+        state.selected_type = None;
+
+        let service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_service_specific_type() {
+        let mut state = AppState::new();
+        state.service_types.push("_http._tcp.local.".to_string());
+        state.service_types.push("_ssh._tcp.local.".to_string());
+        state.selected_type = Some(0);
+
+        let http_service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        let ssh_service = ServiceEntry {
+            fullname: "test._ssh._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_ssh._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 22,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        assert!(state.filter_service(&http_service));
+        assert!(!state.filter_service(&ssh_service));
+    }
+
+    // Service type management tests
+    #[test]
+    fn test_add_service_type() {
+        let mut state = AppState::new();
+        assert!(state.add_service_type("_http._tcp.local."));
+        assert_eq!(state.service_types.len(), 1);
+        assert_eq!(state.service_types[0], "_http._tcp.local.");
+
+        // Adding duplicate should return false
+        assert!(!state.add_service_type("_http._tcp.local."));
+        assert_eq!(state.service_types.len(), 1);
+    }
+
+    #[test]
+    fn test_add_service_type_maintains_sort_order() {
+        let mut state = AppState::new();
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+
+        assert_eq!(state.service_types[0], "_http._tcp.local.");
+        assert_eq!(state.service_types[1], "_printer._tcp.local.");
+        assert_eq!(state.service_types[2], "_ssh._tcp.local.");
+    }
+
+    #[test]
+    fn test_add_service_type_preserves_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_http._tcp.local.");
+        state.selected_type = Some(1); // _ssh._tcp.local.
+
+        // Add a new type, selection should still point to _ssh._tcp.local.
+        state.add_service_type("_printer._tcp.local.");
+        assert_eq!(state.selected_type, Some(2)); // _ssh._tcp.local. moved to index 2
+    }
+
+    #[test]
+    fn test_remove_service_type() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        // Can't remove if still in use
+        state.services.push(ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        });
+
+        assert!(!state.remove_service_type("_http._tcp.local."));
+        assert_eq!(state.service_types.len(), 2);
+
+        // Can remove if not in use
+        assert!(state.remove_service_type("_ssh._tcp.local."));
+        assert_eq!(state.service_types.len(), 1);
+    }
+
+    #[test]
+    fn test_remove_service_type_adjusts_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.selected_type = Some(1); // _printer._tcp.local.
+
+        // Remove the selected type
+        state.remove_service_type("_printer._tcp.local.");
+        // Selection should move to nearest valid index
+        assert!(state.selected_type == Some(1) || state.selected_type == Some(0));
+    }
+
+    // Navigation tests
+    #[test]
+    fn test_navigate_services_up() {
+        let mut state = AppState::new();
+        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
+        state.services.push(create_test_service("test3", "_http._tcp.local.", 82));
+        state.selected_service = 2;
+
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 1);
+
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 0);
+
+        // Should not go below 0
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 0);
+    }
+
+    #[test]
+    fn test_navigate_services_down() {
+        let mut state = AppState::new();
+        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
+        state.services.push(create_test_service("test3", "_http._tcp.local.", 82));
+        state.selected_service = 0;
+
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 1);
+
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 2);
+
+        // Should not go beyond last service
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 2);
+    }
+
+    #[test]
+    fn test_navigate_service_types_up() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.selected_type = Some(1);
+
+        state.navigate_service_types_up();
+        assert_eq!(state.selected_type, Some(0));
+
+        state.navigate_service_types_up();
+        assert_eq!(state.selected_type, None); // "All Types"
+
+        // Should not go beyond "All Types"
+        state.navigate_service_types_up();
+        assert_eq!(state.selected_type, None);
+    }
+
+    #[test]
+    fn test_navigate_service_types_down() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.selected_type = None;
+
+        state.navigate_service_types_down();
+        assert_eq!(state.selected_type, Some(0));
+
+        state.navigate_service_types_down();
+        assert_eq!(state.selected_type, Some(1));
+
+        // Should not go beyond last type
+        state.navigate_service_types_down();
+        assert_eq!(state.selected_type, Some(1));
+    }
+
+    #[test]
+    fn test_navigate_services_to_first() {
+        let mut state = AppState::new();
+        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
+        state.selected_service = 1;
+        state.services_scroll_offset = 1;
+
+        state.navigate_services_to_first();
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_services_to_last() {
+        let mut state = AppState::new();
+        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+        state.services.push(create_test_service("test2", "_http._tcp.local.", 81));
+        state.services.push(create_test_service("test3", "_http._tcp.local.", 82));
+        state.selected_service = 0;
+
+        state.navigate_services_to_last();
+        assert_eq!(state.selected_service, 2);
+    }
+
+    #[test]
+    fn test_navigate_services_page_up() {
+        let mut state = AppState::new();
+        for i in 0..20 {
+            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+        }
+        state.visible_services = 5;
+        state.selected_service = 10;
+
+        state.navigate_services_page_up();
+        assert_eq!(state.selected_service, 6); // 10 - (5-1) = 6
+
+        state.navigate_services_page_up();
+        assert_eq!(state.selected_service, 2); // 6 - (5-1) = 2
+
+        state.navigate_services_page_up();
+        assert_eq!(state.selected_service, 0); // Can't go below 0
+    }
+
+    #[test]
+    fn test_navigate_services_page_down() {
+        let mut state = AppState::new();
+        for i in 0..20 {
+            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+        }
+        state.visible_services = 5;
+        state.selected_service = 0;
+
+        state.navigate_services_page_down();
+        assert_eq!(state.selected_service, 4); // 0 + (5-1) = 4
+
+        state.navigate_services_page_down();
+        assert_eq!(state.selected_service, 8); // 4 + (5-1) = 8
+
+        state.selected_service = 15;
+        state.navigate_services_page_down();
+        assert_eq!(state.selected_service, 19); // Should stop at last item
+    }
+
+    // Remove dead services tests
+    #[test]
+    fn test_remove_dead_services() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.alive = false;
+        let service2 = create_test_service("test2", "_http._tcp.local.", 81);
+        let mut service3 = create_test_service("test3", "_http._tcp.local.", 82);
+        service3.alive = false;
+
+        state.services.push(service1);
+        state.services.push(service2);
+        state.services.push(service3);
+
+        state.remove_dead_services();
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.services[0].fullname, "test2._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_remove_dead_services_removes_empty_types() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        let mut http_service = create_test_service("test1", "_http._tcp.local.", 80);
+        http_service.alive = false;
+        let ssh_service = create_test_service("test2", "_ssh._tcp.local.", 22);
+
+        state.services.push(http_service);
+        state.services.push(ssh_service);
+
+        state.remove_dead_services();
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.service_types.len(), 1);
+        assert_eq!(state.service_types[0], "_ssh._tcp.local.");
+    }
+
+    #[test]
+    fn test_remove_dead_services_adjusts_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 81);
+        service2.alive = false;
+        let service3 = create_test_service("test3", "_http._tcp.local.", 82);
+
+        state.services.push(service1);
+        state.services.push(service2);
+        state.services.push(service3);
+        state.selected_service = 2;
+
+        state.remove_dead_services();
+        assert_eq!(state.services.len(), 2);
+        // Selection should be adjusted to stay within bounds
+        assert!(state.selected_service <= 1);
+    }
+
+    // Key handling tests
+    #[test]
+    fn test_handle_key_event_quit() {
+        let mut state = AppState::new();
+        let key = KeyEvent::from(KeyCode::Char('q'));
+        assert!(!state.handle_key_event(key)); // Should return false to quit
+    }
+
+    #[test]
+    fn test_handle_key_event_toggle_help() {
+        let mut state = AppState::new();
+        assert!(!state.show_help_popup);
+
+        let key = KeyEvent::from(KeyCode::Char('?'));
+        assert!(state.handle_key_event(key)); // Should return true to continue
+        assert!(state.show_help_popup);
+
+        assert!(state.handle_key_event(key));
+        assert!(!state.show_help_popup);
+    }
+
+    #[test]
+    fn test_handle_key_event_toggle_metrics() {
+        let mut state = AppState::new();
+        assert!(!state.show_metrics_popup);
+
+        let key = KeyEvent::from(KeyCode::Char('m'));
+        assert!(state.handle_key_event(key));
+        assert!(state.show_metrics_popup);
+
+        assert!(state.handle_key_event(key));
+        assert!(!state.show_metrics_popup);
+    }
+
+    #[test]
+    fn test_handle_help_popup_key() {
+        let mut state = AppState::new();
+        state.show_help_popup = true;
+
+        let key = KeyEvent::from(KeyCode::Char('a'));
+        assert!(state.handle_key_event(key)); // Any key should close popup
+        assert!(!state.show_help_popup);
+    }
+
+    #[test]
+    fn test_handle_metrics_popup_key() {
+        let mut state = AppState::new();
+        state.show_metrics_popup = true;
+
+        let key = KeyEvent::from(KeyCode::Char('x'));
+        assert!(state.handle_key_event(key)); // Any key should close popup
+        assert!(!state.show_metrics_popup);
+    }
+
+    // Metrics tests
+    #[test]
+    fn test_update_metric() {
+        let mut state = AppState::new();
+        state.update_metric("test_metric");
+        assert_eq!(state.metrics.get("test_metric"), Some(&1));
+
+        state.update_metric("test_metric");
+        assert_eq!(state.metrics.get("test_metric"), Some(&2));
+    }
+
+    #[test]
+    fn test_update_daemon_metrics() {
+        let mut state = AppState::new();
+        let mut daemon_metrics = std::collections::HashMap::new();
+        daemon_metrics.insert("queries-sent".to_string(), 10);
+        daemon_metrics.insert("responses-recv".to_string(), 5);
+
+        let updated = state.update_daemon_metrics(&daemon_metrics);
+        assert!(updated);
+        assert_eq!(state.metrics.get("daemon_queries_sent"), Some(&10));
+        assert_eq!(state.metrics.get("daemon_responses_recv"), Some(&5));
+
+        // Same metrics should not trigger update
+        let updated = state.update_daemon_metrics(&daemon_metrics);
+        assert!(!updated);
+
+        // Changed metrics should trigger update
+        daemon_metrics.insert("queries-sent".to_string(), 15);
+        let updated = state.update_daemon_metrics(&daemon_metrics);
+        assert!(updated);
+        assert_eq!(state.metrics.get("daemon_queries_sent"), Some(&15));
+    }
+
+    // Cache tests
+    #[test]
+    fn test_filter_cache_invalidation() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+
+        // Populate cache
+        let filtered = state.get_filtered_services();
+        assert_eq!(filtered.len(), 1);
+        assert!(!state.cache_dirty);
+
+        // Mark cache dirty
+        state.mark_cache_dirty();
+        assert!(state.cache_dirty);
+
+        // Next call should rebuild cache
+        let filtered = state.get_filtered_services();
+        assert_eq!(filtered.len(), 1);
+        assert!(!state.cache_dirty);
+    }
+
+    #[test]
+    fn test_validate_selected_type() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.selected_type = Some(1);
+
+        // Remove both types
+        state.service_types.clear();
+        state.validate_selected_type();
+        assert_eq!(state.selected_type, None);
+
+        // Add types back
+        state.add_service_type("_http._tcp.local.");
+        state.selected_type = Some(5); // Invalid index
+        state.validate_selected_type();
+        assert_eq!(state.selected_type, Some(0)); // Should clamp to last valid index
+    }
+
+    // Utility function tests
+    #[test]
+    fn test_is_valid_service_type() {
+        assert!(is_valid_service_type("_http._tcp.local."));
+        assert!(is_valid_service_type("_ssh._tcp.local."));
+        assert!(!is_valid_service_type("_sub._http._tcp.local."));
+        assert!(!is_valid_service_type("test_sub.something"));
+    }
+
+    #[test]
+    fn test_current_timestamp_micros() {
+        let ts1 = current_timestamp_micros();
+        let ts2 = current_timestamp_micros();
+        assert!(ts2 >= ts1);
+        assert!(ts1 > 0);
+    }
+
+    // Formatting tests
+    #[test]
+    fn test_format_service_type_for_display() {
+        assert_eq!(
+            format_service_type_for_display("_http._tcp.local."),
+            "http.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("_ssh._tcp.local."),
+            "ssh.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("_printer._tcp."),
+            "printer.tcp"
+        );
+    }
+
+    #[test]
+    fn test_format_service_for_display() {
+        let service = ServiceEntry {
+            fullname: "MyPrinter._printer._tcp.local.".to_string(),
+            host: "printer.local.".to_string(),
+            service_type: "_printer._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec!["192.168.1.100".to_string()],
+            port: 631,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        let display = format_service_for_display(&service);
+        assert!(display.contains("MyPrinter"));
+        assert!(display.contains("printer"));
+        assert!(display.contains("192.168.1.100"));
+        assert!(display.contains("631"));
+    }
+
+    #[test]
+    fn test_format_service_for_display_no_address() {
+        let service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        let display = format_service_for_display(&service);
+        assert!(display.contains("<no-addr>"));
+    }
+
+    #[test]
+    fn test_create_service_details_text() {
+        let service = ServiceEntry {
+            fullname: "MyService._http._tcp.local.".to_string(),
+            host: "myhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: Some("_printer".to_string()),
+            addrs: vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()],
+            port: 8080,
+            txt: vec!["key1=value1".to_string(), "key2=value2".to_string()],
+            alive: true,
+            timestamp_micros: 1000000000,
+        };
+
+        let details = create_service_details_text(&service);
+        assert!(details.contains("MyService._http._tcp.local."));
+        assert!(details.contains("myhost.local."));
+        assert!(details.contains("_http._tcp.local."));
+        assert!(details.contains("_printer"));
+        assert!(details.contains("8080"));
+        assert!(details.contains("192.168.1.1"));
+        assert!(details.contains("192.168.1.2"));
+        assert!(details.contains("key1=value1"));
+        assert!(details.contains("key2=value2"));
+        assert!(details.contains("Alive since:"));
+    }
+
+    #[test]
+    fn test_create_service_details_text_dead_service() {
+        let service = ServiceEntry {
+            fullname: "DeadService._http._tcp.local.".to_string(),
+            host: "deadhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: false,
+            timestamp_micros: 2000000000,
+        };
+
+        let details = create_service_details_text(&service);
+        assert!(details.contains("Dead since:"));
+        assert!(details.contains("None")); // No addresses
+        assert!(!details.contains("Subtype:")); // No subtype
+    }
+
+    #[test]
+    fn test_format_timestamp_micros() {
+        let timestamp = format_timestamp_micros(1609459200000000); // 2021-01-01 00:00:00 UTC
+        // Just verify it's a valid formatted string with expected components
+        assert!(timestamp.contains("-"));
+        assert!(timestamp.contains(":"));
+        assert!(timestamp.len() > 20); // Should include date, time, and microseconds
+    }
+
+    // Layout tests
+    #[test]
+    fn test_create_main_layout() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let layout = create_main_layout(area);
+
+        assert!(layout.left_panel.width > 0);
+        assert!(layout.services_area.width > 0);
+        assert!(layout.details_area.width > 0);
+        assert!(layout.services_area.height > 0);
+        assert!(layout.details_area.height > 0);
+    }
+
+    #[test]
+    fn test_calculate_visible_counts() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let layout = create_main_layout(area);
+        let counts = calculate_visible_counts(&layout);
+
+        assert!(counts.types > 0);
+        assert!(counts.services > 0);
+    }
+
+    #[test]
+    fn test_create_centered_popup() {
+        let parent = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let popup = create_centered_popup(parent, 50, 50);
+
+        // Popup should be smaller than parent
+        assert!(popup.width <= parent.width);
+        assert!(popup.height <= parent.height);
+
+        // Popup should be centered (roughly)
+        let center_x = parent.width / 2;
+        let center_y = parent.height / 2;
+        let popup_center_x = popup.x + popup.width / 2;
+        let popup_center_y = popup.y + popup.height / 2;
+
+        // Allow some margin of error due to rounding and margins
+        assert!((popup_center_x as i32 - center_x as i32).abs() < 10);
+        assert!((popup_center_y as i32 - center_y as i32).abs() < 10);
+    }
+
+    #[test]
+    fn test_create_service_list_item_style() {
+        let alive_service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: 1000,
+        };
+
+        let dead_service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            alive: false,
+            timestamp_micros: 1000,
+        };
+
+        // Test selected alive service
+        let style = create_service_list_item_style(0, 0, &alive_service);
+        assert_eq!(style.fg, Some(Color::White));
+        assert_eq!(style.bg, Some(Color::DarkGray));
+
+        // Test unselected alive service
+        let style = create_service_list_item_style(0, 1, &alive_service);
+        assert_eq!(style.fg, Some(Color::White));
+        assert_eq!(style.bg, None);
+
+        // Test dead service
+        let style = create_service_list_item_style(0, 0, &dead_service);
+        assert_eq!(style.fg, Some(Color::LightMagenta));
+        assert!(style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    // Edge case tests
+    #[test]
+    fn test_empty_service_list_navigation() {
+        let mut state = AppState::new();
+
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 0);
+
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 0);
+
+        state.navigate_services_to_first();
+        assert_eq!(state.selected_service, 0);
+
+        state.navigate_services_to_last();
+        assert_eq!(state.selected_service, 0);
+    }
+
+    #[test]
+    fn test_empty_service_types_navigation() {
+        let mut state = AppState::new();
+
+        state.navigate_service_types_up();
+        assert_eq!(state.selected_type, None);
+
+        state.navigate_service_types_down();
+        assert_eq!(state.selected_type, None);
+    }
+
+    #[test]
+    fn test_filter_with_no_matching_services() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.selected_type = Some(1); // Select _ssh._tcp.local.
+
+        // Add only http service
+        state.services.push(create_test_service("test1", "_http._tcp.local.", 80));
+
+        let filtered = state.get_filtered_services();
+        assert_eq!(filtered.len(), 0); // No ssh services
+    }
+
+    #[test]
+    fn test_scroll_offset_boundary_conditions() {
+        let mut state = AppState::new();
+        for i in 0..3 {
+            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+        }
+        state.visible_services = 10; // More visible space than services
+
+        state.selected_service = 2;
+        state.update_services_scroll_offset();
+        assert_eq!(state.services_scroll_offset, 0); // Should stay at 0 since all fit
+    }
+
+    #[test]
+    fn test_update_service_type_selection_resets_scroll() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        for i in 0..10 {
+            state.services.push(create_test_service(&format!("test{}", i), "_http._tcp.local.", 80 + i));
+        }
+
+        state.selected_service = 5;
+        state.services_scroll_offset = 3;
+
+        state.update_service_type_selection(Some(1));
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_notification_enum() {
+        // Test that notification enum variants can be created
+        let _user_input = Notification::UserInput;
+        let _service_changed = Notification::ServiceChanged;
+        let _metrics_updated = Notification::MetricsUpdated;
+    }
+
+    // Helper function for creating test services
+    fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        ServiceEntry {
+            fullname: format!("{}_{}", name, service_type),
+            host: format!("{}.local.", name),
+            service_type: service_type.to_string(),
+            subtype: None,
+            addrs: vec![format!("192.168.1.{}", port)],
+            port,
+            txt: vec![],
+            alive: true,
+            timestamp_micros: current_timestamp_micros(),
+        }
+    }
+}
