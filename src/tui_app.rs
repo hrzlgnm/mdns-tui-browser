@@ -1529,9 +1529,8 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 state.remove_service_type(&service_type);
                                                 let _ = notification_sender_inner
                                                     .send(Notification::ServiceChanged);
-    }
-
-}
+                                            }
+                                        }
                                         ServiceEvent::ServiceResolved(resolved_service) => {
                                             let entry = ServiceEntry::from(*resolved_service);
                                             let mut state = state_inner.write().await;
