@@ -48,16 +48,12 @@ mdns-tui-browser -h
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
 - <kbd>s</kbd> - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
-- <kbd>S</kbd> - Cycle sort field backward  
+- <kbd>S</kbd> - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
 - <kbd>o</kbd> - Toggle sort direction (↑/↓)
 - <kbd>d</kbd> - Remove offline services
 - <kbd>m</kbd> - Show service metrics
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
-
-Press any key to close the help popup.
-
-
 
 ## Architecture
 
