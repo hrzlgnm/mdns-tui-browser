@@ -14,6 +14,10 @@ on:
         required: false
         type: string
 
+permissions:
+  id-token: write
+  attestations: write
+
 jobs:
   build:
     strategy:
@@ -57,7 +61,7 @@ jobs:
       - name: 🔄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
-          fetch-depth: ${{ inputs.tagName && 0 || 1 }}
+          fetch-depth: ${{ inputs.tagName && '0' || '1' }}
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache

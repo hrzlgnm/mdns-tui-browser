@@ -116,10 +116,10 @@ You can verify the authenticity of release assets using tools like [Sigstore's `
 
 ```bash
 # Using GitHub CLI
-gh attestation verify mdns-tui-browser-1.6.0-Linux-x86_64.tar.gz --repo hrlzgnm/mdns-tui-browser
+gh attestation verify mdns-tui-browser-<version>-Linux-x86_64.tar.gz --repo hrlzgnm/mdns-tui-browser
 
-# Using cosign (if available)
-cosign verify-attestation --certificate-identity=https://github.com/hrzlgnm/mdns-tui-browser/.github/workflows/build-reusable.yml@refs/tags/v1.6.0 --certificate-oidc-issuer=https://token.actions.githubusercontent.com mdns-tui-browser-1.6.0-Linux-x86_64.tar.gz
+# Note: cosign verify-attestation is for OCI images (container images only)
+# For release artifacts, use gh attestation verify as shown above
 ```
 
 This ensures that the binaries you download are authentic and haven't been tampered with.
