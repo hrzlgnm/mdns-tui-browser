@@ -104,7 +104,7 @@ jobs:
 
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
-        uses: actions/attest-build-provenance@1c608d7d2625b23825b400879a683065527c95d3 # v2.1.0
+        uses: actions/attest-build-provenance@v3.2.0
         with:
           subject-path: ${{ env.ASSET }}
 
