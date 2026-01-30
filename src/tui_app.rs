@@ -959,12 +959,12 @@ fn create_service_details_text(service: &ServiceEntry) -> String {
 
     let status_text = if service.online {
         format!(
-            "Alive since: {}",
+            "Online since: {}",
             format_timestamp_micros(service.timestamp_micros)
         )
     } else {
         format!(
-            "Dead since: {}",
+            "Offline since: {}",
             format_timestamp_micros(service.timestamp_micros)
         )
     };
@@ -1877,13 +1877,13 @@ mod tests {
         assert!(details.contains("192.168.1.2"));
         assert!(details.contains("key1=value1"));
         assert!(details.contains("key2=value2"));
-        assert!(details.contains("Alive since:"));
+        assert!(details.contains("Online since:"));
     }
 
     #[test]
     fn test_create_service_details_text_offline_service() {
         let service = ServiceEntry {
-            fullname: "DeadService._http._tcp.local.".to_string(),
+            fullname: "OfflineService._http._tcp.local.".to_string(),
             host: "offlinehost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
             subtype: None,
@@ -1895,7 +1895,7 @@ mod tests {
         };
 
         let details = create_service_details_text(&service);
-        assert!(details.contains("Dead since:"));
+        assert!(details.contains("Offline since:"));
         assert!(details.contains("None")); // No addresses
         assert!(!details.contains("Subtype:")); // No subtype
     }
