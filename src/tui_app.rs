@@ -3,7 +3,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use mdns_sd::{ServiceDaemon, ServiceEvent};
+use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -51,6 +51,45 @@ impl ServiceEntry {
     fn go_offline_at(&mut self, timestamp_micros: u64) {
         self.online = false;
         self.timestamp_micros = timestamp_micros;
+    }
+}
+
+impl From<ResolvedService> for ServiceEntry {
+    fn from(service_info: ResolvedService) -> Self {
+        Self {
+            fullname: service_info.get_fullname().to_string(),
+            host: service_info.get_hostname().to_string(),
+            service_type: service_info.ty_domain.to_string(),
+            subtype: service_info.get_subtype().as_ref().map(|s| s.to_string()),
+            addrs: {
+                let mut addrs: Vec<String> = service_info
+                    .get_addresses()
+                    .iter()
+                    .map(|ip| ip.to_string())
+                    .collect();
+                addrs.sort();
+                addrs
+            },
+            port: service_info.get_port(),
+            txt: {
+                let mut txt: Vec<String> = service_info
+                    .get_properties()
+                    .iter()
+                    .filter_map(|prop| {
+                        prop.val()
+                            .map(|val| format!("{}={}", prop.key(), String::from_utf8_lossy(val)))
+                    })
+                    .collect();
+                txt.sort_by(|a, b| {
+                    let a_key = a.split('=').next().unwrap_or(a);
+                    let b_key = b.split('=').next().unwrap_or(b);
+                    a_key.cmp(b_key)
+                });
+                txt
+            },
+            online: true,
+            timestamp_micros: current_timestamp_micros(),
+        }
     }
 }
 
@@ -337,6 +376,7 @@ impl AppState {
         let removed_count = initial_len - self.services.len();
 
         if removed_count > 0 {
+            self.update_metric("offline_services_removed");
             // Refresh cache immediately after retain to ensure filtered services are up-to-date
             self.invalidate_cache_and_validate();
 
@@ -392,6 +432,7 @@ impl AppState {
     }
 
     fn invalidate_cache_and_validate(&mut self) {
+        self.update_metric("cache_invalidations");
         self.mark_cache_dirty();
         self.cached_sorted = false;
         self.validate_selected_type();
@@ -576,6 +617,33 @@ impl AppState {
 
     fn toggle_metrics(&mut self) {
         self.show_metrics_popup = !self.show_metrics_popup;
+    }
+
+    fn add_or_update_service(&mut self, service_entry: ServiceEntry) -> bool {
+        if let Some(existing) = self
+            .services
+            .iter_mut()
+            .find(|s| s.fullname == service_entry.fullname)
+        {
+            // Check if any significant fields have changed
+            let significant_fields_changed = existing.host != service_entry.host
+                || existing.service_type != service_entry.service_type
+                || existing.subtype != service_entry.subtype
+                || existing.addrs != service_entry.addrs
+                || existing.port != service_entry.port
+                || existing.txt != service_entry.txt
+                || existing.online != service_entry.online; // Include online in significant changes
+
+            if significant_fields_changed {
+                *existing = service_entry;
+                self.update_metric("services_updated");
+            }
+            true
+        } else {
+            self.services.push(service_entry);
+            self.update_metric("services_discovered");
+            false
+        }
     }
 
     fn navigate_services_up(&mut self) {
@@ -1457,61 +1525,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         ServiceEvent::ServiceResolved(service_info) => {
-                                            let entry = ServiceEntry {
-                                                fullname: service_info.get_fullname().to_string(),
-                                                host: service_info.get_hostname().to_string(),
-                                                service_type: service_info.ty_domain.to_string(),
-                                                subtype: service_info
-                                                    .get_subtype()
-                                                    .as_ref()
-                                                    .map(|s| s.to_string()),
-                                                addrs: {
-                                                    let mut addrs: Vec<String> = service_info
-                                                        .get_addresses()
-                                                        .iter()
-                                                        .map(|ip| ip.to_string())
-                                                        .collect();
-                                                    addrs.sort();
-                                                    addrs
-                                                },
-                                                port: service_info.get_port(),
-                                                txt: {
-                                                    let mut txt: Vec<String> = service_info
-                                                        .get_properties()
-                                                        .iter()
-                                                        .filter_map(|prop| {
-                                                            prop.val().map(|val| {
-                                                                format!(
-                                                                    "{}={}",
-                                                                    prop.key(),
-                                                                    String::from_utf8_lossy(val)
-                                                                )
-                                                            })
-                                                        })
-                                                        .collect();
-                                                    txt.sort_by(|a, b| {
-                                                        let a_key =
-                                                            a.split('=').next().unwrap_or(a);
-                                                        let b_key =
-                                                            b.split('=').next().unwrap_or(b);
-                                                        a_key.cmp(b_key)
-                                                    });
-                                                    txt
-                                                },
-                                                online: true,
-                                                timestamp_micros: current_timestamp_micros(),
-                                            };
+                                            let entry = ServiceEntry::from(*service_info);
                                             let mut state = state_inner.write().await;
-                                            if let Some(exist) = state
-                                                .services
-                                                .iter_mut()
-                                                .find(|s| s.fullname == entry.fullname)
-                                            {
-                                                *exist = entry;
-                                            } else {
-                                                state.services.push(entry);
-                                                state.update_metric("services_discovered");
-                                            }
+                                            state.add_or_update_service(entry);
                                             state.services.sort_by(|a, b| a.host.cmp(&b.host));
                                             state.invalidate_cache_and_validate();
                                             let _ = notification_sender_inner
