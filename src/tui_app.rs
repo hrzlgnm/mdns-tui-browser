@@ -71,6 +71,8 @@ struct AppState {
     metrics: BTreeMap<String, u64>,
     sort_field: SortField,
     sort_direction: SortDirection,
+    filter_query: String,
+    filter_input_mode: bool,
 }
 
 impl AppState {
@@ -92,21 +94,43 @@ impl AppState {
             metrics: BTreeMap::new(),
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
+            filter_query: String::new(),
+            filter_input_mode: false,
         };
         state.validate_selected_type();
         state
     }
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
-        if self.selected_type.is_none() {
-            return true; // "All Types" - show everything
+        // First filter by service type if one is selected
+        if let Some(selected_type_idx) = self.selected_type {
+            if let Some(selected_type) = self.service_types.get(selected_type_idx) {
+                if service.service_type != *selected_type {
+                    return false;
+                }
+            }
         }
 
-        let idx = self.selected_type.unwrap();
-        if let Some(selected_type) = self.service_types.get(idx) {
-            service.service_type == *selected_type
+        // Then filter by text query if present
+        if !self.filter_query.is_empty() {
+            let query = self.filter_query.to_lowercase();
+
+            // Search in all service fields case-insensitively
+            let search_text = format!(
+                "{} {} {} {} {} {} {}",
+                service.fullname,
+                service.host,
+                service.service_type,
+                service.addrs.join(" "),
+                service.port.to_string(),
+                service.txt.join(" "),
+                service.subtype.as_ref().unwrap_or(&String::new())
+            )
+            .to_lowercase();
+
+            search_text.contains(&query)
         } else {
-            false
+            true // Show all services if query is empty
         }
     }
 
@@ -380,6 +404,8 @@ impl AppState {
             self.handle_help_popup_key(key)
         } else if self.show_metrics_popup {
             self.handle_metrics_popup_key(key)
+        } else if self.filter_input_mode {
+            self.handle_filter_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
         }
@@ -395,6 +421,28 @@ impl AppState {
         // Any key just closes the metrics popup and returns to normal mode
         self.show_metrics_popup = false;
         true // Continue running
+    }
+
+    fn handle_filter_input_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Enter => {
+                self.apply_filter();
+                true
+            }
+            KeyCode::Esc => {
+                self.clear_filter();
+                true
+            }
+            KeyCode::Backspace => {
+                self.remove_from_filter();
+                true
+            }
+            KeyCode::Char(ch) => {
+                self.add_to_filter(ch);
+                true
+            }
+            _ => true,
+        }
     }
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
@@ -484,6 +532,17 @@ impl AppState {
             // Actions
             KeyCode::Char('d') => {
                 self.remove_offline_services();
+                true
+            }
+
+            // Filter controls
+            KeyCode::Char('/') => {
+                self.start_filter_input();
+                true
+            }
+
+            KeyCode::Char('n') => {
+                self.clear_filter();
                 true
             }
 
@@ -624,6 +683,35 @@ impl AppState {
             self.services_scroll_offset = self.selected_service - self.visible_services + 1;
         }
     }
+
+    // Filter methods
+    fn start_filter_input(&mut self) {
+        self.filter_input_mode = true;
+        self.filter_query.clear();
+    }
+
+    fn clear_filter(&mut self) {
+        self.filter_query.clear();
+        self.filter_input_mode = false;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn apply_filter(&mut self) {
+        self.filter_input_mode = false;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn add_to_filter(&mut self, ch: char) {
+        self.filter_query.push(ch);
+    }
+
+    fn remove_from_filter(&mut self) {
+        self.filter_query.pop();
+    }
 }
 
 fn compare_services_by_field(
@@ -676,16 +764,32 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
     // Ensure state is consistent before rendering
     app_state.validate_selected_type();
 
-    let layout = create_main_layout(f.area());
+    let layout = if app_state.filter_input_mode {
+        create_filter_input_layout(f.area())
+    } else {
+        create_main_layout(f.area())
+    };
     let visible_counts = calculate_visible_counts(&layout);
 
     // Update state with current visible counts
     app_state.visible_types = visible_counts.types;
     app_state.visible_services = visible_counts.services;
 
-    render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
-    render_services_list(f, app_state, layout.services_area, visible_counts.services);
-    render_service_details(f, app_state, layout.details_area);
+    if app_state.filter_input_mode {
+        render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
+        render_services_list(f, app_state, layout.services_area, visible_counts.services);
+        render_service_details(f, app_state, layout.details_area);
+        render_filter_input(f, app_state, f.area());
+    } else {
+        render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
+        render_services_list(f, app_state, layout.services_area, visible_counts.services);
+        render_service_details(f, app_state, layout.details_area);
+
+        // Render filter status if not empty
+        if !app_state.filter_query.is_empty() {
+            render_filter_status(f, app_state);
+        }
+    }
 
     // Render popups if active
     if app_state.show_help_popup {
@@ -728,6 +832,28 @@ fn calculate_visible_counts(layout: &MainLayout) -> VisibleCounts {
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
         services: (layout.services_area.height as usize).saturating_sub(2), // Account for borders
+    }
+}
+
+fn create_filter_input_layout(area: ratatui::layout::Rect) -> MainLayout {
+    // Reserve 3 rows at the bottom for filter input
+    let remaining_height = area.height.saturating_sub(3);
+    let main_area = ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height);
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .split(main_area);
+
+    let services_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(chunks[1]);
+
+    MainLayout {
+        left_panel: chunks[0],
+        services_area: services_chunks[0],
+        details_area: services_chunks[1],
     }
 }
 
@@ -881,6 +1007,38 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
         );
         f.render_widget(details, area);
     }
+}
+
+fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
+    let filter_area = ratatui::layout::Rect::new(area.x, area.y + area.height - 3, area.width, 3);
+
+    let input_text = format!("/{}_", app_state.filter_query);
+
+    let filter_input = Paragraph::new(input_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Quick Filter (Enter to apply, Esc to cancel)"),
+        )
+        .style(Style::default().fg(Color::Yellow));
+
+    f.render_widget(filter_input, filter_area);
+}
+
+fn render_filter_status(f: &mut Frame, app_state: &AppState) {
+    let status_area = ratatui::layout::Rect::new(
+        f.area().x,
+        f.area().y + f.area().height - 1,
+        f.area().width,
+        1,
+    );
+
+    let status_text = format!("Filter: '{}' (Press 'n' to clear)", app_state.filter_query);
+
+    let status =
+        Paragraph::new(status_text).style(Style::default().fg(Color::Cyan).bg(Color::DarkGray));
+
+    f.render_widget(status, status_area);
 }
 
 fn render_help_popup(f: &mut Frame) {
@@ -2782,6 +2940,269 @@ mod tests {
         for idx in filtered {
             assert_eq!(state.services[idx].port, 80);
         }
+    }
+
+    // Filter functionality tests
+    #[test]
+    fn test_appstate_new_with_filter() {
+        let state = AppState::new();
+        assert_eq!(state.filter_query, "");
+        assert!(!state.filter_input_mode);
+    }
+
+    #[test]
+    fn test_start_filter_input() {
+        let mut state = AppState::new();
+        state.start_filter_input();
+        assert!(state.filter_input_mode);
+        assert_eq!(state.filter_query, "");
+    }
+
+    #[test]
+    fn test_clear_filter() {
+        let mut state = AppState::new();
+        state.filter_query = "test".to_string();
+        state.filter_input_mode = true;
+        state.selected_service = 5;
+        state.services_scroll_offset = 2;
+
+        state.clear_filter();
+
+        assert_eq!(state.filter_query, "");
+        assert!(!state.filter_input_mode);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_apply_filter() {
+        let mut state = AppState::new();
+        state.filter_query = "test".to_string();
+        state.filter_input_mode = true;
+        state.selected_service = 5;
+        state.services_scroll_offset = 2;
+
+        state.apply_filter();
+
+        assert_eq!(state.filter_query, "test");
+        assert!(!state.filter_input_mode);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_add_to_filter() {
+        let mut state = AppState::new();
+        state.add_to_filter('a');
+        state.add_to_filter('b');
+        state.add_to_filter('c');
+        assert_eq!(state.filter_query, "abc");
+    }
+
+    #[test]
+    fn test_remove_from_filter() {
+        let mut state = AppState::new();
+        state.filter_query = "abc".to_string();
+        state.remove_from_filter();
+        assert_eq!(state.filter_query, "ab");
+        state.remove_from_filter();
+        assert_eq!(state.filter_query, "a");
+        state.remove_from_filter();
+        assert_eq!(state.filter_query, "");
+        state.remove_from_filter(); // Removing from empty string should be safe
+        assert_eq!(state.filter_query, "");
+    }
+
+    #[test]
+    fn test_filter_service_no_filter() {
+        let mut state = AppState::new();
+        state.selected_type = None;
+
+        let service = create_test_service("test", "_http._tcp.local.", 80);
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_service_with_text_query() {
+        let mut state = AppState::new();
+        state.filter_query = "test".to_string();
+
+        let matching_service = create_test_service("test", "_http._tcp.local.", 80);
+        let non_matching_service = create_test_service("other", "_http._tcp.local.", 80);
+
+        assert!(state.filter_service(&matching_service));
+        assert!(!state.filter_service(&non_matching_service));
+    }
+
+    #[test]
+    fn test_filter_service_case_insensitive() {
+        let mut state = AppState::new();
+        state.filter_query = "TEST".to_string();
+
+        let service = create_test_service("test", "_http._tcp.local.", 80);
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_service_searches_all_fields() {
+        let mut state = AppState::new();
+
+        // Test fullname search
+        state.filter_query = "MyService".to_string();
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.fullname = "MyService._http._tcp.local.".to_string();
+        assert!(state.filter_service(&service));
+
+        // Test host search
+        state.filter_query = "myhost".to_string();
+        service.host = "myhost.local.".to_string();
+        assert!(state.filter_service(&service));
+
+        // Test service type search
+        state.filter_query = "http".to_string();
+        service.service_type = "_http._tcp.local.".to_string();
+        assert!(state.filter_service(&service));
+
+        // Test address search
+        state.filter_query = "192.168.1.100".to_string();
+        service.addrs = vec!["192.168.1.100".to_string()];
+        assert!(state.filter_service(&service));
+
+        // Test port search
+        state.filter_query = "8080".to_string();
+        service.port = 8080;
+        assert!(state.filter_service(&service));
+
+        // Test TXT record search
+        state.filter_query = "key1=value1".to_string();
+        service.txt = vec!["key1=value1".to_string()];
+        assert!(state.filter_service(&service));
+
+        // Test subtype search
+        state.filter_query = "printer".to_string();
+        service.subtype = Some("_printer".to_string());
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_service_combined_with_type_filter() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.selected_type = Some(0); // Select _http._tcp.local.
+        state.filter_query = "test".to_string();
+
+        let http_service = create_test_service("test", "_http._tcp.local.", 80);
+        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
+
+        assert!(state.filter_service(&http_service)); // Matches both type and text
+        assert!(!state.filter_service(&ssh_service)); // Matches text but wrong type
+    }
+
+    #[test]
+    fn test_handle_filter_input_key_enter() {
+        let mut state = AppState::new();
+        state.filter_input_mode = true;
+        state.filter_query = "test".to_string();
+
+        let key = KeyEvent::from(KeyCode::Enter);
+        let should_continue = state.handle_key_event(key);
+
+        assert!(should_continue);
+        assert!(!state.filter_input_mode);
+        assert_eq!(state.filter_query, "test");
+    }
+
+    #[test]
+    fn test_handle_filter_input_key_escape() {
+        let mut state = AppState::new();
+        state.filter_input_mode = true;
+        state.filter_query = "test".to_string();
+
+        let key = KeyEvent::from(KeyCode::Esc);
+        let should_continue = state.handle_key_event(key);
+
+        assert!(should_continue);
+        assert!(!state.filter_input_mode);
+        assert_eq!(state.filter_query, "");
+    }
+
+    #[test]
+    fn test_handle_filter_input_key_backspace() {
+        let mut state = AppState::new();
+        state.filter_input_mode = true;
+        state.filter_query = "test".to_string();
+
+        let key = KeyEvent::from(KeyCode::Backspace);
+        let should_continue = state.handle_key_event(key);
+
+        assert!(should_continue);
+        assert!(state.filter_input_mode);
+        assert_eq!(state.filter_query, "tes");
+    }
+
+    #[test]
+    fn test_handle_filter_input_key_char() {
+        let mut state = AppState::new();
+        state.filter_input_mode = true;
+
+        let key = KeyEvent::from(KeyCode::Char('a'));
+        let should_continue = state.handle_key_event(key);
+
+        assert!(should_continue);
+        assert!(state.filter_input_mode);
+        assert_eq!(state.filter_query, "a");
+    }
+
+    #[test]
+    fn test_handle_normal_mode_key_slash() {
+        let mut state = AppState::new();
+
+        let key = KeyEvent::from(KeyCode::Char('/'));
+        let should_continue = state.handle_key_event(key);
+
+        assert!(should_continue);
+        assert!(state.filter_input_mode);
+        assert_eq!(state.filter_query, "");
+    }
+
+    #[test]
+    fn test_handle_normal_mode_key_n() {
+        let mut state = AppState::new();
+        state.filter_query = "test".to_string();
+        // Note: not in filter_input_mode so 'n' is handled by normal mode
+        state.selected_service = 5;
+        state.services_scroll_offset = 2;
+
+        let key = KeyEvent::from(KeyCode::Char('n'));
+        let should_continue = state.handle_key_event(key);
+
+        assert!(should_continue);
+        assert_eq!(state.filter_query, "");
+        assert!(!state.filter_input_mode);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_filter_empty_query_shows_all() {
+        let mut state = AppState::new();
+        state.filter_query = String::new(); // Empty query
+        state.selected_type = Some(0); // Specific type selected
+        state.add_service_type("_http._tcp.local.");
+
+        let service = create_test_service("test", "_http._tcp.local.", 80);
+        assert!(state.filter_service(&service)); // Should show all since empty query
+    }
+
+    #[test]
+    fn test_filter_with_special_characters() {
+        let mut state = AppState::new();
+        state.filter_query = "key=value".to_string();
+
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.txt = vec!["key=value".to_string()];
+        assert!(state.filter_service(&service));
     }
 
     // Helper function for creating test services
