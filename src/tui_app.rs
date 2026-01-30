@@ -27,13 +27,13 @@ struct ServiceEntry {
     addrs: Vec<String>,
     port: u16,
     txt: Vec<String>,
-    alive: bool,
+    online: bool,
     timestamp_micros: u64,
 }
 
 impl ServiceEntry {
-    fn die_at(&mut self, timestamp_micros: u64) {
-        self.alive = false;
+    fn go_offline_at(&mut self, timestamp_micros: u64) {
+        self.online = false;
         self.timestamp_micros = timestamp_micros;
     }
 }
@@ -202,18 +202,18 @@ impl AppState {
         self.invalidate_cache_and_validate();
     }
 
-    fn remove_dead_services(&mut self) {
-        // Collect service types that have dead services
+    fn remove_offline_services(&mut self) {
+        // Collect service types that have offline services
         let mut service_types_to_check: std::collections::HashSet<String> =
             std::collections::HashSet::new();
 
         // Capture initial filtered length for scroll logic
         let initial_filtered_len = self.get_filtered_services().len();
 
-        // Remove dead services and track their types
+        // Remove offline services and track their types
         let initial_len = self.services.len();
         self.services.retain(|service| {
-            if !service.alive {
+            if !service.online {
                 service_types_to_check.insert(service.service_type.clone());
                 false // Remove this service
             } else {
@@ -233,7 +233,7 @@ impl AppState {
                 if !self
                     .services
                     .iter()
-                    .any(|s| s.service_type == service_type && s.alive)
+                    .any(|s| s.service_type == service_type && s.online)
                 {
                     types_to_remove.push(service_type);
                 }
@@ -376,7 +376,7 @@ impl AppState {
 
             // Actions
             KeyCode::Char('d') => {
-                self.remove_dead_services();
+                self.remove_offline_services();
                 true
             }
 
@@ -737,7 +737,7 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from(" "),
         Line::from(" Actions:"),
-        Line::from("   d                   - Remove dead services"),
+        Line::from("   d                   - Remove offline services"),
         Line::from("   m                   - Show service metrics"),
         Line::from("   ?                   - Toggle this help popup"),
         Line::from("   q or Ctrl+C         - Quit the application"),
@@ -898,7 +898,7 @@ fn create_service_list_item_style(
     selected_index: usize,
     service: &ServiceEntry,
 ) -> Style {
-    let foreground = if service.alive {
+    let foreground = if service.online {
         Color::White
     } else {
         Color::LightMagenta
@@ -910,7 +910,7 @@ fn create_service_list_item_style(
         Style::default().fg(foreground)
     };
 
-    if !service.alive {
+    if !service.online {
         style = style.add_modifier(Modifier::ITALIC);
     }
 
@@ -957,7 +957,7 @@ fn create_service_details_text(service: &ServiceEntry) -> String {
         .map(|s| format!("\nSubtype: {}", s))
         .unwrap_or_default();
 
-    let status_text = if service.alive {
+    let status_text = if service.online {
         format!(
             "Alive since: {}",
             format_timestamp_micros(service.timestamp_micros)
@@ -1090,7 +1090,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 .iter_mut()
                                                 .find(|s| s.fullname == fullname)
                                             {
-                                                entry.die_at(current_timestamp_micros());
+                                                entry.go_offline_at(current_timestamp_micros());
                                                 state.update_metric("services_removed");
                                                 state.invalidate_cache_and_validate();
                                                 state.remove_service_type(&service_type);
@@ -1140,7 +1140,7 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                     });
                                                     txt
                                                 },
-                                                alive: true,
+                                                online: true,
                                                 timestamp_micros: current_timestamp_micros(),
                                             };
                                             let mut state = state_inner.write().await;
@@ -1251,7 +1251,7 @@ mod tests {
 
     // ServiceEntry tests
     #[test]
-    fn test_service_entry_die_at() {
+    fn test_service_entry_go_offline_at() {
         let mut service = ServiceEntry {
             fullname: "test._http._tcp.local.".to_string(),
             host: "testhost.local.".to_string(),
@@ -1260,13 +1260,13 @@ mod tests {
             addrs: vec!["192.168.1.1".to_string()],
             port: 8080,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
-        assert!(service.alive);
-        service.die_at(2000);
-        assert!(!service.alive);
+        assert!(service.online);
+        service.go_offline_at(2000);
+        assert!(!service.online);
         assert_eq!(service.timestamp_micros, 2000);
     }
 
@@ -1299,7 +1299,7 @@ mod tests {
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
@@ -1321,7 +1321,7 @@ mod tests {
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
@@ -1333,7 +1333,7 @@ mod tests {
             addrs: vec![],
             port: 22,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
@@ -1393,7 +1393,7 @@ mod tests {
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         });
 
@@ -1588,54 +1588,54 @@ mod tests {
         assert_eq!(state.selected_service, 19); // Should stop at last item
     }
 
-    // Remove dead services tests
+    // Remove offline services tests
     #[test]
-    fn test_remove_dead_services() {
+    fn test_remove_offline_services() {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
 
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.alive = false;
+        service1.online = false;
         let service2 = create_test_service("test2", "_http._tcp.local.", 81);
         let mut service3 = create_test_service("test3", "_http._tcp.local.", 82);
-        service3.alive = false;
+        service3.online = false;
 
         state.services.push(service1);
         state.services.push(service2);
         state.services.push(service3);
 
-        state.remove_dead_services();
+        state.remove_offline_services();
         assert_eq!(state.services.len(), 1);
         assert_eq!(state.services[0].fullname, "test2._http._tcp.local.");
     }
 
     #[test]
-    fn test_remove_dead_services_removes_empty_types() {
+    fn test_remove_offline_services_removes_empty_types() {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
         let mut http_service = create_test_service("test1", "_http._tcp.local.", 80);
-        http_service.alive = false;
+        http_service.online = false;
         let ssh_service = create_test_service("test2", "_ssh._tcp.local.", 22);
 
         state.services.push(http_service);
         state.services.push(ssh_service);
 
-        state.remove_dead_services();
+        state.remove_offline_services();
         assert_eq!(state.services.len(), 1);
         assert_eq!(state.service_types.len(), 1);
         assert_eq!(state.service_types[0], "_ssh._tcp.local.");
     }
 
     #[test]
-    fn test_remove_dead_services_adjusts_selection() {
+    fn test_remove_offline_services_adjusts_selection() {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
 
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 81);
-        service2.alive = false;
+        service2.online = false;
         let service3 = create_test_service("test3", "_http._tcp.local.", 82);
 
         state.services.push(service1);
@@ -1643,7 +1643,7 @@ mod tests {
         state.services.push(service3);
         state.selected_service = 2;
 
-        state.remove_dead_services();
+        state.remove_offline_services();
         assert_eq!(state.services.len(), 2);
         // Selection should be adjusted to stay within bounds
         assert!(state.selected_service <= 1);
@@ -1824,7 +1824,7 @@ mod tests {
             addrs: vec!["192.168.1.100".to_string()],
             port: 631,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
@@ -1845,7 +1845,7 @@ mod tests {
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
@@ -1863,7 +1863,7 @@ mod tests {
             addrs: vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()],
             port: 8080,
             txt: vec!["key1=value1".to_string(), "key2=value2".to_string()],
-            alive: true,
+            online: true,
             timestamp_micros: 1000000000,
         };
 
@@ -1881,16 +1881,16 @@ mod tests {
     }
 
     #[test]
-    fn test_create_service_details_text_dead_service() {
+    fn test_create_service_details_text_offline_service() {
         let service = ServiceEntry {
             fullname: "DeadService._http._tcp.local.".to_string(),
-            host: "deadhost.local.".to_string(),
+            host: "offlinehost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
             subtype: None,
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: false,
+            online: false,
             timestamp_micros: 2000000000,
         };
 
@@ -1954,7 +1954,7 @@ mod tests {
 
     #[test]
     fn test_create_service_list_item_style() {
-        let alive_service = ServiceEntry {
+        let online_service = ServiceEntry {
             fullname: "test._http._tcp.local.".to_string(),
             host: "testhost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
@@ -1962,11 +1962,11 @@ mod tests {
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: 1000,
         };
 
-        let dead_service = ServiceEntry {
+        let offline_service = ServiceEntry {
             fullname: "test._http._tcp.local.".to_string(),
             host: "testhost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
@@ -1974,22 +1974,22 @@ mod tests {
             addrs: vec![],
             port: 80,
             txt: vec![],
-            alive: false,
+            online: false,
             timestamp_micros: 1000,
         };
 
-        // Test selected alive service
-        let style = create_service_list_item_style(0, 0, &alive_service);
+        // Test selected online service
+        let style = create_service_list_item_style(0, 0, &online_service);
         assert_eq!(style.fg, Some(Color::White));
         assert_eq!(style.bg, Some(Color::DarkGray));
 
-        // Test unselected alive service
-        let style = create_service_list_item_style(0, 1, &alive_service);
+        // Test unselected online service
+        let style = create_service_list_item_style(0, 1, &online_service);
         assert_eq!(style.fg, Some(Color::White));
         assert_eq!(style.bg, None);
 
-        // Test dead service
-        let style = create_service_list_item_style(0, 0, &dead_service);
+        // Test offline service
+        let style = create_service_list_item_style(0, 0, &offline_service);
         assert_eq!(style.fg, Some(Color::LightMagenta));
         assert!(style.add_modifier.contains(Modifier::ITALIC));
     }
@@ -2096,7 +2096,7 @@ mod tests {
             addrs: vec![format!("192.168.1.{}", port)],
             port,
             txt: vec![],
-            alive: true,
+            online: true,
             timestamp_micros: current_timestamp_micros(),
         }
     }
