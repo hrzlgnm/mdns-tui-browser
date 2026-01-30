@@ -16,6 +16,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🔄 **Real-time Updates**: Async architecture for live service discovery
 - 📈 **Live Metrics**: Comprehensive ServiceDaemon and application metrics
 - 🎛️ **Service Type Filtering**: Browse different service types separately
+- 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
 
 ## Quick Start
 
@@ -46,14 +47,13 @@ mdns-tui-browser -h
 - <kbd>←</kbd>/<kbd>→</kbd> or <kbd>h</kbd>/<kbd>l</kbd> - Switch between service types  
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
+- <kbd>s</kbd> - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
+- <kbd>S</kbd> - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
+- <kbd>o</kbd> - Toggle sort direction (↑/↓)
 - <kbd>d</kbd> - Remove offline services
 - <kbd>m</kbd> - Show service metrics
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
-
-Press any key to close the help popup.
-
-
 
 ## Architecture
 

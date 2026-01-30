@@ -18,6 +18,22 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortField {
+    Host,
+    ServiceType,
+    Fullname,
+    Port,
+    Address,
+    Timestamp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortDirection {
+    Ascending,
+    Descending,
+}
+
 #[derive(Clone, Debug)]
 struct ServiceEntry {
     fullname: String,
@@ -49,9 +65,12 @@ struct AppState {
     visible_services: usize,
     cached_filtered_services: Vec<usize>,
     cache_dirty: bool,
+    cached_sorted: bool,
     show_help_popup: bool,
     show_metrics_popup: bool,
     metrics: BTreeMap<String, u64>,
+    sort_field: SortField,
+    sort_direction: SortDirection,
 }
 
 impl AppState {
@@ -67,9 +86,12 @@ impl AppState {
             visible_services: 0,
             cached_filtered_services: Vec::new(),
             cache_dirty: true,
+            cached_sorted: false,
             show_help_popup: false,
             show_metrics_popup: false,
             metrics: BTreeMap::new(),
+            sort_field: SortField::Host,
+            sort_direction: SortDirection::Ascending,
         };
         state.validate_selected_type();
         state
@@ -88,7 +110,7 @@ impl AppState {
         }
     }
 
-    fn update_filtered_cache(&mut self) {
+    fn update_filtered_cache(&mut self) -> bool {
         if self.cache_dirty {
             self.cached_filtered_services.clear();
             for (idx, service) in self.services.iter().enumerate() {
@@ -97,6 +119,10 @@ impl AppState {
                 }
             }
             self.cache_dirty = false;
+            self.cached_sorted = false;
+            true // Cache was rebuilt
+        } else {
+            false // Cache was not rebuilt
         }
     }
 
@@ -118,8 +144,34 @@ impl AppState {
     }
 
     fn get_filtered_services(&mut self) -> &[usize] {
-        self.update_filtered_cache();
+        let cache_was_rebuilt = self.update_filtered_cache();
+        if cache_was_rebuilt || !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
+        }
         self.cached_filtered_services.as_slice()
+    }
+
+    fn sort_filtered_services(&mut self) {
+        let sort_field = self.sort_field;
+        let services = &self.services;
+
+        match self.sort_direction {
+            SortDirection::Ascending => {
+                self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
+                    let service_a = &services[a_idx];
+                    let service_b = &services[b_idx];
+                    compare_services_by_field(service_a, service_b, sort_field)
+                });
+            }
+            SortDirection::Descending => {
+                self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
+                    let service_a = &services[a_idx];
+                    let service_b = &services[b_idx];
+                    compare_services_by_field(service_b, service_a, sort_field)
+                });
+            }
+        }
     }
 
     // Helper methods for service type management
@@ -202,6 +254,44 @@ impl AppState {
         self.invalidate_cache_and_validate();
     }
 
+    fn update_sort_field(&mut self, field: SortField) {
+        self.sort_field = field;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn update_sort_direction(&mut self, direction: SortDirection) {
+        self.sort_direction = direction;
+        self.selected_service = 0;
+        self.services_scroll_offset = 0;
+        self.invalidate_cache_and_validate();
+    }
+
+    fn toggle_sort_direction(&mut self) {
+        match self.sort_direction {
+            SortDirection::Ascending => self.update_sort_direction(SortDirection::Descending),
+            SortDirection::Descending => self.update_sort_direction(SortDirection::Ascending),
+        }
+    }
+
+    fn cycle_sort_field(&mut self, forward: bool) {
+        use SortField::*;
+        let fields = [Host, ServiceType, Fullname, Port, Address, Timestamp];
+        let current_idx = fields
+            .iter()
+            .position(|&f| f == self.sort_field)
+            .unwrap_or(0);
+
+        let new_idx = if forward {
+            (current_idx + 1) % fields.len()
+        } else {
+            current_idx.checked_sub(1).unwrap_or(fields.len() - 1)
+        };
+
+        self.update_sort_field(fields[new_idx]);
+    }
+
     fn remove_offline_services(&mut self) {
         // Collect service types that have offline services
         let mut service_types_to_check: std::collections::HashSet<String> =
@@ -280,6 +370,7 @@ impl AppState {
 
     fn invalidate_cache_and_validate(&mut self) {
         self.mark_cache_dirty();
+        self.cached_sorted = false;
         self.validate_selected_type();
     }
 
@@ -371,6 +462,22 @@ impl AppState {
 
             KeyCode::End => {
                 self.navigate_services_to_last();
+                true
+            }
+
+            // Sorting
+            KeyCode::Char('s') => {
+                self.cycle_sort_field(true);
+                true
+            }
+
+            KeyCode::Char('S') => {
+                self.cycle_sort_field(false);
+                true
+            }
+
+            KeyCode::Char('o') => {
+                self.toggle_sort_direction();
                 true
             }
 
@@ -516,6 +623,32 @@ impl AppState {
         {
             self.services_scroll_offset = self.selected_service - self.visible_services + 1;
         }
+    }
+}
+
+fn compare_services_by_field(
+    a: &ServiceEntry,
+    b: &ServiceEntry,
+    field: SortField,
+) -> std::cmp::Ordering {
+    match field {
+        SortField::Host => a.host.cmp(&b.host),
+        SortField::ServiceType => a.service_type.cmp(&b.service_type),
+        SortField::Fullname => a.fullname.cmp(&b.fullname),
+        SortField::Port => a.port.cmp(&b.port),
+        SortField::Address => {
+            use std::net::IpAddr;
+
+            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
+            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
+
+            // Try to parse as IP addresses for numeric comparison, fall back to string comparison
+            match (a_addr_str.parse::<IpAddr>(), b_addr_str.parse::<IpAddr>()) {
+                (Ok(a_ip), Ok(b_ip)) => a_ip.cmp(&b_ip),
+                _ => a_addr_str.cmp(b_addr_str),
+            }
+        }
+        SortField::Timestamp => a.timestamp_micros.cmp(&b.timestamp_micros),
     }
 }
 
@@ -680,12 +813,36 @@ fn render_services_list(
         .take(visible_services)
         .collect();
 
+    let sort_field_display = format_sort_field_for_display(app_state.sort_field);
+    let sort_dir_display = format_sort_direction_for_display(app_state.sort_direction);
+    let sort_field_highlighted = Span::styled(
+        sort_field_display,
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    );
+    let sort_dir_highlighted = Span::styled(
+        sort_dir_display,
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    let title = Line::from(vec![
+        Span::raw("Services ["),
+        Span::styled(
+            format!("{}/{}", filtered_indices_len, services_clone.len()),
+            Style::default().fg(Color::Green),
+        ),
+        Span::raw("] ["),
+        sort_field_highlighted,
+        Span::raw("/"),
+        sort_dir_highlighted,
+        Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
+    ]);
+
     let services_list = List::new(visible_service_items)
-        .block(Block::default().borders(Borders::ALL).title(format!(
-            "Services [{}/{}] (↑/↓)",
-            filtered_indices_len,
-            services_clone.len()
-        )))
+        .block(Block::default().borders(Borders::ALL).title(title))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut services_list_state = ListState::default();
@@ -741,6 +898,15 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   m                   - Show service metrics"),
         Line::from("   ?                   - Toggle this help popup"),
         Line::from("   q or Ctrl+C         - Quit the application"),
+        Line::from(" "),
+        Line::from(" Sorting:"),
+        Line::from(
+            "   s                   - Cycle sort field: Host → Type → Name → Port → Addr → Time",
+        ),
+        Line::from("   S                   - Cycle sort field backward"),
+        Line::from("   o                   - Toggle sort direction (↑/↓)"),
+        Line::from(" "),
+        Line::from("   Sort field highlighted in yellow, direction in cyan"),
         Line::from(" "),
         Line::from(" Press any key to close this help"),
     ];
@@ -884,6 +1050,24 @@ fn create_centered_popup(
 }
 
 // Helper functions for formatting
+fn format_sort_field_for_display(field: SortField) -> &'static str {
+    match field {
+        SortField::Host => "Host",
+        SortField::ServiceType => "Type",
+        SortField::Fullname => "Name",
+        SortField::Port => "Port",
+        SortField::Address => "Addr",
+        SortField::Timestamp => "Time",
+    }
+}
+
+fn format_sort_direction_for_display(direction: SortDirection) -> &'static str {
+    match direction {
+        SortDirection::Ascending => "↑",
+        SortDirection::Descending => "↓",
+    }
+}
+
 fn format_service_type_for_display(service_type: &str) -> String {
     service_type
         .trim_start_matches('_')
@@ -2084,6 +2268,520 @@ mod tests {
         let _user_input = Notification::UserInput;
         let _service_changed = Notification::ServiceChanged;
         let _metrics_updated = Notification::MetricsUpdated;
+    }
+
+    // Sorting tests
+    #[test]
+    fn test_compare_services_by_field_host() {
+        let service1 = create_test_service("alpha", "_http._tcp.local.", 80);
+        let service2 = create_test_service("beta", "_http._tcp.local.", 80);
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Host);
+        assert_eq!(result, std::cmp::Ordering::Less);
+
+        let result = compare_services_by_field(&service2, &service1, SortField::Host);
+        assert_eq!(result, std::cmp::Ordering::Greater);
+
+        let result = compare_services_by_field(&service1, &service1, SortField::Host);
+        assert_eq!(result, std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_service_type() {
+        let http_service = create_test_service("test", "_http._tcp.local.", 80);
+        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
+
+        let result = compare_services_by_field(&http_service, &ssh_service, SortField::ServiceType);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_fullname() {
+        let service1 = ServiceEntry {
+            fullname: "aaa._http._tcp.local.".to_string(),
+            host: "host1.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            online: true,
+            timestamp_micros: 1000,
+        };
+        let service2 = ServiceEntry {
+            fullname: "zzz._http._tcp.local.".to_string(),
+            host: "host2.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            online: true,
+            timestamp_micros: 1000,
+        };
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Fullname);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_port() {
+        let service1 = create_test_service("test", "_http._tcp.local.", 80);
+        let service2 = create_test_service("test", "_http._tcp.local.", 8080);
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Port);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_timestamp() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.timestamp_micros = 1000;
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.timestamp_micros = 2000;
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Timestamp);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_address_ip() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.addrs = vec!["192.168.1.10".to_string()];
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.addrs = vec!["192.168.1.20".to_string()];
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Address);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_address_ipv6() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.addrs = vec!["2001:db8::1".to_string()];
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.addrs = vec!["2001:db8::2".to_string()];
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Address);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_address_mixed_ipv4_ipv6() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.addrs = vec!["192.168.1.1".to_string()];
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.addrs = vec!["2001:db8::1".to_string()];
+
+        // IPv4 should come before IPv6 (lexicographic comparison of IP types)
+        let result = compare_services_by_field(&service1, &service2, SortField::Address);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_address_no_addr() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.addrs = vec![];
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.addrs = vec!["192.168.1.1".to_string()];
+
+        let result = compare_services_by_field(&service1, &service2, SortField::Address);
+        // "<no-addr>" should be compared as string ("<no-addr>" > "192.168.1.1")
+        assert_eq!(result, std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_compare_services_by_field_address_string_fallback() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.addrs = vec!["invalid-ip-1".to_string()];
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.addrs = vec!["invalid-ip-2".to_string()];
+
+        // Falls back to string comparison when IP parsing fails
+        let result = compare_services_by_field(&service1, &service2, SortField::Address);
+        assert_eq!(result, std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_toggle_sort_direction() {
+        let mut state = AppState::new();
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+
+        state.toggle_sort_direction();
+        assert_eq!(state.sort_direction, SortDirection::Descending);
+
+        state.toggle_sort_direction();
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+    }
+
+    #[test]
+    fn test_cycle_sort_field_forward() {
+        let mut state = AppState::new();
+        assert_eq!(state.sort_field, SortField::Host);
+
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::ServiceType);
+
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Fullname);
+
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Port);
+
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Address);
+
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+
+        // Should wrap around
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Host);
+    }
+
+    #[test]
+    fn test_cycle_sort_field_backward() {
+        let mut state = AppState::new();
+        assert_eq!(state.sort_field, SortField::Host);
+
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Address);
+
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Port);
+
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Fullname);
+
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::ServiceType);
+
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Host);
+    }
+
+    #[test]
+    fn test_update_sort_field_resets_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        for i in 0..5 {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
+        }
+        state.selected_service = 3;
+        state.services_scroll_offset = 2;
+
+        state.update_sort_field(SortField::Port);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_update_sort_direction_resets_selection() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        for i in 0..5 {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                80 + i,
+            ));
+        }
+        state.selected_service = 3;
+        state.services_scroll_offset = 2;
+
+        state.update_sort_direction(SortDirection::Descending);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.services_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_sort_filtered_services_ascending() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        // Add services in reverse alphabetical order
+        state
+            .services
+            .push(create_test_service("zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 82));
+
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 3);
+
+        // Verify services are sorted by host in ascending order
+        assert_eq!(state.services[filtered[0]].host, "alpha.local.");
+        assert_eq!(state.services[filtered[1]].host, "beta.local.");
+        assert_eq!(state.services[filtered[2]].host, "zebra.local.");
+    }
+
+    #[test]
+    fn test_sort_filtered_services_descending() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 81));
+        state
+            .services
+            .push(create_test_service("zebra", "_http._tcp.local.", 82));
+
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Descending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 3);
+
+        // Verify services are sorted by host in descending order
+        assert_eq!(state.services[filtered[0]].host, "zebra.local.");
+        assert_eq!(state.services[filtered[1]].host, "beta.local.");
+        assert_eq!(state.services[filtered[2]].host, "alpha.local.");
+    }
+
+    #[test]
+    fn test_sort_by_port_ascending() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        state
+            .services
+            .push(create_test_service("service1", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("service2", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("service3", "_http._tcp.local.", 443));
+
+        state.sort_field = SortField::Port;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(state.services[filtered[0]].port, 80);
+        assert_eq!(state.services[filtered[1]].port, 443);
+        assert_eq!(state.services[filtered[2]].port, 8080);
+    }
+
+    #[test]
+    fn test_sort_by_timestamp() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let mut service1 = create_test_service("service1", "_http._tcp.local.", 80);
+        service1.timestamp_micros = 3000;
+        let mut service2 = create_test_service("service2", "_http._tcp.local.", 81);
+        service2.timestamp_micros = 1000;
+        let mut service3 = create_test_service("service3", "_http._tcp.local.", 82);
+        service3.timestamp_micros = 2000;
+
+        state.services.push(service1);
+        state.services.push(service2);
+        state.services.push(service3);
+
+        state.sort_field = SortField::Timestamp;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(state.services[filtered[0]].timestamp_micros, 1000);
+        assert_eq!(state.services[filtered[1]].timestamp_micros, 2000);
+        assert_eq!(state.services[filtered[2]].timestamp_micros, 3000);
+    }
+
+    #[test]
+    fn test_sort_with_filtering() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        state
+            .services
+            .push(create_test_service("http-zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
+        state
+            .services
+            .push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
+
+        // Filter to only HTTP services and sort by host
+        state.selected_type = Some(0); // _http._tcp.local.
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 2); // Only HTTP services
+        assert_eq!(state.services[filtered[0]].host, "http-alpha.local.");
+        assert_eq!(state.services[filtered[1]].host, "http-zebra.local.");
+    }
+
+    #[test]
+    fn test_sort_mixed_online_offline() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        let mut service1 = create_test_service("online1", "_http._tcp.local.", 80);
+        service1.online = true;
+        let mut service2 = create_test_service("offline1", "_http._tcp.local.", 81);
+        service2.online = false;
+        let mut service3 = create_test_service("online2", "_http._tcp.local.", 82);
+        service3.online = true;
+
+        state.services.push(service1);
+        state.services.push(service2);
+        state.services.push(service3);
+
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        // All services should be included and sorted, regardless of online status
+        assert_eq!(filtered.len(), 3);
+        assert!(state.services[filtered[0]].host < state.services[filtered[1]].host);
+        assert!(state.services[filtered[1]].host < state.services[filtered[2]].host);
+    }
+
+    #[test]
+    fn test_format_sort_field_display() {
+        assert_eq!(format_sort_field_for_display(SortField::Host), "Host");
+        assert_eq!(
+            format_sort_field_for_display(SortField::ServiceType),
+            "Type"
+        );
+        assert_eq!(format_sort_field_for_display(SortField::Fullname), "Name");
+        assert_eq!(format_sort_field_for_display(SortField::Port), "Port");
+        assert_eq!(format_sort_field_for_display(SortField::Address), "Addr");
+        assert_eq!(format_sort_field_for_display(SortField::Timestamp), "Time");
+    }
+
+    #[test]
+    fn test_format_sort_direction_display() {
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Ascending),
+            "↑"
+        );
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Descending),
+            "↓"
+        );
+    }
+
+    #[test]
+    fn test_sort_field_enum_equality() {
+        assert_eq!(SortField::Host, SortField::Host);
+        assert_ne!(SortField::Host, SortField::Port);
+    }
+
+    #[test]
+    fn test_sort_direction_enum_equality() {
+        assert_eq!(SortDirection::Ascending, SortDirection::Ascending);
+        assert_ne!(SortDirection::Ascending, SortDirection::Descending);
+    }
+
+    #[test]
+    fn test_key_event_cycle_sort_forward() {
+        let mut state = AppState::new();
+        assert_eq!(state.sort_field, SortField::Host);
+
+        let key = KeyEvent::from(KeyCode::Char('s'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_field, SortField::ServiceType);
+    }
+
+    #[test]
+    fn test_key_event_cycle_sort_backward() {
+        let mut state = AppState::new();
+        assert_eq!(state.sort_field, SortField::Host);
+
+        let key = KeyEvent::from(KeyCode::Char('S'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+    }
+
+    #[test]
+    fn test_key_event_toggle_sort_direction() {
+        let mut state = AppState::new();
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+
+        let key = KeyEvent::from(KeyCode::Char('o'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_direction, SortDirection::Descending);
+
+        state.handle_key_event(key);
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+    }
+
+    #[test]
+    fn test_cache_invalidation_on_sort_change() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 80));
+
+        // Populate cache
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+        assert!(state.cached_sorted);
+
+        // Changing sort field should invalidate sorted flag
+        state.update_sort_field(SortField::Port);
+        assert!(state.cache_dirty);
+        assert!(!state.cached_sorted);
+    }
+
+    #[test]
+    fn test_sort_stability_with_equal_values() {
+        let mut state = AppState::new();
+        state.add_service_type("_http._tcp.local.");
+
+        // Create services with same port but different names
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("gamma", "_http._tcp.local.", 80));
+
+        state.sort_field = SortField::Port;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        // All should have same port, so order is determined by the stable sort
+        assert_eq!(filtered.len(), 3);
+        for idx in filtered {
+            assert_eq!(state.services[idx].port, 80);
+        }
     }
 
     // Helper function for creating test services
