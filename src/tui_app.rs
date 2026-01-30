@@ -379,7 +379,7 @@ impl AppState {
         let removed_count = initial_len - self.services.len();
 
         if removed_count > 0 {
-            self.update_metric("offline_services_removed");
+            self.update_metric_by("offline_services_removed", removed_count as u64);
             // Refresh cache immediately after retain to ensure filtered services are up-to-date
             self.invalidate_cache_and_validate();
 
@@ -599,6 +599,10 @@ impl AppState {
 
     fn update_metric(&mut self, key: &str) {
         *self.metrics.entry(key.to_string()).or_insert(0) += 1;
+    }
+
+    fn update_metric_by(&mut self, key: &str, value: u64) {
+        *self.metrics.entry(key.to_string()).or_insert(0) += value;
     }
 
     fn update_daemon_metrics(
@@ -1525,8 +1529,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                                 state.remove_service_type(&service_type);
                                                 let _ = notification_sender_inner
                                                     .send(Notification::ServiceChanged);
-                                            }
-                                        }
+    }
+
+}
                                         ServiceEvent::ServiceResolved(resolved_service) => {
                                             let entry = ServiceEntry::from(*resolved_service);
                                             let mut state = state_inner.write().await;
