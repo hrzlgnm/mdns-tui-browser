@@ -65,6 +65,7 @@ struct AppState {
     visible_services: usize,
     cached_filtered_services: Vec<usize>,
     cache_dirty: bool,
+    cached_sorted: bool,
     show_help_popup: bool,
     show_metrics_popup: bool,
     metrics: BTreeMap<String, u64>,
@@ -85,6 +86,7 @@ impl AppState {
             visible_services: 0,
             cached_filtered_services: Vec::new(),
             cache_dirty: true,
+            cached_sorted: false,
             show_help_popup: false,
             show_metrics_popup: false,
             metrics: BTreeMap::new(),
@@ -108,7 +110,7 @@ impl AppState {
         }
     }
 
-    fn update_filtered_cache(&mut self) {
+    fn update_filtered_cache(&mut self) -> bool {
         if self.cache_dirty {
             self.cached_filtered_services.clear();
             for (idx, service) in self.services.iter().enumerate() {
@@ -117,6 +119,10 @@ impl AppState {
                 }
             }
             self.cache_dirty = false;
+            self.cached_sorted = false;
+            true // Cache was rebuilt
+        } else {
+            false // Cache was not rebuilt
         }
     }
 
@@ -138,8 +144,11 @@ impl AppState {
     }
 
     fn get_filtered_services(&mut self) -> &[usize] {
-        self.update_filtered_cache();
-        self.sort_filtered_services();
+        let cache_was_rebuilt = self.update_filtered_cache();
+        if cache_was_rebuilt || !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
+        }
         self.cached_filtered_services.as_slice()
     }
 
@@ -361,6 +370,7 @@ impl AppState {
 
     fn invalidate_cache_and_validate(&mut self) {
         self.mark_cache_dirty();
+        self.cached_sorted = false;
         self.validate_selected_type();
     }
 
@@ -627,17 +637,16 @@ fn compare_services_by_field(
         SortField::Fullname => a.fullname.cmp(&b.fullname),
         SortField::Port => a.port.cmp(&b.port),
         SortField::Address => {
-            let a_addr = a
-                .addrs
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "<no-addr>".to_string());
-            let b_addr = b
-                .addrs
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "<no-addr>".to_string());
-            a_addr.cmp(&b_addr)
+            use std::net::IpAddr;
+            
+            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
+            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
+            
+            // Try to parse as IP addresses for numeric comparison, fall back to string comparison
+            match (a_addr_str.parse::<IpAddr>(), b_addr_str.parse::<IpAddr>()) {
+                (Ok(a_ip), Ok(b_ip)) => a_ip.cmp(&b_ip),
+                _ => a_addr_str.cmp(b_addr_str),
+            }
         }
         SortField::Timestamp => a.timestamp_micros.cmp(&b.timestamp_micros),
     }
