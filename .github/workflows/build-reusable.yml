@@ -65,6 +65,13 @@ jobs:
           targets: ${{ matrix.target }}
           save-cache: ${{ inputs.branch == 'main' }}
 
+      - name: 🛠️🔐 cargo-auditable
+        uses: baptiste0928/cargo-install@b687c656bda5733207e629b50a22bf68974a0305 # v3
+        with:
+          crate: cargo-auditable
+          version: 0.7.2
+          locked: true
+
       - name: 🛠️ dependencies
         if: matrix.dependencies
         shell: bash
@@ -81,7 +88,11 @@ jobs:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cargo build --release --target ${{ matrix.target }}
+          if [ "${{ inputs.tagName }}" ]; then
+            cargo auditable build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: 📦 Build archive
         shell: bash

@@ -124,6 +124,49 @@ cosign verify-attestation --certificate-identity=https://github.com/hrzlgnm/mdns
 
 This ensures that the binaries you download are authentic and haven't been tampered with.
 
+## Auditable Builds
+
+Starting from **Release 1.6.0**, all release binaries are built with [cargo-auditable](https://github.com/rust-secure-code/cargo-auditable), which embeds detailed dependency information directly into the executable. This provides additional security benefits:
+
+### What are Auditable Builds?
+
+Auditable builds embed a complete dependency tree in JSON format within the binary, enabling:
+- **Security Auditing**: Scan binaries for known vulnerabilities in their dependencies
+- **Supply Chain Transparency**: Know exactly which crate versions were used
+- **Zero Bookkeeping**: No separate dependency tracking required
+- **Production Safety**: Verify that production binaries match expected dependencies
+
+### How It Works
+
+The `cargo auditable` command builds your application with additional metadata:
+- Embeds JSON-formatted dependency information in a dedicated binary section
+- Typically adds less than 4KB even to large dependency trees
+- Works across all platforms (Linux, Windows, macOS, WebAssembly)
+
+### Auditing Release Binaries
+
+You can audit any release binary to verify its dependencies:
+
+```bash
+# Install required tools
+cargo install cargo-audit
+
+# Extract and audit dependencies from a release binary
+cargo audit bin mdns-tui-browser-1.6.0-Linux-x86_64/mdns-tui-browser
+
+# Or audit binary by path
+cargo audit bin path/to/release/binary
+```
+
+### Build Process
+
+Release builds use auditable builds by default:
+- **CI/CD builds**: Use `cargo auditable build --release`
+- **Development builds**: Use standard `cargo build --release` for performance
+- **Dependency tracking**: Automatic, no manual intervention required
+
+This ensures that every release binary can be independently verified for security compliance and supply chain integrity.
+
 ## Future Enhancements
 
 - [ ] Service discovery configuration
