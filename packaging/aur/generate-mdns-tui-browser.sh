@@ -22,7 +22,7 @@ url="https://github.com/hrzlgnm/mdns-tui-browser"
 license=('MIT')
 makedepends=('cargo' 'cargo-auditable' 'git' 'rust')
 options=('!emptydirs')
-source=("\$pkgname-v\$pkgver.tar.gz::https://github.com/hrzlgnm/\$pkgname/archive/refs/tags/v\$pkgver.tar.gz")
+source=("\$pkgname-v\$pkgver.tar.gz::https://github.com/hrzlgnm/\$pkgname/archive/refs/tags/\$pkgver.tar.gz")
 sha256sums=('$sha256sum')
 _builddir="\$pkgname-\$pkgver"
 prepare() {
