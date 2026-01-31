@@ -519,7 +519,7 @@ impl AppState {
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
         // Debug: Log all key events to see what's happening
-        eprintln!("DEBUG: Key event: {:?}, modifiers: {:?}", key.code, key.modifiers);
+
 
         match key.code {
             // Quit actions
