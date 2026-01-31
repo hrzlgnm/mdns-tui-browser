@@ -565,21 +565,27 @@ impl AppState {
             }
 
             // Page navigation - check Ctrl modifiers first
-            KeyCode::PageUp
+            KeyCode::PageUp => {
                 if key
                     .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
-                self.navigate_service_types_page_up();
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_page_up();
+                }
                 true
             }
 
-            KeyCode::PageDown
+            KeyCode::PageDown => {
                 if key
                     .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
-                self.navigate_service_types_page_down();
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
                 true
             }
 
@@ -601,21 +607,13 @@ impl AppState {
                 true
             }
 
-            // Regular page navigation for services (only when no Ctrl modifier)
-            KeyCode::PageUp | KeyCode::Char('b')
-                if !key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            // Regular page navigation for services (character alternatives)
+            KeyCode::Char('b') => {
                 self.navigate_services_page_up();
                 true
             }
 
-            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ')
-                if !key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            KeyCode::Char('f') | KeyCode::Char(' ') => {
                 self.navigate_services_page_down();
                 true
             }
