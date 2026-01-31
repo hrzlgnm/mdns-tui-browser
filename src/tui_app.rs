@@ -569,14 +569,17 @@ impl AppState {
 
             // Page navigation - check Ctrl modifiers first
             KeyCode::PageUp => {
+                eprintln!("DEBUG: PageUp key received! modifiers: {:?}", key.modifiers);
                 if key
                     .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL)
-                {
-                    self.navigate_service_types_page_up();
-                } else {
-                    self.navigate_services_page_up();
-                }
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.navigate_service_types_page_up();
+            } else {
+                self.navigate_services_page_up();
+            }
+                true
+            }
                 true
             }
 
