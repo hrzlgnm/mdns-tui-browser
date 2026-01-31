@@ -3,6 +3,7 @@
 [![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/hrzlgnm/mdns-tui-browser/latest/total)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
 [![GitHub Release](https://img.shields.io/github/v/release/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
 [![GitHub Release Date](https://img.shields.io/github/release-date/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
+[![AUR Version](https://img.shields.io/aur/version/mdns-tui-browser)](https://aur.archlinux.org/packages/mdns-tui-browser)
 [![License: MIT](https://img.shields.io/github/license/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/blob/main/LICENSE)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/hrzlgnm/mdns-tui-browser/ci.yml)](https://github.com/hrzlgnm/mdns-tui-browser/actions)
 # mDNS TUI Browser
@@ -29,6 +30,17 @@ cargo run
 ```bash
 cargo build --release
 ```
+
+### Install from AUR (Arch Linux)
+
+You can install `mdns-tui-browser` from the Arch User Repository (AUR) using `yay`:
+
+```bash
+# Install using yay
+yay -S mdns-tui-browser
+```
+
+This will install the latest version from the AUR and handle updates automatically with your regular system updates.
 
 ### CLI Options
 
