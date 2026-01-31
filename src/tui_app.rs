@@ -555,7 +555,51 @@ impl AppState {
             }
 
             KeyCode::Char('h') | KeyCode::Left => {
-                self.navigate_service_types_up();
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_service_types_up();
+                }
+                true
+            }
+
+            KeyCode::Char('l') | KeyCode::Right => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_service_types_down();
+                }
+                true
+            }
+
+            // Ctrl+Arrow keys for service type page navigation (consistent with existing arrow keys)
+            KeyCode::PageUp => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_page_up();
+                }
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
                 true
             }
 
@@ -564,13 +608,39 @@ impl AppState {
                 true
             }
 
-            // Page navigation - check Ctrl modifiers first
-            KeyCode::PageUp
+            // Page navigation - check modifiers in order of specificity
+            // Shift+PageUp/PageDown for service type page navigation (more standard desktop shortcuts)
+            KeyCode::PageUp => {
                 if key
                     .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
-                self.navigate_service_types_page_up();
+                    .contains(crossterm::event::KeyModifiers::SHIFT)
+                {
+                    self.navigate_service_types_page_up();
+                } else if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_page_up();
+                }
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::SHIFT)
+                {
+                    self.navigate_service_types_page_down();
+                } else if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
                 true
             }
 
@@ -601,13 +671,14 @@ impl AppState {
                 true
             }
 
-            // Regular page navigation for services (only when no Ctrl modifier)
-            KeyCode::PageUp | KeyCode::Char('b')
-                if !key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            // Character-based page navigation for services
+            KeyCode::Char('b') => {
                 self.navigate_services_page_up();
+                true
+            }
+
+            KeyCode::Char('f') | KeyCode::Char(' ') => {
+                self.navigate_services_page_down();
                 true
             }
 
@@ -1308,7 +1379,7 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   ↑/↓ or j/k          - Navigate services list"),
         Line::from("   ←/→ or h/l          - Switch between service types"),
         Line::from("   PageUp/Down         - Scroll services list by page"),
-        Line::from("   Ctrl+PageUp/Down    - Scroll service types by page"),
+        Line::from("   Ctrl+Arrow Left/Right  - Scroll service types by page"),
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
