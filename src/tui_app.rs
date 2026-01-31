@@ -359,6 +359,34 @@ impl AppState {
         self.update_sort_field(fields[new_idx]);
     }
 
+    fn clear_stale_service_types(&mut self) {
+        // Find service types that have no services at all (neither online nor offline)
+        let mut types_to_remove = Vec::new();
+
+        for service_type in &self.service_types.clone() {
+            if !self
+                .services
+                .iter()
+                .any(|s| s.service_type == *service_type)
+            {
+                types_to_remove.push(service_type.clone());
+            }
+        }
+
+        // Remove empty service types
+        let mut removed_count = 0;
+        for service_type in types_to_remove {
+            if self.remove_service_type(&service_type) {
+                removed_count += 1;
+            }
+        }
+
+        if removed_count > 0 {
+            self.update_metric_by("stale_service_types_removed", removed_count as u64);
+            self.invalidate_cache_and_validate();
+        }
+    }
+
     fn remove_offline_services(&mut self) {
         // Collect service types that have offline services
         let mut service_types_to_check: std::collections::HashSet<String> =
@@ -576,6 +604,10 @@ impl AppState {
             // Actions
             KeyCode::Char('d') => {
                 self.remove_offline_services();
+                true
+            }
+            KeyCode::Char('D') => {
+                self.clear_stale_service_types();
                 true
             }
 
@@ -3773,6 +3805,44 @@ mod tests {
     }
 
     #[test]
+    fn test_key_event_clear_stale_service_types() {
+        let mut state = AppState::new();
+
+        // Add multiple service types but only services for some
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+
+        state
+            .services
+            .push(create_test_service("http1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh1", "_ssh._tcp.local.", 22));
+
+        let key = KeyEvent::from(KeyCode::Char('D'));
+        state.handle_key_event(key);
+
+        // Should remove _printer._tcp.local. but keep the others
+        assert_eq!(state.service_types.len(), 2);
+        assert!(
+            state
+                .service_types
+                .contains(&"_http._tcp.local.".to_string())
+        );
+        assert!(
+            state
+                .service_types
+                .contains(&"_ssh._tcp.local.".to_string())
+        );
+        assert!(
+            !state
+                .service_types
+                .contains(&"_printer._tcp.local.".to_string())
+        );
+    }
+
+    #[test]
     fn test_multiple_filter_operations() {
         let mut state = AppState::new();
 
@@ -3913,5 +3983,86 @@ mod tests {
         let updated_service = &state.services[0];
         assert!(!updated_service.online);
         assert!(updated_service.timestamp_micros > original_timestamp);
+    }
+
+    #[test]
+    fn test_clear_stale_service_types() {
+        let mut state = AppState::new();
+
+        // Add multiple service types
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+
+        // Add services for only some types
+        state
+            .services
+            .push(create_test_service("http1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh1", "_ssh._tcp.local.", 22));
+
+        // _printer._tcp.local. has no services - it's stale
+
+        assert_eq!(state.service_types.len(), 3);
+
+        // Clear stale service types
+        state.clear_stale_service_types();
+
+        // Should remove _printer._tcp.local. but keep the others
+        assert_eq!(state.service_types.len(), 2);
+        assert!(
+            state
+                .service_types
+                .contains(&"_http._tcp.local.".to_string())
+        );
+        assert!(
+            state
+                .service_types
+                .contains(&"_ssh._tcp.local.".to_string())
+        );
+        assert!(
+            !state
+                .service_types
+                .contains(&"_printer._tcp.local.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_clear_stale_service_types_empty() {
+        let mut state = AppState::new();
+
+        // Add a service type but no services
+        state.add_service_type("_test._tcp.local.");
+
+        assert_eq!(state.service_types.len(), 1);
+
+        // Clear should remove the empty type
+        state.clear_stale_service_types();
+
+        assert_eq!(state.service_types.len(), 0);
+    }
+
+    #[test]
+    fn test_clear_stale_service_types_no_stale() {
+        let mut state = AppState::new();
+
+        // Add service types and services for all
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        state
+            .services
+            .push(create_test_service("http1", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh1", "_ssh._tcp.local.", 22));
+
+        assert_eq!(state.service_types.len(), 2);
+
+        // Clear should not remove anything since all types have services
+        state.clear_stale_service_types();
+
+        assert_eq!(state.service_types.len(), 2);
     }
 }
