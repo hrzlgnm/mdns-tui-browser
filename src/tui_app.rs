@@ -518,6 +518,9 @@ impl AppState {
     }
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
+        // Debug: Log all key events to see what's happening
+        eprintln!("DEBUG: Key event: {:?}, modifiers: {:?}", key.code, key.modifiers);
+
         match key.code {
             // Quit actions
             KeyCode::Char('q') => {
@@ -555,7 +558,51 @@ impl AppState {
             }
 
             KeyCode::Char('h') | KeyCode::Left => {
-                self.navigate_service_types_up();
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_service_types_up();
+                }
+                true
+            }
+
+            KeyCode::Char('l') | KeyCode::Right => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_service_types_down();
+                }
+                true
+            }
+
+            // Ctrl+Arrow keys for service type page navigation (consistent with existing arrow keys)
+            KeyCode::PageUp => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_page_up();
+                }
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
                 true
             }
 
@@ -564,23 +611,129 @@ impl AppState {
                 true
             }
 
-            // Page navigation
-            KeyCode::PageUp | KeyCode::Char('b') => {
+<<<<<<< HEAD
+            // Page navigation - check modifiers in order of specificity
+            // Shift+PageUp/PageDown for service type page navigation (more standard desktop shortcuts)
+            KeyCode::PageUp => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::SHIFT)
+                {
+                    self.navigate_service_types_page_up();
+                } else if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_page_up();
+                }
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::SHIFT)
+                {
+                    self.navigate_service_types_page_down();
+                } else if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
+=======
+            // Page navigation - check Ctrl modifiers first
+            KeyCode::PageUp => {
+                eprintln!("DEBUG: PageUp key received! modifiers: {:?}", key.modifiers);
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.navigate_service_types_page_up();
+            } else {
+                self.navigate_services_page_up();
+            }
+                true
+            }
+>>>>>>> 6055cc0fff735758dae65041c7e2f42636b80ab4
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
+                true
+            }
+
+            KeyCode::Home
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.navigate_service_types_to_first();
+                true
+            }
+
+            KeyCode::End
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.navigate_service_types_to_last();
+                true
+            }
+
+<<<<<<< HEAD
+            // Character-based page navigation for services
+=======
+            // Regular page navigation for services (character alternatives)
+>>>>>>> 6055cc0fff735758dae65041c7e2f42636b80ab4
+            KeyCode::Char('b') => {
                 self.navigate_services_page_up();
                 true
             }
 
-            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
+            KeyCode::Char('f') | KeyCode::Char(' ') => {
+<<<<<<< HEAD
                 self.navigate_services_page_down();
                 true
             }
 
-            KeyCode::Home => {
+            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ')
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+=======
+>>>>>>> 6055cc0fff735758dae65041c7e2f42636b80ab4
+                self.navigate_services_page_down();
+                true
+            }
+
+            KeyCode::Home
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.navigate_services_to_first();
                 true
             }
 
-            KeyCode::End => {
+            KeyCode::End
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.navigate_services_to_last();
                 true
             }
@@ -764,6 +917,78 @@ impl AppState {
             }
         }
         self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_page_up(&mut self) {
+        let scroll_amount = self.visible_types.saturating_sub(1);
+        let new_type = match self.selected_type {
+            None => None, // Stay at "All Types"
+            Some(idx) => {
+                if idx > scroll_amount {
+                    Some(idx - scroll_amount)
+                } else {
+                    None // Jump to "All Types"
+                }
+            }
+        };
+
+        if new_type.is_none() {
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
+            if new_idx < self.types_scroll_offset {
+                self.types_scroll_offset = new_idx;
+            }
+        }
+        self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_page_down(&mut self) {
+        let scroll_amount = self.visible_types.saturating_sub(1);
+        let types_len = self.service_types.len();
+        let new_type = match self.selected_type {
+            None => {
+                // From "All Types", jump to scroll_amount or last type
+                if types_len > 0 {
+                    Some(scroll_amount.min(types_len.saturating_sub(1)))
+                } else {
+                    None
+                }
+            }
+            Some(idx) => {
+                if idx + scroll_amount < types_len.saturating_sub(1) {
+                    Some(idx + scroll_amount)
+                } else {
+                    Some(types_len.saturating_sub(1)) // Go to last type
+                }
+            }
+        };
+
+        if new_type.is_none() {
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
+            if self.visible_types > 0 && new_idx >= self.types_scroll_offset + self.visible_types {
+                self.types_scroll_offset = new_idx - self.visible_types + 1;
+            }
+        }
+        self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_to_first(&mut self) {
+        self.selected_type = None;
+        self.types_scroll_offset = 0;
+        self.update_service_type_selection(self.selected_type);
+    }
+
+    fn navigate_service_types_to_last(&mut self) {
+        let types_len = self.service_types.len();
+        if types_len > 0 {
+            let last_idx = types_len.saturating_sub(1);
+            self.selected_type = Some(last_idx);
+            if self.visible_types > 0 && last_idx >= self.types_scroll_offset + self.visible_types {
+                self.types_scroll_offset = last_idx - self.visible_types + 1;
+            }
+        }
+        self.update_service_type_selection(self.selected_type);
     }
 
     fn navigate_services_page_up(&mut self) {
@@ -1183,8 +1408,10 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   ↑/↓ or j/k          - Navigate services list"),
         Line::from("   ←/→ or h/l          - Switch between service types"),
         Line::from("   PageUp/Down         - Scroll services list by page"),
+        Line::from("   Ctrl+Arrow Left/Right  - Scroll service types by page"),
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
+        Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove offline services"),
@@ -3637,10 +3864,170 @@ mod tests {
     fn test_navigate_service_types_with_single_type() {
         let mut state = AppState::new();
         state.add_service_type("_http._tcp.local.");
-        state.selected_type = Some(0);
 
+        // Should not wrap with only one type
+        state.selected_type = Some(0);
         state.navigate_service_types_down();
         assert_eq!(state.selected_type, Some(0));
+
+        state.navigate_service_types_up();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation() {
+        let mut state = AppState::new();
+
+        // Add many service types
+        for i in 0..20 {
+            state.add_service_type(&format!("._type{}._tcp.local.", i));
+        }
+
+        // Set visible count to small number to test scrolling
+        state.visible_types = 5;
+
+        // Test page down from "All Types"
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(4)); // Should jump to index 4 (visible_count - 1)
+
+        // Test another page down
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(8)); // Should jump to index 8
+
+        // Test page up
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(4)); // Should go back to index 4
+
+        // Test page up to "All Types"
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+
+        // Test to first
+        state.selected_type = Some(15);
+        state.navigate_service_types_to_first();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+        assert_eq!(state.types_scroll_offset, 0);
+
+        // Test to last
+        state.navigate_service_types_to_last();
+        assert_eq!(state.selected_type, Some(19)); // Last type
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation_edge_cases() {
+        let mut state = AppState::new();
+
+        // Test with no service types
+        state.visible_types = 5;
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, None);
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None);
+        state.navigate_service_types_to_first();
+        assert_eq!(state.selected_type, None);
+        state.navigate_service_types_to_last();
+        assert_eq!(state.selected_type, None);
+
+        // Add a single service type
+        state.add_service_type("_test._tcp.local.");
+
+        // Test page navigation with single type
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(0)); // Should go to the only type
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None); // Should go back to "All Types"
+        state.navigate_service_types_to_last();
+        assert_eq!(state.selected_type, Some(0)); // Should go to the only type
+        state.navigate_service_types_to_first();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation_bounds() {
+        let mut state = AppState::new();
+
+        // Add exactly the number of types that fit in viewport
+        for i in 0..5 {
+            state.add_service_type(&format!("_type{}._tcp.local.", i));
+        }
+        state.visible_types = 5;
+
+        // Test page down from "All Types" - should go to last available, not beyond
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(4)); // Last type (4 fits within viewport)
+
+        // Test another page down - should stay at last
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(4)); // Still at last type
+
+        // Test page up from last
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation_with_offset() {
+        let mut state = AppState::new();
+
+        // Add many service types
+        for i in 0..30 {
+            state.add_service_type(&format!("._type{}._tcp.local.", i));
+        }
+        state.visible_types = 5;
+
+        // Start scrolled down
+        state.selected_type = Some(10);
+        state.types_scroll_offset = 5;
+
+        // Test page down maintains proper offset
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(14)); // 10 + 4
+        assert_eq!(state.types_scroll_offset, 10); // Offset should update to keep selected item visible (14-5+1=10)
+
+        // Test page up from scrolled position
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(10)); // Back to 10
+
+        // Test to first resets offset
+        state.navigate_service_types_to_first();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+        assert_eq!(state.types_scroll_offset, 0);
+
+        // Test to last adjusts offset correctly
+        state.navigate_service_types_to_last();
+        assert_eq!(state.selected_type, Some(29)); // Last type
+        // Offset should ensure last type is visible
+        assert_eq!(state.types_scroll_offset, 25); // 29 - 5 + 1 = 25
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation_small_viewport() {
+        let mut state = AppState::new();
+
+        // Add many service types
+        for i in 0..10 {
+            state.add_service_type(&format!("._type{}._tcp.local.", i));
+        }
+
+        // Test with very small viewport (2 visible items to enable page navigation)
+        state.visible_types = 2; // Use 2 so scroll_amount = 1
+
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(1)); // Should jump to index 1 (scroll_amount = 1)
+
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(2)); // Next type
+
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(1)); // Should go back to index 1
+
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
+
+        // Test to last
+        state.navigate_service_types_to_last();
+        assert_eq!(state.selected_type, Some(9)); // Last type
+        assert_eq!(state.types_scroll_offset, 8); // Offset should show last item (9-2+1=8)
     }
 
     #[test]
