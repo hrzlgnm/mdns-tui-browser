@@ -1186,6 +1186,7 @@ fn render_help_popup(f: &mut Frame) {
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove offline services"),
+        Line::from("   D                   - Clear stale service types"),
         Line::from("   m                   - Show service metrics"),
         Line::from("   /                   - Enter quick filter mode"),
         Line::from("   n                   - Clear current filter"),
