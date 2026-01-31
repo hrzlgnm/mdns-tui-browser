@@ -654,7 +654,7 @@ impl AppState {
         }
     }
 
-    fn remove_service(&mut self, fullname: &str, service_type: &str) -> bool {
+    fn mark_service_offline(&mut self, fullname: &str) -> bool {
         let service_idx = self.services.iter().position(|s| s.fullname == fullname);
 
         if let Some(idx) = service_idx {
@@ -665,7 +665,6 @@ impl AppState {
             }
             self.services[idx].go_offline_at(current_timestamp_micros());
             self.invalidate_cache_and_validate();
-            self.remove_service_type(service_type);
             true
         } else {
             false
@@ -1538,9 +1537,9 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                             tokio::spawn(async move {
                                 while let Ok(service_event) = service_receiver.recv_async().await {
                                     match service_event {
-                                        ServiceEvent::ServiceRemoved(service_type, fullname) => {
+                                        ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                                             let mut state = state_inner.write().await;
-                                            if state.remove_service(&fullname, &service_type) {
+                                            if state.mark_service_offline(&fullname) {
                                                 let _ = notification_sender_inner
                                                     .send(Notification::ServiceChanged);
                                             }
@@ -3855,14 +3854,13 @@ mod tests {
         assert_eq!(state.metrics.get("services_removed"), None);
 
         // Remove online service - should increment metric
-        let removed = state.remove_service("test-service._http._tcp.local.", "_http._tcp.local.");
+        let removed = state.mark_service_offline("test-service._http._tcp.local.");
         assert!(removed);
         assert_eq!(state.metrics.get("services_removed"), Some(&1));
         assert!(!state.services[0].online); // Service should now be offline
 
         // Remove offline service - should not increment metric
-        let removed =
-            state.remove_service("offline-service._http._tcp.local.", "_http._tcp.local.");
+        let removed = state.mark_service_offline("offline-service._http._tcp.local.");
         assert!(removed);
         assert_eq!(state.metrics.get("services_removed"), Some(&1)); // Still 1, not 2
         assert!(!state.services[1].online); // Service should still be offline
@@ -3877,15 +3875,13 @@ mod tests {
         state.services.push(service);
 
         // First removal - should increment metric
-        let removed1 =
-            state.remove_service("duplicate-service._http._tcp.local.", "_http._tcp.local.");
+        let removed1 = state.mark_service_offline("duplicate-service._http._tcp.local.");
         assert!(removed1);
         assert_eq!(state.metrics.get("services_removed"), Some(&1));
         assert!(!state.services[0].online);
 
         // Second removal of same service - should not increment metric
-        let removed2 =
-            state.remove_service("duplicate-service._http._tcp.local.", "_http._tcp.local.");
+        let removed2 = state.mark_service_offline("duplicate-service._http._tcp.local.");
         assert!(removed2);
         assert_eq!(state.metrics.get("services_removed"), Some(&1)); // Still 1, not 2
     }
@@ -3895,7 +3891,7 @@ mod tests {
         let mut state = AppState::new();
 
         // Try to remove a service that doesn't exist
-        let removed = state.remove_service("nonexistent._http._tcp.local.", "_http._tcp.local.");
+        let removed = state.mark_service_offline("nonexistent._http._tcp.local.");
         assert!(!removed);
         assert_eq!(state.metrics.get("services_removed"), None);
     }
@@ -3911,8 +3907,7 @@ mod tests {
         // Wait a bit to ensure different timestamp
         std::thread::sleep(std::time::Duration::from_millis(1));
 
-        let removed =
-            state.remove_service("timestamp-service._http._tcp.local.", "_http._tcp.local.");
+        let removed = state.mark_service_offline("timestamp-service._http._tcp.local.");
         assert!(removed);
 
         let updated_service = &state.services[0];
