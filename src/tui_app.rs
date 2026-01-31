@@ -3891,16 +3891,16 @@ mod tests {
 
         // Test with very small viewport (2 visible items to enable page navigation)
         state.visible_types = 2; // Use 2 so scroll_amount = 1
-        
+
         state.navigate_service_types_page_down();
         assert_eq!(state.selected_type, Some(1)); // Should jump to index 1 (scroll_amount = 1)
-        
+
         state.navigate_service_types_page_down();
         assert_eq!(state.selected_type, Some(2)); // Next type
 
         state.navigate_service_types_page_up();
         assert_eq!(state.selected_type, Some(1)); // Should go back to index 1
-        
+
         state.navigate_service_types_page_up();
         assert_eq!(state.selected_type, None); // Should go to "All Types"
 
