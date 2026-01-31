@@ -66,6 +66,7 @@ mdns-tui-browser -h
 - <kbd>/</kbd> - Enter quick filter mode (search across all service fields)
 - <kbd>n</kbd> - Clear current filter
 - <kbd>d</kbd> - Remove offline services
+- <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show service metrics
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
