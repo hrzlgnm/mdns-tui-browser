@@ -1310,6 +1310,7 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   ←/→ or h/l          - Switch between service types"),
         Line::from("   PageUp/Down         - Scroll services list by page"),
         Line::from("   Ctrl+PageUp/Down    - Scroll service types by page"),
+        Line::from("   Ctrl+H/L           - Scroll service types by page"),
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
