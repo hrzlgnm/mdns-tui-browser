@@ -567,7 +567,43 @@ impl AppState {
                 true
             }
 
-            // Page navigation - check Ctrl modifiers first
+            // Ctrl+Home/End for service type page navigation (page up/down)
+            KeyCode::Home => {
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_to_first();
+                }
+                true
+            }
+
+            KeyCode::End => {
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_to_last();
+                }
+                true
+            }
+
+            // Regular page navigation for services (when no Ctrl modifier)
+            KeyCode::PageUp => {
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                    self.navigate_service_types_page_up();
+                } else {
+                    self.navigate_services_page_up();
+                }
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
+                true
+            }
             KeyCode::PageUp => {
                 if key
                     .modifiers
