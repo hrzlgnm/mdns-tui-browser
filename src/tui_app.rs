@@ -661,7 +661,7 @@ impl AppState {
             // Only count as removed if the service was online
             let was_online = self.services[idx].online;
             if was_online {
-                self.update_metric("services_removed");
+                self.update_metric("services_marked_offline");
             }
             self.services[idx].go_offline_at(current_timestamp_micros());
             self.invalidate_cache_and_validate();
@@ -3851,18 +3851,18 @@ mod tests {
         state.services.push(offline_service);
 
         // Initially no services removed
-        assert_eq!(state.metrics.get("services_removed"), None);
+        assert_eq!(state.metrics.get("services_marked_offline"), None);
 
         // Remove online service - should increment metric
         let removed = state.mark_service_offline("test-service._http._tcp.local.");
         assert!(removed);
-        assert_eq!(state.metrics.get("services_removed"), Some(&1));
+        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1));
         assert!(!state.services[0].online); // Service should now be offline
 
         // Remove offline service - should not increment metric
         let removed = state.mark_service_offline("offline-service._http._tcp.local.");
         assert!(removed);
-        assert_eq!(state.metrics.get("services_removed"), Some(&1)); // Still 1, not 2
+        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1)); // Still 1, not 2
         assert!(!state.services[1].online); // Service should still be offline
     }
 
@@ -3877,13 +3877,13 @@ mod tests {
         // First removal - should increment metric
         let removed1 = state.mark_service_offline("duplicate-service._http._tcp.local.");
         assert!(removed1);
-        assert_eq!(state.metrics.get("services_removed"), Some(&1));
+        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1));
         assert!(!state.services[0].online);
 
         // Second removal of same service - should not increment metric
         let removed2 = state.mark_service_offline("duplicate-service._http._tcp.local.");
         assert!(removed2);
-        assert_eq!(state.metrics.get("services_removed"), Some(&1)); // Still 1, not 2
+        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1)); // Still 1, not 2
     }
 
     #[test]
@@ -3893,7 +3893,7 @@ mod tests {
         // Try to remove a service that doesn't exist
         let removed = state.mark_service_offline("nonexistent._http._tcp.local.");
         assert!(!removed);
-        assert_eq!(state.metrics.get("services_removed"), None);
+        assert_eq!(state.metrics.get("services_marked_offline"), None);
     }
 
     #[test]
