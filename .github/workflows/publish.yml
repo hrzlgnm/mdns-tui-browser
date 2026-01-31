@@ -9,6 +9,13 @@ on:
       - published
 
 jobs:
+  source:
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/source-checksums-reusable.yml
+    secrets: inherit
+
   build:
     permissions:
       id-token: write
