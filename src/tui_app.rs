@@ -518,6 +518,9 @@ impl AppState {
     }
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
+        // Debug: Log all key events to see what's happening
+        eprintln!("DEBUG: Key event: {:?}, modifiers: {:?}", key.code, key.modifiers);
+
         match key.code {
             // Quit actions
             KeyCode::Char('q') => {
@@ -608,6 +611,7 @@ impl AppState {
                 true
             }
 
+<<<<<<< HEAD
             // Page navigation - check modifiers in order of specificity
             // Shift+PageUp/PageDown for service type page navigation (more standard desktop shortcuts)
             KeyCode::PageUp => {
@@ -641,15 +645,33 @@ impl AppState {
                 } else {
                     self.navigate_services_page_down();
                 }
-                true
-            }
-
-            KeyCode::PageDown
+=======
+            // Page navigation - check Ctrl modifiers first
+            KeyCode::PageUp => {
+                eprintln!("DEBUG: PageUp key received! modifiers: {:?}", key.modifiers);
                 if key
                     .modifiers
                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
             {
-                self.navigate_service_types_page_down();
+                self.navigate_service_types_page_up();
+            } else {
+                self.navigate_services_page_up();
+            }
+                true
+            }
+>>>>>>> 6055cc0fff735758dae65041c7e2f42636b80ab4
+                true
+            }
+
+            KeyCode::PageDown => {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    self.navigate_service_types_page_down();
+                } else {
+                    self.navigate_services_page_down();
+                }
                 true
             }
 
@@ -671,13 +693,18 @@ impl AppState {
                 true
             }
 
+<<<<<<< HEAD
             // Character-based page navigation for services
+=======
+            // Regular page navigation for services (character alternatives)
+>>>>>>> 6055cc0fff735758dae65041c7e2f42636b80ab4
             KeyCode::Char('b') => {
                 self.navigate_services_page_up();
                 true
             }
 
             KeyCode::Char('f') | KeyCode::Char(' ') => {
+<<<<<<< HEAD
                 self.navigate_services_page_down();
                 true
             }
@@ -687,6 +714,8 @@ impl AppState {
                     .modifiers
                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
             {
+=======
+>>>>>>> 6055cc0fff735758dae65041c7e2f42636b80ab4
                 self.navigate_services_page_down();
                 true
             }
