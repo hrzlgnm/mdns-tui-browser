@@ -39,6 +39,6 @@ check() {
 }
 package() {
     install -Dm755 "\${srcdir}/\${_builddir}/target/release/mdns-tui-browser" "\$pkgdir"/usr/bin/mdns-tui-browser
-    install -Dm644 "\${srcdir}/\${_builddir}/LICENSE "\$pkgdir"/usr/share/licenses/mdns-tui-browser/LICENSE
+    install -Dm644 "\${srcdir}/\${_builddir}"/LICENSE "\$pkgdir"/usr/share/licenses/mdns-tui-browser/LICENSE
 }
 EOF
