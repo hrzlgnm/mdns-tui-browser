@@ -42,8 +42,8 @@ jobs:
       - name: 📥🔢☑️
         run: |
           set -o errexit
-          curl -sLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${{ needs.tag.outputs.tag }}.tar.gz
-          curl -sLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${{ needs.tag.outputs.tag }}.zip
+          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${{ needs.tag.outputs.tag }}.tar.gz
+          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${{ needs.tag.outputs.tag }}.zip
           for file in *; do
             if [ -f "$file" ] && [[ "$file" != *.sha* ]]; then
               ${{ matrix.algorithm }}sum "$file" > "$file.${{ matrix.algorithm }}"
