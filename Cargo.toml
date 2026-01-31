@@ -1,6 +1,6 @@
 [package]
 name = "mdns-tui-browser"
-version = "1.6.4"
+version = "1.7.0"
 edition = "2024"
 rust-version = "1.85"
 
