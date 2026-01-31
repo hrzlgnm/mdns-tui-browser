@@ -601,23 +601,39 @@ impl AppState {
                 true
             }
 
-            // Regular page navigation for services
-            KeyCode::PageUp | KeyCode::Char('b') => {
+            // Regular page navigation for services (only when no Ctrl modifier)
+            KeyCode::PageUp | KeyCode::Char('b')
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.navigate_services_page_up();
                 true
             }
 
-            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
+            KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ')
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.navigate_services_page_down();
                 true
             }
 
-            KeyCode::Home => {
+            KeyCode::Home
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.navigate_services_to_first();
                 true
             }
 
-            KeyCode::End => {
+            KeyCode::End
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.navigate_services_to_last();
                 true
             }
