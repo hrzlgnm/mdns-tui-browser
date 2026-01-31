@@ -77,7 +77,7 @@ jobs:
           su runner -c '
             set -o errexit
             mkdir -p ~/.ssh
-            printf '%s' "${{ secrets.AUR_DEPLOY_KEY }}" > ~/.ssh/aur
+            printf '%s\n' "${{ secrets.AUR_DEPLOY_KEY }}" > ~/.ssh/aur
             chmod 600 ~/.ssh/aur
             echo "Host aur.archlinux.org" >> ~/.ssh/config
             echo "  IdentityFile ~/.ssh/aur" >> ~/.ssh/config
