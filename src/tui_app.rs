@@ -1522,13 +1522,19 @@ pub async fn run_tui() -> Result<(), Box<dyn std::error::Error>> {
                                     match service_event {
                                         ServiceEvent::ServiceRemoved(service_type, fullname) => {
                                             let mut state = state_inner.write().await;
-                                            if let Some(entry) = state
+                                            let service_idx = state
                                                 .services
-                                                .iter_mut()
-                                                .find(|s| s.fullname == fullname)
-                                            {
-                                                entry.go_offline_at(current_timestamp_micros());
-                                                state.update_metric("services_removed");
+                                                .iter()
+                                                .position(|s| s.fullname == fullname);
+
+                                            if let Some(idx) = service_idx {
+                                                // Only count as removed if the service was online
+                                                let was_online = state.services[idx].online;
+                                                if was_online {
+                                                    state.update_metric("services_removed");
+                                                }
+                                                state.services[idx]
+                                                    .go_offline_at(current_timestamp_micros());
                                                 state.invalidate_cache_and_validate();
                                                 state.remove_service_type(&service_type);
                                                 let _ = notification_sender_inner
@@ -3825,5 +3831,89 @@ mod tests {
             online: true,
             timestamp_micros: current_timestamp_micros(),
         }
+    }
+
+    // Tests for service removal metric fix
+    #[test]
+    fn test_service_removed_metric_only_counts_online_services() {
+        let mut state = AppState::new();
+
+        // Add an online service
+        let online_service = create_test_service("test-service", "_http._tcp.local.", 8080);
+        state.services.push(online_service);
+
+        // Add an offline service
+        let mut offline_service = create_test_service("offline-service", "_http._tcp.local.", 8081);
+        offline_service.online = false;
+        state.services.push(offline_service);
+
+        // Initially no services removed
+        assert_eq!(state.metrics.get("services_removed"), None);
+
+        // Simulate removal of online service
+        let service_idx = state
+            .services
+            .iter()
+            .position(|s| s.fullname == "test-service._http._tcp.local.")
+            .unwrap();
+        let was_online = state.services[service_idx].online;
+        if was_online {
+            state.update_metric("services_removed");
+        }
+        state.services[service_idx].go_offline_at(current_timestamp_micros());
+
+        // Should count as removed since it was online
+        assert_eq!(state.metrics.get("services_removed"), Some(&1));
+
+        // Simulate removal of offline service (duplicate event)
+        let service_idx = state
+            .services
+            .iter()
+            .position(|s| s.fullname == "offline-service._http._tcp.local.")
+            .unwrap();
+        let was_online = state.services[service_idx].online;
+        if was_online {
+            state.update_metric("services_removed");
+        }
+        state.services[service_idx].go_offline_at(current_timestamp_micros());
+
+        // Should not increment since it was already offline
+        assert_eq!(state.metrics.get("services_removed"), Some(&1));
+    }
+
+    #[test]
+    fn test_service_removed_metric_prevents_double_counting() {
+        let mut state = AppState::new();
+
+        // Add an online service
+        let service = create_test_service("duplicate-service", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        // Simulate first removal event
+        let service_idx = state
+            .services
+            .iter()
+            .position(|s| s.fullname == "duplicate-service._http._tcp.local.")
+            .unwrap();
+        let was_online = state.services[service_idx].online;
+        if was_online {
+            state.update_metric("services_removed");
+        }
+        state.services[service_idx].go_offline_at(current_timestamp_micros());
+
+        // Simulate second removal event (duplicate)
+        let service_idx = state
+            .services
+            .iter()
+            .position(|s| s.fullname == "duplicate-service._http._tcp.local.")
+            .unwrap();
+        let was_online = state.services[service_idx].online;
+        if was_online {
+            state.update_metric("services_removed");
+        }
+        state.services[service_idx].go_offline_at(current_timestamp_micros());
+
+        // Should only count once despite two removal events
+        assert_eq!(state.metrics.get("services_removed"), Some(&1));
     }
 }
