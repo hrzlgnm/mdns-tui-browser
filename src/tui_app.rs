@@ -858,6 +858,7 @@ impl AppState {
     fn navigate_service_types_to_first(&mut self) {
         self.selected_type = None;
         self.types_scroll_offset = 0;
+        self.update_service_type_selection(self.selected_type);
     }
 
     fn navigate_service_types_to_last(&mut self) {
@@ -869,6 +870,7 @@ impl AppState {
                 self.types_scroll_offset = last_idx - self.visible_types + 1;
             }
         }
+        self.update_service_type_selection(self.selected_type);
     }
 
     fn navigate_services_page_up(&mut self) {
@@ -3785,7 +3787,7 @@ mod tests {
         // Test to first
         state.selected_type = Some(15);
         state.navigate_service_types_to_first();
-        assert_eq!(state.selected_type, None);
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
         assert_eq!(state.types_scroll_offset, 0);
 
         // Test to last
@@ -3870,7 +3872,7 @@ mod tests {
 
         // Test to first resets offset
         state.navigate_service_types_to_first();
-        assert_eq!(state.selected_type, None);
+        assert_eq!(state.selected_type, None); // Should go to "All Types"
         assert_eq!(state.types_scroll_offset, 0);
 
         // Test to last adjusts offset correctly
