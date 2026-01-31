@@ -680,6 +680,8 @@ impl AppState {
             }
             true
         } else {
+            // Ensure service type exists for filtering purposes
+            self.add_service_type(&service_entry.service_type);
             self.services.push(service_entry);
             self.update_metric("services_discovered");
             false
@@ -3504,6 +3506,47 @@ mod tests {
         assert_eq!(state.services.len(), 1);
         assert_eq!(state.services[0].subtype, Some("_printer".to_string()));
         assert_eq!(state.metrics.get("services_updated"), Some(&1));
+    }
+
+    #[test]
+    fn test_add_or_update_service_ensures_service_type_exists() {
+        let mut state = AppState::new();
+
+        // Start with no service types
+        assert_eq!(state.service_types.len(), 0);
+
+        // Add a service with a new type
+        let service = create_test_service("test1", "_newtype._tcp.local.", 8080);
+        let was_existing = state.add_or_update_service(service);
+
+        // Service should be added and service type should be created
+        assert!(!was_existing);
+        assert_eq!(state.services.len(), 1);
+        assert_eq!(state.service_types.len(), 1);
+        assert!(
+            state
+                .service_types
+                .contains(&"_newtype._tcp.local.".to_string())
+        );
+
+        // Add another service with the same type
+        let service2 = create_test_service("test2", "_newtype._tcp.local.", 8081);
+        let was_existing2 = state.add_or_update_service(service2);
+
+        // Service should be added but service type count should stay the same
+        assert!(!was_existing2);
+        assert_eq!(state.services.len(), 2);
+        assert_eq!(state.service_types.len(), 1);
+
+        // Update an existing service
+        let mut service3 = create_test_service("test1", "_newtype._tcp.local.", 8082);
+        service3.online = false; // Change to trigger update
+        let was_existing3 = state.add_or_update_service(service3);
+
+        // Service should be updated but service type count should stay the same
+        assert!(was_existing3);
+        assert_eq!(state.services.len(), 2);
+        assert_eq!(state.service_types.len(), 1);
     }
 
     // Test cache invalidation scenarios
