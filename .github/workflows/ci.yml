@@ -45,6 +45,7 @@ jobs:
     name: "🔍 Detect Changes"
     runs-on: ubuntu-slim
     outputs:
+      aur: ${{ steps.filter.outputs.aur }}
       branch: ${{ steps.branch.outputs.branch }}
       code: ${{ steps.filter.outputs.code }}
       lint: ${{ steps.filter.outputs.lint }}
@@ -58,6 +59,11 @@ jobs:
         id: filter
         with:
           filters: |
+            aur:
+              - '.github/workflows/aur-reusable.yml'
+              - '.github/actions/lateste-release-info/action.yml'
+              - 'packaging/aur/**'
+              
             code:
               - '.github/actions/setup-*/**'
               - '.github/workflows/build-reusable.yml'
@@ -103,10 +109,17 @@ jobs:
     with:
       branch: ${{ needs.changes.outputs.branch }}
 
+  aur:
+    name: AUR
+    needs: changes
+    if: needs.changes.outputs.aur == 'true'
+    uses: ./.github/workflows/aur-reusable.yml
+
   all-required-green: # This job does nothing and is only used for the branch protection
     name: CI Status
     runs-on: ubuntu-latest
     needs:
+      - aur
       - build
       - lint
       - tests
@@ -117,6 +130,7 @@ jobs:
         uses: re-actors/alls-green@2765efec08f0fd63e83ad900f5fd75646be69ff6
         with:
           allowed-skips: >-
+            aur,
             lint,
             tests,
             build,
