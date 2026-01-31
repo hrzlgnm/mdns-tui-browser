@@ -13,7 +13,7 @@ fi
 cat <<EOF
 # Maintainer: Valentin Batz <valentin.batz+archlinux@posteo.de>
 
-pkgname=mdns-browser
+pkgname=mdns-tuibrowser
 pkgver=$version
 pkgrel=1
 pkgdesc="A terminal-based mDNS service browser"
