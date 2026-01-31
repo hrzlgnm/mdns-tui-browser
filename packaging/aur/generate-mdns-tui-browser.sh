@@ -14,7 +14,7 @@ cat <<EOF
 # Maintainer: Valentin Batz <valentin.batz+archlinux@posteo.de>
 
 pkgname=mdns-tui-browser
-pkgver=$version
+pkgver=${version#v}
 pkgrel=1
 pkgdesc="A terminal-based mDNS service browser"
 arch=('x86_64')
@@ -22,7 +22,7 @@ url="https://github.com/hrzlgnm/mdns-tui-browser"
 license=('MIT')
 makedepends=('cargo' 'cargo-auditable' 'git' 'rust')
 options=('!emptydirs')
-source=("\$pkgname-v\$pkgver.tar.gz::https://github.com/hrzlgnm/\$pkgname/archive/refs/tags/\$pkgver.tar.gz")
+source=("\$pkgname-\$pkgver.tar.gz::https://github.com/hrzlgnm/\$pkgname/archive/refs/tags/v\$pkgver.tar.gz")
 sha256sums=('$sha256sum')
 _builddir="\$pkgname-\$pkgver"
 prepare() {
@@ -39,6 +39,7 @@ check() {
 }
 package() {
     install -Dm755 "\${srcdir}/\${_builddir}/target/release/mdns-tui-browser" "\$pkgdir"/usr/bin/mdns-tui-browser
-    install -Dm644 "\${srcdir}/\${_builddir}"/LICENSE "\$pkgdir"/usr/share/licenses/mdns-tui-browser/LICENSE
+    install -Dm644 "\${srcdir}/\${_builddir}"/LICENSE "\$pkgdir"/usr/share/licenses/\$pkgname/LICENSE
+    install -Dm644 "\${srcdir}/\${_builddir}"/README.md "\$pkgdir"/usr/share/doc/\$pkgname/README.md
 }
 EOF
