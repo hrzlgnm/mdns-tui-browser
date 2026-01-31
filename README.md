@@ -30,6 +30,17 @@ cargo run
 cargo build --release
 ```
 
+### Install from AUR (Arch Linux)
+
+You can install `mdns-tui-browser` from the Arch User Repository (AUR) using `yay`:
+
+```bash
+# Install using yay
+yay -S mdns-tui-browser
+```
+
+This will install the latest version from the AUR and handle updates automatically with your regular system updates.
+
 ### CLI Options
 
 ```bash
