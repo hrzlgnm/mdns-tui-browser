@@ -847,7 +847,9 @@ impl AppState {
             }
         };
 
-        if let Some(new_idx) = new_type {
+        if new_type.is_none() {
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
             if self.visible_types > 0 && new_idx >= self.types_scroll_offset + self.visible_types {
                 self.types_scroll_offset = new_idx - self.visible_types + 1;
             }
