@@ -564,6 +564,17 @@ impl AppState {
                 true
             }
 
+            // Service type page navigation
+            KeyCode::Char('H') => {
+                self.navigate_service_types_page_up();
+                true
+            }
+
+            KeyCode::Char('L') => {
+                self.navigate_service_types_page_down();
+                true
+            }
+
             // Page navigation
             KeyCode::PageUp | KeyCode::Char('b') => {
                 self.navigate_services_page_up();
@@ -572,6 +583,25 @@ impl AppState {
 
             KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
                 self.navigate_services_page_down();
+                true
+            }
+
+            // Service type beginning/end navigation with Ctrl+Home/Ctrl+End
+            KeyCode::Home
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.navigate_service_types_to_first();
+                true
+            }
+
+            KeyCode::End
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.navigate_service_types_to_last();
                 true
             }
 
@@ -764,6 +794,91 @@ impl AppState {
             }
         }
         self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_page_up(&mut self) {
+        let scroll_amount = self.visible_types.saturating_sub(1);
+        let new_type = match self.selected_type {
+            None => None, // Already at "All Types"
+            Some(idx) => {
+                if idx >= scroll_amount {
+                    Some(idx - scroll_amount)
+                } else {
+                    None // Jump to "All Types"
+                }
+            }
+        };
+
+        if new_type.is_none() {
+            // Moving to "All Types" - ensure it's visible at visual index 0
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
+            // Update scroll offset for types list using actual visible count
+            if new_idx < self.types_scroll_offset {
+                self.types_scroll_offset = new_idx;
+            } else if self.visible_types > 0
+                && new_idx >= self.types_scroll_offset + self.visible_types
+            {
+                self.types_scroll_offset = new_idx - self.visible_types + 1;
+            }
+        }
+        self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_page_down(&mut self) {
+        let scroll_amount = self.visible_types.saturating_sub(1);
+        let new_type = match self.selected_type {
+            None => {
+                // Move from "All Types" to service type at scroll_amount position
+                if self.service_types.len() > scroll_amount {
+                    Some(scroll_amount)
+                } else if !self.service_types.is_empty() {
+                    Some(self.service_types.len().saturating_sub(1))
+                } else {
+                    None
+                }
+            }
+            Some(idx) => {
+                let target_idx = idx + scroll_amount;
+                if target_idx < self.service_types.len() {
+                    Some(target_idx)
+                } else {
+                    Some(self.service_types.len().saturating_sub(1)) // Go to last type
+                }
+            }
+        };
+
+        if new_type.is_none() {
+            // Moving to "All Types" - ensure it's visible at visual index 0
+            self.types_scroll_offset = 0;
+        } else if let Some(new_idx) = new_type {
+            // Update scroll offset for types list using actual visible count
+            if self.visible_types > 0 && new_idx >= self.types_scroll_offset + self.visible_types {
+                self.types_scroll_offset = new_idx - self.visible_types + 1;
+            }
+        }
+        self.update_service_type_selection(new_type);
+    }
+
+    fn navigate_service_types_to_first(&mut self) {
+        self.selected_type = None; // "All Types" is the first
+        self.types_scroll_offset = 0;
+        self.update_service_type_selection(None);
+    }
+
+    fn navigate_service_types_to_last(&mut self) {
+        if !self.service_types.is_empty() {
+            let last_idx = self.service_types.len().saturating_sub(1);
+            self.selected_type = Some(last_idx);
+            // Update scroll offset to ensure the last item is visible
+            if self.visible_types > 0 && last_idx >= self.visible_types {
+                self.types_scroll_offset = last_idx - self.visible_types + 1;
+            }
+        } else {
+            self.selected_type = None;
+            self.types_scroll_offset = 0;
+        }
+        self.update_service_type_selection(self.selected_type);
     }
 
     fn navigate_services_page_up(&mut self) {
@@ -1182,9 +1297,11 @@ fn render_help_popup(f: &mut Frame) {
         Line::from(" Navigation:"),
         Line::from("   ↑/↓ or j/k          - Navigate services list"),
         Line::from("   ←/→ or h/l          - Switch between service types"),
+        Line::from("   H/L                 - Page through service types"),
         Line::from("   PageUp/Down         - Scroll services list by page"),
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
+        Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove offline services"),
