@@ -111,6 +111,7 @@ struct AppState {
     cache_dirty: bool,
     cached_sorted: bool,
     show_help_popup: bool,
+    help_scroll_offset: usize,
     show_metrics_popup: bool,
     metrics: BTreeMap<String, u64>,
     sort_field: SortField,
@@ -139,6 +140,7 @@ impl AppState {
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
             filter_query: String::new(),
+            help_scroll_offset: 0,
             filter_input_mode: false,
         };
         state.validate_selected_type();
@@ -483,10 +485,26 @@ impl AppState {
         }
     }
 
-    fn handle_help_popup_key(&mut self, _key: KeyEvent) -> bool {
-        // Any key just closes the help popup and returns to normal mode
-        self.show_help_popup = false;
-        true // Continue running
+    fn handle_help_popup_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            // Arrow keys for scrolling
+            KeyCode::Up => {
+                if self.help_scroll_offset > 0 {
+                    self.help_scroll_offset -= 1;
+                }
+                true
+            }
+            KeyCode::Down => {
+                self.help_scroll_offset += 1;
+                true
+            }
+            // Any other key closes the help popup and returns to normal mode
+            _ => {
+                self.show_help_popup = false;
+                self.help_scroll_offset = 0; // Reset scroll offset when closing
+                true // Continue running
+            }
+        }
     }
 
     fn handle_metrics_popup_key(&mut self, _key: KeyEvent) -> bool {
@@ -1051,7 +1069,7 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
 
     // Render popups if active
     if app_state.show_help_popup {
-        render_help_popup(f);
+        render_help_popup(f, app_state.help_scroll_offset);
     } else if app_state.show_metrics_popup {
         render_metrics_popup(f, app_state);
     }
@@ -1299,7 +1317,7 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState) {
     f.render_widget(status, status_area);
 }
 
-fn render_help_popup(f: &mut Frame) {
+fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     let help_content = vec![
         Line::from(""),
         Line::from(" Navigation:"),
@@ -1310,6 +1328,10 @@ fn render_help_popup(f: &mut Frame) {
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
+        Line::from(" "),
+        Line::from(" Help Controls:"),
+        Line::from("   ↑/↓                 - Scroll this help content"),
+        Line::from("   Any other key        - Close this help popup"),
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove offline services"),
@@ -1359,7 +1381,11 @@ fn render_help_popup(f: &mut Frame) {
         popup_area.height.saturating_sub(2),
     );
 
-    let help_paragraph = Paragraph::new(help_content)
+    // Apply scroll offset to help content
+    let visible_help_content: Vec<Line> =
+        help_content.into_iter().skip(help_scroll_offset).collect();
+
+    let help_paragraph = Paragraph::new(visible_help_content)
         .style(Style::default().fg(Color::White))
         .wrap(Wrap { trim: false });
 
@@ -2451,9 +2477,37 @@ mod tests {
         let mut state = AppState::new();
         state.show_help_popup = true;
 
-        let key = KeyEvent::from(KeyCode::Char('a'));
-        assert!(state.handle_key_event(key)); // Any key should close popup
-        assert!(!state.show_help_popup);
+        // Test scrolling up
+        state.help_scroll_offset = 5;
+        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_event);
+        assert_eq!(result, true);
+        assert!(state.show_help_popup); // Should remain open
+        assert_eq!(state.help_scroll_offset, 4);
+
+        // Test scrolling down
+        state.help_scroll_offset = 3;
+        let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_event);
+        assert_eq!(result, true);
+        assert!(state.show_help_popup); // Should remain open
+        assert_eq!(state.help_scroll_offset, 4);
+
+        // Test scrolling up at boundary (should not go below 0)
+        state.help_scroll_offset = 0;
+        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_event);
+        assert_eq!(result, true);
+        assert!(state.show_help_popup); // Should remain open
+        assert_eq!(state.help_scroll_offset, 0);
+
+        // Test any other key closes popup and resets scroll
+        state.help_scroll_offset = 10;
+        let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_event);
+        assert_eq!(result, true);
+        assert!(!state.show_help_popup); // Should close
+        assert_eq!(state.help_scroll_offset, 0); // Should reset
     }
 
     #[test]
