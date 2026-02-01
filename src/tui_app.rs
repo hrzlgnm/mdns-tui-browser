@@ -508,7 +508,7 @@ impl AppState {
                     popup_area.height.saturating_sub(2),
                 );
                 let max_visible_lines = inner_area.height as usize;
-                
+
                 // Generate actual help content to count lines
                 let help_content = generate_help_content();
                 let total_help_lines = help_content.len();
@@ -546,7 +546,7 @@ impl AppState {
                     popup_area.height.saturating_sub(2),
                 );
                 let max_visible_lines = inner_area.height as usize;
-                
+
                 // Generate actual metrics content to count lines
                 let metrics_content = generate_metrics_content(&self.metrics);
                 let total_metrics_lines = metrics_content.len();
@@ -1091,7 +1091,7 @@ fn current_timestamp_micros() -> u64 {
 fn ui(f: &mut Frame, app_state: &mut AppState) {
     // Store current terminal area for popup calculations
     app_state.terminal_area = f.area();
-    
+
     // Ensure state is consistent before rendering
     app_state.validate_selected_type();
 
@@ -1393,9 +1393,13 @@ fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
         popup_area.height.saturating_sub(2),
     );
 
-    // Apply scroll offset to help content
-    let visible_help_content: Vec<Line> =
-        help_content.into_iter().skip(help_scroll_offset).collect();
+    // Apply scroll offset to help content with clamping
+    let clamped_offset = if help_content.is_empty() {
+        0
+    } else {
+        help_scroll_offset.min(help_content.len().saturating_sub(1))
+    };
+    let visible_help_content: Vec<Line> = help_content.into_iter().skip(clamped_offset).collect();
 
     let help_paragraph = Paragraph::new(visible_help_content)
         .style(Style::default().fg(Color::White))
@@ -1432,11 +1436,12 @@ fn render_metrics_popup(f: &mut Frame, app_state: &AppState, metrics_scroll_offs
         popup_area.height.saturating_sub(2),
     );
 
-    // Apply scroll offset to metrics content
-    let visible_metrics_content: Vec<Line> = metrics_content
-        .into_iter()
-        .skip(metrics_scroll_offset)
-        .collect();
+    // Apply scroll offset to metrics content with clamping
+    let visible_lines = inner_area.height as usize;
+    let max_offset = metrics_content.len().saturating_sub(visible_lines);
+    let clamped_offset = metrics_scroll_offset.min(max_offset);
+    let visible_metrics_content: Vec<Line> =
+        metrics_content.into_iter().skip(clamped_offset).collect();
 
     let metrics_paragraph = Paragraph::new(visible_metrics_content)
         .style(Style::default().fg(Color::White))
@@ -2546,7 +2551,7 @@ mod tests {
     fn test_handle_metrics_popup_key() {
         let mut state = AppState::new();
         state.show_metrics_popup = true;
-        
+
         // Add some metrics to ensure there's content to scroll through
         state.update_metric("test_metric_1");
         state.update_metric("test_metric_2");
@@ -2558,7 +2563,7 @@ mod tests {
         for i in 1..50 {
             state.update_metric(&format!("test_metric_{}", i));
         }
-        
+
         // Test scrolling down when possible
         state.metrics_scroll_offset = 3;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
@@ -2652,7 +2657,7 @@ mod tests {
     fn test_metrics_scrolling_boundaries() {
         let mut state = AppState::new();
         state.show_metrics_popup = true;
-        
+
         // Add some metrics to ensure there's content to scroll through
         for i in 1..20 {
             state.update_metric(&format!("test_metric_{}", i));
@@ -2664,7 +2669,7 @@ mod tests {
         state.handle_key_event(key_event);
         assert_eq!(state.metrics_scroll_offset, 0);
 
-        // Test scrolling up from higher position  
+        // Test scrolling up from higher position
         state.metrics_scroll_offset = 3;
         let initial_offset = state.metrics_scroll_offset;
         state.handle_key_event(key_event);
@@ -2688,7 +2693,7 @@ mod tests {
     #[test]
     fn test_metrics_scrolling_with_popup_state() {
         let mut state = AppState::new();
-        
+
         // Add some metrics to ensure there's content to scroll through
         for i in 1..20 {
             state.update_metric(&format!("test_metric_{}", i));
@@ -2763,7 +2768,7 @@ mod tests {
     fn test_metrics_scroll_with_modifiers() {
         let mut state = AppState::new();
         state.show_metrics_popup = true;
-        
+
         // Add some metrics to ensure there's content to scroll through
         for i in 1..20 {
             state.update_metric(&format!("test_metric_{}", i));
