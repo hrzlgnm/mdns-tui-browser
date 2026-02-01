@@ -73,6 +73,10 @@ mdns-tui-browser -h
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
 
+### Help Popup Controls
+- <kbd>↑</kbd>/<kbd>↓</kbd> - Scroll help content
+- Any other key - Close help popup
+
 ### Quick Filter Mode
 When in filter mode (activated with <kbd>/</kbd>):
 - <kbd>Enter</kbd> - Apply filter

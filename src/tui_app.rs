@@ -1320,6 +1320,10 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState) {
 fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     let help_content = vec![
         Line::from(""),
+        Line::from(" Help Controls:"),
+        Line::from("   ↑/↓                 - Scroll this help content"),
+        Line::from("   Any other key        - Close this help popup"),
+        Line::from(" "),
         Line::from(" Navigation:"),
         Line::from("   ↑/↓ or j/k          - Navigate services list"),
         Line::from("   ←/→ or h/l          - Switch between service types"),
@@ -1328,10 +1332,6 @@ fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
-        Line::from(" "),
-        Line::from(" Help Controls:"),
-        Line::from("   ↑/↓                 - Scroll this help content"),
-        Line::from("   Any other key        - Close this help popup"),
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove offline services"),
@@ -1359,8 +1359,6 @@ fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
         Line::from("   n (normal mode)     - Clear current filter"),
         Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
-        Line::from(" "),
-        Line::from(" Press any key to close this help"),
     ];
 
     let popup_area = create_centered_popup(f.area(), 60, 70);
