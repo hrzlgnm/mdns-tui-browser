@@ -869,16 +869,24 @@ impl AppState {
     fn navigate_service_types_to_last(&mut self) {
         if !self.service_types.is_empty() {
             let last_idx = self.service_types.len().saturating_sub(1);
-            self.selected_type = Some(last_idx);
-            // Update scroll offset to ensure the last item is visible
-            if self.visible_types > 0 && last_idx >= self.visible_types {
+
+            // Reset scroll offset when list fits on screen
+            if self.visible_types > 0 && last_idx < self.visible_types {
+                self.types_scroll_offset = 0;
+            } else if self.visible_types > 0 {
+                // Update scroll offset to ensure last item is visible
                 self.types_scroll_offset = last_idx - self.visible_types + 1;
             }
+
+            self.update_service_type_selection(Some(last_idx));
         } else {
+            // When no service types, reset both selection and scroll offset
             self.selected_type = None;
             self.types_scroll_offset = 0;
+            self.selected_service = 0;
+            self.services_scroll_offset = 0;
+            self.invalidate_cache_and_validate();
         }
-        self.update_service_type_selection(self.selected_type);
     }
 
     fn navigate_services_page_up(&mut self) {
