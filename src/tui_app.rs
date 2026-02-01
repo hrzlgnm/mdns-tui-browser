@@ -2056,7 +2056,213 @@ mod tests {
     }
 
     #[test]
-    fn test_navigate_services_to_first() {
+    fn test_navigate_service_types_page_up() {
+        let mut state = AppState::new();
+        // Add 10 service types to test paging
+        for i in 0..10 {
+            state.add_service_type(&format!("_test{}.._tcp.local.", i));
+        }
+        state.selected_type = Some(8); // Start near the end
+        state.visible_types = 3; // Simulate 3 visible items
+
+        // Page up should move by visible_types - 1 = 2 positions
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(6));
+
+        // Another page up
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(4));
+
+        // Page up from index 1 should go to "All Types"
+        state.selected_type = Some(1);
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None);
+
+        // Page up from "All Types" should stay at "All Types"
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None);
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_up_with_offset() {
+        let mut state = AppState::new();
+        // Add several service types
+        for i in 0..8 {
+            state.add_service_type(&format!("_test{}.._tcp.local.", i));
+        }
+        state.selected_type = Some(5);
+        state.visible_types = 3;
+        state.types_scroll_offset = 3; // Currently showing types 3,4,5
+
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(3));
+        assert_eq!(state.types_scroll_offset, 3); // Scroll offset should stay the same
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_down() {
+        let mut state = AppState::new();
+        // Add 10 service types to test paging
+        for i in 0..10 {
+            state.add_service_type(&format!("_test{}.._tcp.local.", i));
+        }
+        state.selected_type = None; // Start at "All Types"
+        state.visible_types = 3; // Simulate 3 visible items
+
+        // Page down from "All Types" should jump to index 2 (visible_types - 1)
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(2));
+
+        // Another page down should move by 2 positions
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(4));
+
+        // Page down near the end should clamp to last index
+        state.selected_type = Some(8);
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(9)); // Last index
+
+        // Page down from last should stay at last
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(9));
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_down_with_few_types() {
+        let mut state = AppState::new();
+        state.add_service_type("_test1._tcp.local.");
+        state.add_service_type("_test2._tcp.local.");
+        state.selected_type = None;
+        state.visible_types = 5; // More visible than available
+
+        // Page down should go to last available type
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(1)); // Last index
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_up_with_empty_types() {
+        let mut state = AppState::new();
+        state.visible_types = 5;
+        state.selected_type = None;
+
+        // Page up should not crash and stay at None
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.types_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_up_with_zero_visible() {
+        let mut state = AppState::new();
+        state.add_service_type("_test1._tcp.local.");
+        state.add_service_type("_test2._tcp.local.");
+        state.selected_type = Some(1);
+        state.visible_types = 0;
+
+        // Page up with 0 visible should not move
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(1));
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_down_with_empty_types() {
+        let mut state = AppState::new();
+        state.visible_types = 5;
+        state.selected_type = None;
+
+        // Page down should not crash and stay at None
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.types_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_down_with_zero_visible() {
+        let mut state = AppState::new();
+        state.add_service_type("_test1._tcp.local.");
+        state.add_service_type("_test2._tcp.local.");
+        state.selected_type = None;
+        state.visible_types = 0;
+
+        // Page down with 0 visible should move to index 0 (scroll_amount = 0)
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(0));
+    }
+
+    #[test]
+    fn test_navigate_service_types_to_first_with_empty_types() {
+        let mut state = AppState::new();
+        state.visible_types = 5;
+        state.types_scroll_offset = 5;
+
+        state.navigate_service_types_to_first();
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.types_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_service_types_to_last_with_empty_types() {
+        let mut state = AppState::new();
+        state.visible_types = 5;
+        state.types_scroll_offset = 5;
+
+        state.navigate_service_types_to_last();
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.types_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_service_types_to_last_uses_saturating_sub() {
+        let mut state = AppState::new();
+        for i in 0..3 {
+            state.add_service_type(&format!("_test{}.._tcp.local.", i));
+        }
+        state.visible_types = 2;
+
+        state.navigate_service_types_to_last();
+        // Should use .len().saturating_sub(1) = 3-1 = 2
+        assert_eq!(state.selected_type, Some(2));
+        // Scroll offset should position last item at bottom of visible area
+        assert_eq!(state.types_scroll_offset, 1); // 2 - 2 + 1 = 1
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_down_more_than_available() {
+        let mut state = AppState::new();
+        state.add_service_type("_test1._tcp.local.");
+        state.add_service_type("_test2._tcp.local.");
+        state.selected_type = None;
+        state.visible_types = 10; // More visible than available
+
+        // Should go to last available index (1)
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(1));
+    }
+
+    #[test]
+    fn test_service_type_pagination_edge_cases() {
+        let mut state = AppState::new();
+        state.add_service_type("_test1._tcp.local.");
+        state.visible_types = 1; // Only 1 visible item, scroll_amount = 0
+
+        // Test page up with single visible item (scroll_amount = 0, so stays at index 0)
+        state.selected_type = Some(0);
+        state.navigate_service_types_page_up();
+        assert_eq!(state.selected_type, Some(0));
+
+        // Test page down with single visible item
+        state.selected_type = None;
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(0));
+
+        // Test page down from last with single visible item
+        state.navigate_service_types_page_down();
+        assert_eq!(state.selected_type, Some(0));
+    }
+
+    #[test]
+    fn test_navigate_service_types_to_first() {
         let mut state = AppState::new();
         state
             .services
