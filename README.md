@@ -58,6 +58,8 @@ mdns-tui-browser -h
 
 - <kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>j</kbd>/<kbd>k</kbd> - Navigate services list
 - <kbd>←</kbd>/<kbd>→</kbd> or <kbd>h</kbd>/<kbd>l</kbd> - Switch between service types  
+- <kbd>H</kbd>/<kbd>L</kbd> - Page through service types
+- <kbd>Ctrl</kbd>+<kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service type
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
 - <kbd>s</kbd> - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
@@ -70,6 +72,10 @@ mdns-tui-browser -h
 - <kbd>m</kbd> - Show service metrics
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
+
+### Help Popup Controls
+- <kbd>↑</kbd>/<kbd>↓</kbd> - Scroll help content
+- Any other key - Close help popup
 
 ### Quick Filter Mode
 When in filter mode (activated with <kbd>/</kbd>):
