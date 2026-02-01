@@ -54,4 +54,4 @@ jobs:
       - name: 📎 Run clippy and fail if any warnings
         shell: bash
         run: |
-          cargo clippy -- -D warnings
+          cargo clippy --tests -- -D warnings

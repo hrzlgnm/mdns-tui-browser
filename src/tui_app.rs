@@ -2568,7 +2568,7 @@ mod tests {
         state.metrics_scroll_offset = 3;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
-        assert_eq!(result, true);
+        assert!(result);
         assert!(state.show_metrics_popup); // Should remain open
         // The exact scroll offset now depends on content length and terminal size
         assert!(state.metrics_scroll_offset >= 3); // Should not decrease
@@ -2577,7 +2577,7 @@ mod tests {
         state.metrics_scroll_offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
-        assert_eq!(result, true);
+        assert!(result);
         assert!(state.show_metrics_popup); // Should remain open
         assert_eq!(state.metrics_scroll_offset, 0);
 
@@ -2585,7 +2585,7 @@ mod tests {
         state.metrics_scroll_offset = 10;
         let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
-        assert_eq!(result, true);
+        assert!(result);
         assert!(!state.show_metrics_popup); // Should close
         assert_eq!(state.metrics_scroll_offset, 0); // Should reset
     }
@@ -2599,14 +2599,14 @@ mod tests {
         state.help_scroll_offset = 0;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
-        assert_eq!(result, true);
+        assert!(result);
         assert!(state.show_help_popup); // Should remain open
 
         // Test scrolling up when at boundary (should not go below 0)
         state.help_scroll_offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
-        assert_eq!(result, true);
+        assert!(result);
         assert!(state.show_help_popup); // Should remain open
         assert_eq!(state.help_scroll_offset, 0);
 
@@ -2614,7 +2614,7 @@ mod tests {
         state.help_scroll_offset = 10;
         let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
-        assert_eq!(result, true);
+        assert!(result);
         assert!(!state.show_help_popup); // Should close
         assert_eq!(state.help_scroll_offset, 0); // Should reset
     }
