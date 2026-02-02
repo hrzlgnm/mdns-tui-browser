@@ -15,7 +15,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
@@ -121,10 +121,13 @@ struct AppState {
     filter_input_mode: bool,
     terminal_area: ratatui::layout::Rect,
     additional_service_types: Vec<String>,
+    original_additional_service_types: HashSet<String>,
 }
 
 impl AppState {
     fn new(additional_service_types: Vec<String>) -> Self {
+        let original_additional_service_types: HashSet<String> =
+            additional_service_types.iter().cloned().collect();
         let mut state = Self {
             services: Vec::new(),
             service_types: Vec::new(),
@@ -148,6 +151,7 @@ impl AppState {
             metrics_scroll_offset: 0,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             additional_service_types,
+            original_additional_service_types,
         };
         state.validate_selected_type();
         state
@@ -1221,11 +1225,19 @@ fn render_service_types_list(
             .iter()
             .enumerate()
             .map(|(i, service_type)| {
-                let style = if app_state.selected_type == Some(i) {
+                let mut style = if app_state.selected_type == Some(i) {
                     Style::default().bg(Color::DarkGray).fg(Color::White)
                 } else {
                     Style::default()
                 };
+
+                // If this is an additional service type, display it in italic
+                if app_state
+                    .original_additional_service_types
+                    .contains(service_type)
+                {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
                 let display_type = format_service_type_for_display(service_type);
                 ListItem::new(Line::from(Span::styled(display_type, style)))
             }),
@@ -2046,6 +2058,7 @@ mod tests {
         assert!(state.additional_service_types.is_empty());
         assert_eq!(state.services.len(), 0);
         assert_eq!(state.service_types.len(), 0);
+        assert!(state.original_additional_service_types.is_empty());
     }
 
     #[test]
@@ -2055,6 +2068,12 @@ mod tests {
 
         assert_eq!(state.additional_service_types.len(), 1);
         assert_eq!(state.additional_service_types[0], "_printer._tcp.local.");
+        assert_eq!(state.original_additional_service_types.len(), 1);
+        assert!(
+            state
+                .original_additional_service_types
+                .contains("_printer._tcp.local.")
+        );
     }
 
     #[test]
@@ -2165,14 +2184,14 @@ mod tests {
     fn test_cli_service_types_parsing() {
         // This test simulates behavior that happens in main.rs with normalization
         let input_types = vec!["_http._tcp".to_string(), "_ssh._tcp".to_string()];
-        let additional_types: Vec<String> = input_types
+        let additional_types: HashSet<String> = input_types
             .into_iter()
             .map(|service_type| normalize_service_type(&service_type))
-            .collect();
+            .collect::<HashSet<_>>();
 
         assert_eq!(additional_types.len(), 2);
-        assert!(additional_types.contains(&"_http._tcp.local.".to_string()));
-        assert!(additional_types.contains(&"_ssh._tcp.local.".to_string()));
+        assert!(additional_types.contains("_http._tcp.local."));
+        assert!(additional_types.contains("_ssh._tcp.local."));
     }
 
     // Filter service tests
