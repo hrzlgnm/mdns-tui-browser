@@ -1082,6 +1082,11 @@ enum Notification {
 }
 
 pub fn normalize_service_type(service_type: &str) -> String {
+    // Return empty string for empty or whitespace-only input
+    if service_type.trim().is_empty() {
+        return String::new();
+    }
+
     // If the service type already ends with ".local.", return as-is
     if service_type.ends_with(".local.") {
         service_type.to_string()
@@ -2169,7 +2174,7 @@ mod tests {
     fn test_normalize_service_type_empty_string() {
         let service_type = "";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, ".local.");
+        assert_eq!(normalized, "");
     }
 
     #[test]
