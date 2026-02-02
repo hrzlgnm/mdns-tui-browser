@@ -1769,7 +1769,6 @@ pub async fn run_tui(
             Ok(service_receiver) => {
                 let state_inner = Arc::clone(&state_clone);
                 let notification_sender_inner = notification_sender_clone.clone();
-                let _service_type_clone = service_type.clone();
 
                 tokio::spawn(async move {
                     while let Ok(service_event) = service_receiver.recv_async().await {
