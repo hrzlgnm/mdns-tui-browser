@@ -68,15 +68,29 @@ Some mDNS service implementations don't properly announce their PTR records to `
 
 **Usage:**
 - Accepts comma-separated list of mDNS service types
-- Service types should follow the format: `_service._protocol.local.`
-- Examples: `_http._tcp.local.`, `_ssh._tcp.local.`, `_printer._tcp.local.`
+- Service types can be specified with or without `.local.` suffix (auto-completed if missing)
+- Examples: `_http._tcp.local.`, `_http._tcp`, `_ssh._tcp.local.`, `_ssh._tcp`
 
 **Common Service Types:**
-- `_http._tcp.local.` - HTTP servers
-- `_ssh._tcp.local.` - SSH servers  
-- `_printer._tcp.local.` - Network printers
-- `_airplay._tcp.local.` - Apple AirPlay devices
-- `_raop._tcp.local.` - AirPlay audio devices
+- `_http._tcp.local.` or `_http._tcp` - HTTP servers
+- `_ssh._tcp.local.` or `_ssh._tcp` - SSH servers  
+- `_printer._tcp.local.` or `_printer._tcp` - Network printers
+- `_airplay._tcp.local.` or `_airplay._tcp` - Apple AirPlay devices
+- `_raop._tcp.local.` or `_raop._tcp` - AirPlay audio devices
+
+**Auto-completion Examples:**
+```bash
+# Browse with additional service types (full form)
+mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
+mdns-tui-browser -s "_printer._tcp.local."
+
+# Browse with shortened service types (auto-completed with .local.)
+mdns-tui-browser -s "_http._tcp,_ssh._tcp"
+mdns-tui-browser -s "_printer._tcp.,_airplay._tcp"
+
+# Mixed usage (full and shortened forms)
+mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp,_airplay._tcp"
+```
 
 ## Controls
 

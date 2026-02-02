@@ -1077,6 +1077,16 @@ enum Notification {
     MetricsUpdated,
 }
 
+pub fn normalize_service_type(service_type: &str) -> String {
+    // If the service type already ends with ".local.", return as-is
+    if service_type.ends_with(".local.") {
+        service_type.to_string()
+    } else {
+        // Add ".local." suffix if missing
+        format!("{}.local.", service_type.trim_end_matches('.'))
+    }
+}
+
 fn is_valid_service_type(service_type: &str) -> bool {
     // Just ignore subtypes in enumeration, other
     // invalid types are covered by browse resulting in an error
@@ -2101,14 +2111,65 @@ mod tests {
         }
     }
 
+    // Service type normalization tests
+    #[test]
+    fn test_normalize_service_type_with_local_suffix() {
+        let service_type = "_http._tcp.local.";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_without_local_suffix() {
+        let service_type = "_http._tcp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_with_trailing_dot() {
+        let service_type = "_ssh._tcp.";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_ssh._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_short_form() {
+        let service_type = "_printer";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_printer.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_multiple_trailing_dots() {
+        let service_type = "_airplay._tcp..";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_airplay._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_empty_string() {
+        let service_type = "";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, ".local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_already_complete() {
+        let service_type = "_raop._tcp.local.";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_raop._tcp.local.");
+    }
+
     // Integration test to simulate CLI parsing behavior
     #[test]
     fn test_cli_service_types_parsing() {
-        // This test simulates the behavior that happens in main.rs
-        let additional_types = [
-            "_http._tcp.local.".to_string(),
-            "_ssh._tcp.local.".to_string(),
-        ];
+        // This test simulates behavior that happens in main.rs with normalization
+        let input_types = vec!["_http._tcp".to_string(), "_ssh._tcp".to_string()];
+        let additional_types: Vec<String> = input_types
+            .into_iter()
+            .map(|service_type| normalize_service_type(&service_type))
+            .collect();
 
         assert_eq!(additional_types.len(), 2);
         assert!(additional_types.contains(&"_http._tcp.local.".to_string()));
