@@ -19,6 +19,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🎛️ **Service Type Filtering**: Browse different service types separately
 - 🔍 **Quick Filter**: Text-based search across all service fields
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
+- ⚙️ **Custom Service Discovery**: Specify additional service types via CLI for hard-to-discover services
 
 ## Quick Start
 
@@ -52,6 +53,43 @@ mdns-tui-browser -V
 # Show help
 mdns-tui-browser --help
 mdns-tui-browser -h
+
+# Browse with additional service types
+mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
+mdns-tui-browser -s "_printer._tcp.local."
+
+# Browse with multiple service types (comma-separated)
+mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp.local.,_airplay._tcp.local."
+```
+
+#### Service Types Argument (`--service-types/-s`)
+
+Some mDNS service implementations don't properly announce their PTR records to `_services._dns-sd._udp.local.`, making them undiscoverable through standard enumeration. The `--service-types` argument allows you to specify additional service types to browse for explicitly.
+
+**Usage:**
+- Accepts comma-separated list of mDNS service types
+- Service types can be specified with or without `.local.` suffix (auto-completed if missing)
+- Examples: `_http._tcp.local.`, `_http._tcp`, `_ssh._tcp.local.`, `_ssh._tcp`
+
+**Common Service Types:**
+- `_http._tcp.local.` or `_http._tcp` - HTTP servers
+- `_ssh._tcp.local.` or `_ssh._tcp` - SSH servers  
+- `_printer._tcp.local.` or `_printer._tcp` - Network printers
+- `_airplay._tcp.local.` or `_airplay._tcp` - Apple AirPlay devices
+- `_raop._tcp.local.` or `_raop._tcp` - AirPlay audio devices
+
+**Auto-completion Examples:**
+```bash
+# Browse with additional service types (full form)
+mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
+mdns-tui-browser -s "_printer._tcp.local."
+
+# Browse with shortened service types (auto-completed with .local.)
+mdns-tui-browser -s "_http._tcp,_ssh._tcp"
+mdns-tui-browser -s "_printer._tcp.,_airplay._tcp"
+
+# Mixed usage (full and shortened forms)
+mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp,_airplay._tcp"
 ```
 
 ## Controls
@@ -193,7 +231,7 @@ This ensures that every release binary can be independently verified for securit
 - [ ] Service discovery configuration
 - [ ] Export capabilities
 - [x] Service filtering and search
-- [ ] Custom service type browsing
+- [x] Custom service type browsing
 - [ ] Network interface selection
 
 ## License
