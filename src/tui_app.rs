@@ -2016,9 +2016,12 @@ mod tests {
     // CLI Service Types tests
     #[test]
     fn test_appstate_new_with_additional_service_types() {
-        let additional_types = vec!["_http._tcp.local.".to_string(), "_ssh._tcp.local.".to_string()];
+        let additional_types = vec![
+            "_http._tcp.local.".to_string(),
+            "_ssh._tcp.local.".to_string(),
+        ];
         let state = AppState::new(additional_types.clone());
-        
+
         assert_eq!(state.additional_service_types, additional_types);
         assert_eq!(state.services.len(), 0);
         assert_eq!(state.service_types.len(), 0);
@@ -2030,7 +2033,7 @@ mod tests {
     fn test_appstate_new_with_empty_additional_service_types() {
         let additional_types = vec![];
         let state = AppState::new(additional_types);
-        
+
         assert!(state.additional_service_types.is_empty());
         assert_eq!(state.services.len(), 0);
         assert_eq!(state.service_types.len(), 0);
@@ -2040,7 +2043,7 @@ mod tests {
     fn test_appstate_new_with_single_additional_service_type() {
         let additional_types = vec!["_printer._tcp.local.".to_string()];
         let state = AppState::new(additional_types);
-        
+
         assert_eq!(state.additional_service_types.len(), 1);
         assert_eq!(state.additional_service_types[0], "_printer._tcp.local.");
     }
@@ -2049,15 +2052,15 @@ mod tests {
     fn test_additional_service_types_immutability() {
         let additional_types = vec!["_http._tcp.local.".to_string()];
         let state = AppState::new(additional_types);
-        
+
         // The additional_service_types field should remain unchanged throughout the app lifecycle
         let original_types = state.additional_service_types.clone();
-        
+
         // Simulate some state operations that shouldn't affect additional_service_types
         let mut mutable_state = state;
         mutable_state.add_service_type("_ssh._tcp.local.");
         mutable_state.update_metric("test_metric");
-        
+
         // Verify additional_service_types hasn't changed
         assert_eq!(mutable_state.additional_service_types, original_types);
     }
@@ -2070,25 +2073,31 @@ mod tests {
             "_printer._tcp.local.",
             "_airplay._tcp.local.",
             "_raop._tcp.local.",
-            "http._tcp.local.",      // Currently considered valid by the function
-            "_http.tcp.local.",       // Currently considered valid by the function
-            "_http._tcp.local",       // Currently considered valid by the function
+            "http._tcp.local.", // Currently considered valid by the function
+            "_http.tcp.local.", // Currently considered valid by the function
+            "_http._tcp.local", // Currently considered valid by the function
         ];
-        
+
         for service_type in valid_types {
-            assert!(is_valid_service_type(service_type), 
-                   "Expected {} to be valid", service_type);
+            assert!(
+                is_valid_service_type(service_type),
+                "Expected {} to be valid",
+                service_type
+            );
         }
-        
+
         // Only subtypes are considered invalid by current implementation
         let invalid_types = vec![
             "_sub._http._tcp.local.", // Contains sub
             "_sub._ssh._tcp.local.",  // Contains sub
         ];
-        
+
         for service_type in invalid_types {
-            assert!(!is_valid_service_type(service_type), 
-                   "Expected {} to be invalid", service_type);
+            assert!(
+                !is_valid_service_type(service_type),
+                "Expected {} to be invalid",
+                service_type
+            );
         }
     }
 
@@ -2096,8 +2105,11 @@ mod tests {
     #[test]
     fn test_cli_service_types_parsing() {
         // This test simulates the behavior that happens in main.rs
-        let additional_types = ["_http._tcp.local.".to_string(), "_ssh._tcp.local.".to_string()];
-        
+        let additional_types = [
+            "_http._tcp.local.".to_string(),
+            "_ssh._tcp.local.".to_string(),
+        ];
+
         assert_eq!(additional_types.len(), 2);
         assert!(additional_types.contains(&"_http._tcp.local.".to_string()));
         assert!(additional_types.contains(&"_ssh._tcp.local.".to_string()));
