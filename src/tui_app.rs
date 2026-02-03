@@ -1255,11 +1255,7 @@ fn start_browsing_service_type(
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
                     let mut state = state_inner.write().await;
-                    let was_existing = state.add_or_update_service(entry);
-                    if !was_existing {
-                        // Only sort when new service added
-                        state.services.sort_by(|a, b| a.host.cmp(&b.host));
-                    }
+                    state.add_or_update_service(entry);
                     state.invalidate_cache_and_validate();
                     let _ = notification_sender_inner.send(Notification::ServiceChanged);
                 }

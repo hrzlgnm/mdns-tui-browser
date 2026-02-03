@@ -19,7 +19,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🎛️ **Service Type Filtering**: Browse different service types separately
 - 🔍 **Quick Filter**: Text-based search across all service fields
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
-- ⚙️ **Custom Service Discovery**: Specify additional service types via CLI for hard-to-discover services
+- ⚙️ **Custom Service Discovery**: Specify service types via CLI for hard-to-discover services
 
 ## Quick Start
 
@@ -80,7 +80,7 @@ Some mDNS service implementations don't properly announce their PTR records to `
 
 **Auto-completion Examples:**
 ```bash
-# Browse with additional service types (full form)
+# Browse with custom service types (full form)
 mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
 mdns-tui-browser -s "_printer._tcp.local."
 
