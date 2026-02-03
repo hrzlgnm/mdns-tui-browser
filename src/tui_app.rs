@@ -1153,10 +1153,9 @@ fn handle_browse_failure(
     notification_sender: flume::Sender<Notification>,
     failure_metric_key: &str,
 ) {
-    if state.remove_service_type(service_type) {
-        state.update_metric(failure_metric_key);
-        let _ = notification_sender.send(Notification::ServiceChanged);
-    }
+    state.remove_service_type(service_type);
+    state.update_metric(failure_metric_key);
+    let _ = notification_sender.send(Notification::ServiceChanged);
 }
 
 fn ui(f: &mut Frame, app_state: &mut AppState) {
