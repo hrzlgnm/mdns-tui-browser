@@ -1285,7 +1285,7 @@ fn render_service_types_list(
                     Style::default()
                 };
 
-                // If this is an user_requested service type, display it in italic
+                // If this is a user-requested service type, display it in italic
                 if app_state.user_service_types.contains(service_type) {
                     style = style.add_modifier(Modifier::ITALIC);
                 }
