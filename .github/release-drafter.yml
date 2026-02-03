@@ -8,6 +8,24 @@ name-template: "mDNS TUI Browser Release v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 tag-prefix: v
 
+version-resolver:
+  major:
+    labels:
+      - "major"
+      - "breaking-change"
+  minor:
+    labels:
+      - "feature"
+
+  patch:
+    labels:
+      - "patch"
+      - "bug"
+      - "bugfix"
+      - "dependencies"
+
+  default: patch
+
 category-template: "### $TITLE"
 categories:
   - title: ":boom: Breaking Changes"
