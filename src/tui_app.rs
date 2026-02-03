@@ -5204,4 +5204,207 @@ mod tests {
 
         assert_eq!(state.service_types.len(), 2);
     }
+
+    // Popup navigation tests for ScrollState system
+    #[test]
+    fn test_popup_scroll_up_at_zero() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.help_scroll.offset = 0;
+
+        let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_up);
+
+        assert!(result); // Should continue running
+        assert_eq!(state.help_scroll.offset, 0); // Should stay at 0
+        assert!(state.show_help_popup); // Should remain open
+    }
+
+    #[test]
+    fn test_popup_scroll_down() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.help_scroll.offset = 0;
+        // Set terminal area to have known dimensions
+        state.terminal_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+
+        let key_down = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_down);
+
+        assert!(result); // Should continue running
+        assert!(state.show_help_popup); // Should remain open
+        // Should increase scroll offset if content is longer than visible area
+    }
+
+    #[test]
+    fn test_popup_close_on_any_key() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.help_scroll.offset = 5;
+
+        let key_char = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_char);
+
+        assert!(result); // Should continue running
+        assert!(!state.show_help_popup); // Should close popup
+        assert_eq!(state.help_scroll.offset, 0); // Should reset scroll offset
+    }
+
+    #[test]
+    fn test_metrics_popup_scroll_up_at_zero() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_metrics_popup = true;
+        state.metrics_scroll.offset = 0;
+
+        let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_metrics_popup_key(key_up);
+
+        assert!(result); // Should continue running
+        assert_eq!(state.metrics_scroll.offset, 0); // Should stay at 0
+        assert!(state.show_metrics_popup); // Should remain open
+    }
+
+    #[test]
+    fn test_metrics_popup_scroll_down() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_metrics_popup = true;
+        state.metrics_scroll.offset = 0;
+        state.terminal_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+        // Add some metrics to ensure content exists
+        state.metrics.insert("test_metric".to_string(), 42);
+
+        let key_down = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_metrics_popup_key(key_down);
+
+        assert!(result); // Should continue running
+        assert!(state.show_metrics_popup); // Should remain open
+        // Should increase scroll offset if content is longer than visible area
+    }
+
+    #[test]
+    fn test_metrics_popup_close_on_any_key() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_metrics_popup = true;
+        state.metrics_scroll.offset = 3;
+
+        let key_escape = KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_metrics_popup_key(key_escape);
+
+        assert!(result); // Should continue running
+        assert!(!state.show_metrics_popup); // Should close popup
+        assert_eq!(state.metrics_scroll.offset, 0); // Should reset scroll offset
+    }
+
+    #[test]
+    fn test_popup_scroll_up_with_offset() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.help_scroll.offset = 5;
+
+        let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_up);
+
+        assert!(result); // Should continue running
+        assert_eq!(state.help_scroll.offset, 4); // Should decrease by 1
+        assert!(state.show_help_popup); // Should remain open
+    }
+
+    #[test]
+    fn test_popup_scroll_down_to_max() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.help_scroll.offset = 10;
+        state.terminal_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+
+        let key_down = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_help_popup_key(key_down);
+
+        assert!(result); // Should continue running
+        assert!(state.show_help_popup); // Should remain open
+        // Should not exceed maximum scroll offset
+        assert!(state.help_scroll.offset <= generate_help_content().len());
+    }
+
+    #[test]
+    fn test_popup_independence() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.show_metrics_popup = true;
+        state.help_scroll.offset = 2;
+        state.metrics_scroll.offset = 3;
+
+        // Test help popup scrolling doesn't affect metrics
+        let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        state.handle_help_popup_key(key_up);
+
+        assert_eq!(state.help_scroll.offset, 1);
+        assert_eq!(state.metrics_scroll.offset, 3);
+        assert!(state.show_help_popup);
+        assert!(state.show_metrics_popup);
+
+        // Test metrics popup scrolling doesn't affect help
+        state.handle_metrics_popup_key(key_up);
+
+        assert_eq!(state.help_scroll.offset, 1);
+        assert_eq!(state.metrics_scroll.offset, 2);
+        assert!(state.show_help_popup);
+        assert!(state.show_metrics_popup);
+    }
+
+    #[test]
+    fn test_popup_close_independence() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.show_metrics_popup = true;
+
+        // Close help popup
+        let key_char = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        state.handle_help_popup_key(key_char);
+
+        assert!(!state.show_help_popup);
+        assert!(state.show_metrics_popup);
+
+        // Close metrics popup
+        state.handle_metrics_popup_key(key_char);
+
+        assert!(!state.show_help_popup);
+        assert!(!state.show_metrics_popup);
+    }
+
+    #[test]
+    fn test_scroll_state_reset_functionality() {
+        let mut state = AppState::new(HashSet::new());
+        state.help_scroll.offset = 10;
+        state.metrics_scroll.offset = 15;
+
+        // Test reset on close
+        state.handle_help_popup_key(KeyEvent::new(
+            KeyCode::Char('x'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(state.help_scroll.offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 15); // Should not be affected
+
+        state.handle_metrics_popup_key(KeyEvent::new(
+            KeyCode::Char('x'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(state.help_scroll.offset, 0); // Should remain 0
+        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
+    }
+
+    #[test]
+    fn test_popup_scroll_visible_items_set() {
+        let mut state = AppState::new(HashSet::new());
+        state.show_help_popup = true;
+        state.terminal_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+
+        let key_down = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        state.handle_help_popup_key(key_down);
+
+        // Should set visible_items based on popup dimensions
+        assert!(state.help_scroll.visible_items > 0);
+        // For a 70% height popup in 24-line terminal, inner area calculation results in 12 visible lines
+        assert_eq!(state.help_scroll.visible_items, 12);
+    }
 }
