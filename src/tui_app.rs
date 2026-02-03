@@ -2143,8 +2143,8 @@ mod tests {
         assert_eq!(state.service_types.len(), 0);
         assert_eq!(state.selected_service, 0);
         assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll_offset, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.types_scroll.offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
         assert!(state.cache_dirty);
         assert!(!state.show_help_popup);
         assert!(!state.show_metrics_popup);
@@ -2537,7 +2537,7 @@ mod tests {
             state.add_service_type(&format!("_test{}.._tcp.local.", i));
         }
         state.selected_type = Some(8); // Start near the end
-        state.visible_types = 3; // Simulate 3 visible items
+        state.types_scroll.visible_items = 3; // Simulate 3 visible items
 
         // Page up should move by visible_types - 1 = 2 positions
         state.navigate_service_types_page_up();
@@ -2565,12 +2565,12 @@ mod tests {
             state.add_service_type(&format!("_test{}.._tcp.local.", i));
         }
         state.selected_type = Some(5);
-        state.visible_types = 3;
-        state.types_scroll_offset = 3; // Currently showing types 3,4,5
+        state.types_scroll.visible_items = 3;
+        state.types_scroll.offset = 3; // Currently showing types 3,4,5
 
         state.navigate_service_types_page_up();
         assert_eq!(state.selected_type, Some(3));
-        assert_eq!(state.types_scroll_offset, 3); // Scroll offset should stay the same
+        assert_eq!(state.types_scroll.offset, 3); // Scroll offset should stay the same
     }
 
     #[test]
@@ -2581,7 +2581,7 @@ mod tests {
             state.add_service_type(&format!("_test{}.._tcp.local.", i));
         }
         state.selected_type = None; // Start at "All Types"
-        state.visible_types = 3; // Simulate 3 visible items
+        state.types_scroll.visible_items = 3; // Simulate 3 visible items
 
         // Page down from "All Types" should jump to index 2 (visible_types - 1)
         state.navigate_service_types_page_down();
@@ -2607,7 +2607,7 @@ mod tests {
         state.add_service_type("_test1._tcp.local.");
         state.add_service_type("_test2._tcp.local.");
         state.selected_type = None;
-        state.visible_types = 5; // More visible than available
+        state.types_scroll.visible_items = 5; // More visible than available
 
         // Page down should go to last available type
         state.navigate_service_types_page_down();
@@ -2617,13 +2617,13 @@ mod tests {
     #[test]
     fn test_navigate_service_types_page_up_with_empty_types() {
         let mut state = AppState::new(HashSet::new());
-        state.visible_types = 5;
+        state.types_scroll.visible_items = 5;
         state.selected_type = None;
 
         // Page up should not crash and stay at None
         state.navigate_service_types_page_up();
         assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll_offset, 0);
+        assert_eq!(state.types_scroll.offset, 0);
     }
 
     #[test]
@@ -2632,7 +2632,7 @@ mod tests {
         state.add_service_type("_test1._tcp.local.");
         state.add_service_type("_test2._tcp.local.");
         state.selected_type = Some(1);
-        state.visible_types = 0;
+        state.types_scroll.visible_items = 0;
 
         // Page up with 0 visible should not move
         state.navigate_service_types_page_up();
@@ -2642,13 +2642,13 @@ mod tests {
     #[test]
     fn test_navigate_service_types_page_down_with_empty_types() {
         let mut state = AppState::new(HashSet::new());
-        state.visible_types = 5;
+        state.types_scroll.visible_items = 5;
         state.selected_type = None;
 
         // Page down should not crash and stay at None
         state.navigate_service_types_page_down();
         assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll_offset, 0);
+        assert_eq!(state.types_scroll.offset, 0);
     }
 
     #[test]
@@ -2657,7 +2657,7 @@ mod tests {
         state.add_service_type("_test1._tcp.local.");
         state.add_service_type("_test2._tcp.local.");
         state.selected_type = None;
-        state.visible_types = 0;
+        state.types_scroll.visible_items = 0;
 
         // Page down with 0 visible should move to index 0 (scroll_amount = 0)
         state.navigate_service_types_page_down();
@@ -2667,23 +2667,23 @@ mod tests {
     #[test]
     fn test_navigate_service_types_to_first_with_empty_types() {
         let mut state = AppState::new(HashSet::new());
-        state.visible_types = 5;
-        state.types_scroll_offset = 5;
+        state.types_scroll.visible_items = 5;
+        state.types_scroll.offset = 5;
 
         state.navigate_service_types_to_first();
         assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll_offset, 0);
+        assert_eq!(state.types_scroll.offset, 0);
     }
 
     #[test]
     fn test_navigate_service_types_to_last_with_empty_types() {
         let mut state = AppState::new(HashSet::new());
-        state.visible_types = 5;
-        state.types_scroll_offset = 5;
+        state.types_scroll.visible_items = 5;
+        state.types_scroll.offset = 5;
 
         state.navigate_service_types_to_last();
         assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll_offset, 0);
+        assert_eq!(state.types_scroll.offset, 0);
     }
 
     #[test]
@@ -2692,13 +2692,13 @@ mod tests {
         for i in 0..3 {
             state.add_service_type(&format!("_test{}.._tcp.local.", i));
         }
-        state.visible_types = 2;
+        state.types_scroll.visible_items = 2;
 
         state.navigate_service_types_to_last();
         // Should use .len().saturating_sub(1) = 3-1 = 2
         assert_eq!(state.selected_type, Some(2));
         // Scroll offset should position last item at bottom of visible area
-        assert_eq!(state.types_scroll_offset, 1); // 2 - 2 + 1 = 1
+        assert_eq!(state.types_scroll.offset, 1); // 2 - 2 + 1 = 1
     }
 
     #[test]
@@ -2707,7 +2707,7 @@ mod tests {
         state.add_service_type("_test1._tcp.local.");
         state.add_service_type("_test2._tcp.local.");
         state.selected_type = None;
-        state.visible_types = 10; // More visible than available
+        state.types_scroll.visible_items = 10; // More visible than available
 
         // Should go to last available index (1)
         state.navigate_service_types_page_down();
@@ -2718,7 +2718,7 @@ mod tests {
     fn test_service_type_pagination_edge_cases() {
         let mut state = AppState::new(HashSet::new());
         state.add_service_type("_test1._tcp.local.");
-        state.visible_types = 1; // Only 1 visible item, scroll_amount = 0
+        state.types_scroll.visible_items = 1; // Only 1 visible item, scroll_amount = 0
 
         // Test page up with single visible item (scroll_amount = 0, so stays at index 0)
         state.selected_type = Some(0);
@@ -2745,11 +2745,11 @@ mod tests {
             .services
             .push(create_test_service("test2", "_http._tcp.local.", 81));
         state.selected_service = 1;
-        state.services_scroll_offset = 1;
+        state.services_scroll.offset = 1;
 
         state.navigate_services_to_first();
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -2780,7 +2780,7 @@ mod tests {
                 80 + i,
             ));
         }
-        state.visible_services = 5;
+        state.services_scroll.visible_items = 5;
         state.selected_service = 10;
 
         state.navigate_services_page_up();
@@ -2803,7 +2803,7 @@ mod tests {
                 80 + i,
             ));
         }
-        state.visible_services = 5;
+        state.services_scroll.visible_items = 5;
         state.selected_service = 0;
 
         state.navigate_services_page_down();
@@ -2930,29 +2930,29 @@ mod tests {
         }
 
         // Test scrolling down when possible
-        state.metrics_scroll_offset = 3;
+        state.metrics_scroll.offset = 3;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_metrics_popup); // Should remain open
         // The exact scroll offset now depends on content length and terminal size
-        assert!(state.metrics_scroll_offset >= 3); // Should not decrease
+        assert!(state.metrics_scroll.offset >= 3); // Should not decrease
 
         // Test scrolling up at boundary (should not go below 0)
-        state.metrics_scroll_offset = 0;
+        state.metrics_scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_metrics_popup); // Should remain open
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
 
         // Test any other key closes popup and resets scroll
-        state.metrics_scroll_offset = 10;
+        state.metrics_scroll.offset = 10;
         let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(!state.show_metrics_popup); // Should close
-        assert_eq!(state.metrics_scroll_offset, 0); // Should reset
+        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
     }
 
     #[test]
@@ -2961,27 +2961,27 @@ mod tests {
         state.show_help_popup = true;
 
         // Test scrolling down when at max scroll offset
-        state.help_scroll_offset = 0;
+        state.help_scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_help_popup); // Should remain open
 
         // Test scrolling up when at boundary (should not go below 0)
-        state.help_scroll_offset = 0;
+        state.help_scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_help_popup); // Should remain open
-        assert_eq!(state.help_scroll_offset, 0);
+        assert_eq!(state.help_scroll.offset, 0);
 
         // Test any other key closes popup and resets scroll
-        state.help_scroll_offset = 10;
+        state.help_scroll.offset = 10;
         let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(!state.show_help_popup); // Should close
-        assert_eq!(state.help_scroll_offset, 0); // Should reset
+        assert_eq!(state.help_scroll.offset, 0); // Should reset
     }
 
     // Metrics tests
@@ -3029,30 +3029,30 @@ mod tests {
         }
 
         // Test scrolling up when already at top (should stay at 0)
-        state.metrics_scroll_offset = 0;
+        state.metrics_scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
 
         // Test scrolling up from higher position
-        state.metrics_scroll_offset = 3;
-        let initial_offset = state.metrics_scroll_offset;
+        state.metrics_scroll.offset = 3;
+        let initial_offset = state.metrics_scroll.offset;
         state.handle_key_event(key_event);
-        assert!(state.metrics_scroll_offset < initial_offset); // Should scroll up
+        assert!(state.metrics_scroll.offset < initial_offset); // Should scroll up
 
         // Test scrolling down from various positions
-        state.metrics_scroll_offset = 0;
+        state.metrics_scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
         // Should increment
-        assert!(state.metrics_scroll_offset > 0);
+        assert!(state.metrics_scroll.offset > 0);
 
         // Test scrolling down when already at max - set to very high value first
-        state.metrics_scroll_offset = 100;
-        let max_before = state.metrics_scroll_offset;
+        state.metrics_scroll.offset = 100;
+        let max_before = state.metrics_scroll.offset;
         state.handle_key_event(key_event);
         // Should not exceed max
-        assert!(state.metrics_scroll_offset <= max_before);
+        assert!(state.metrics_scroll.offset <= max_before);
     }
 
     #[test]
@@ -3066,19 +3066,19 @@ mod tests {
 
         // Test that scrolling only works when popup is shown
         state.show_metrics_popup = false;
-        state.metrics_scroll_offset = 5;
+        state.metrics_scroll.offset = 5;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
 
         // This should not be called when popup is not shown, but let's test it anyway
         state.handle_key_event(key_event);
-        let _offset_without_popup = state.metrics_scroll_offset;
+        let _offset_without_popup = state.metrics_scroll.offset;
 
         // Now test with popup shown
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 5;
+        state.metrics_scroll.offset = 5;
         state.handle_key_event(key_event);
         // With popup shown, scrolling should work and offset should decrease
-        assert!(state.metrics_scroll_offset < 5);
+        assert!(state.metrics_scroll.offset < 5);
         // Note: behavior without popup is undefined since key shouldn't be handled then
     }
 
@@ -3086,32 +3086,32 @@ mod tests {
     fn test_metrics_scroll_reset_on_close() {
         let mut state = AppState::new(HashSet::new());
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 10;
+        state.metrics_scroll.offset = 10;
 
         // Close popup with a non-scroll key
         let key_event = KeyEvent::new(KeyCode::Char('q'), crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0); // Should reset
+        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
 
         // Test with Enter key
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 15;
+        state.metrics_scroll.offset = 15;
         let key_event = KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0); // Should reset
+        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
 
         // Test with Escape key
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 20;
+        state.metrics_scroll.offset = 20;
         let key_event = KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0); // Should reset
+        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
     }
 
     #[test]
@@ -3138,25 +3138,25 @@ mod tests {
         for i in 1..20 {
             state.update_metric(&format!("test_metric_{}", i));
         }
-        state.metrics_scroll_offset = 2;
+        state.metrics_scroll.offset = 2;
 
         // Test scrolling with Control modifier (should still work)
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::CONTROL);
         state.handle_key_event(key_event);
-        assert_eq!(state.metrics_scroll_offset, 1);
+        assert_eq!(state.metrics_scroll.offset, 1);
 
         // Test scrolling with Shift modifier
-        state.metrics_scroll_offset = 2;
+        state.metrics_scroll.offset = 2;
         let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::SHIFT);
         state.handle_key_event(key_event);
-        assert!(state.metrics_scroll_offset > 2);
+        assert!(state.metrics_scroll.offset > 2);
     }
 
     #[test]
     fn test_metrics_scroll_multiple_operations() {
         let mut state = AppState::new(HashSet::new());
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 5;
+        state.metrics_scroll.offset = 5;
 
         let up_key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         let down_key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
@@ -3165,24 +3165,24 @@ mod tests {
         for _ in 0..10 {
             state.handle_key_event(up_key);
         }
-        assert_eq!(state.metrics_scroll_offset, 0); // Should stop at 0
+        assert_eq!(state.metrics_scroll.offset, 0); // Should stop at 0
 
         // Test multiple down operations
         for _ in 0..20 {
             state.handle_key_event(down_key);
         }
         // Should not exceed calculated maximum
-        assert!(state.metrics_scroll_offset <= 6);
+        assert!(state.metrics_scroll.offset <= 6);
 
         // Test mixed operations
-        state.metrics_scroll_offset = 3;
+        state.metrics_scroll.offset = 3;
         state.handle_key_event(up_key); // to 2
         state.handle_key_event(up_key); // to 1
         state.handle_key_event(down_key); // to 2
         state.handle_key_event(up_key); // to 1
         state.handle_key_event(up_key); // to 0
 
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
     }
 
     #[test]
@@ -3191,56 +3191,56 @@ mod tests {
         state.show_metrics_popup = true;
 
         // Test PageUp key (should behave like Up in current implementation)
-        state.metrics_scroll_offset = 5;
+        state.metrics_scroll.offset = 5;
         let page_up_key = KeyEvent::new(KeyCode::PageUp, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(page_up_key);
         assert!(!state.show_metrics_popup); // PageUp closes popup
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
 
         // Test PageDown key (should behave like Down in current implementation)
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 0;
+        state.metrics_scroll.offset = 0;
         let page_down_key = KeyEvent::new(KeyCode::PageDown, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(page_down_key);
         assert!(!state.show_metrics_popup); // PageDown closes popup
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
 
         // Test Home key (should close popup)
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 3;
+        state.metrics_scroll.offset = 3;
         let home_key = KeyEvent::new(KeyCode::Home, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(home_key);
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
 
         // Test End key (should close popup)
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 3;
+        state.metrics_scroll.offset = 3;
         let end_key = KeyEvent::new(KeyCode::End, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(end_key);
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
     }
 
     #[test]
     fn test_metrics_scroll_function_key_navigation() {
         let mut state = AppState::new(HashSet::new());
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 3;
+        state.metrics_scroll.offset = 3;
 
         // Test F1 key (should close popup)
         let f1_key = KeyEvent::new(KeyCode::F(1), crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(f1_key);
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
 
         // Test F5 key (should close popup)
         state.show_metrics_popup = true;
-        state.metrics_scroll_offset = 3;
+        state.metrics_scroll.offset = 3;
         let f5_key = KeyEvent::new(KeyCode::F(5), crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(f5_key);
         assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll_offset, 0);
+        assert_eq!(state.metrics_scroll.offset, 0);
     }
 
     #[test]
@@ -3249,18 +3249,18 @@ mod tests {
         state.show_metrics_popup = true;
 
         // Test with very large scroll offset (should be clamped)
-        state.metrics_scroll_offset = 1000;
+        state.metrics_scroll.offset = 1000;
         let down_key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(down_key);
-        assert!(state.metrics_scroll_offset <= 6); // Should be clamped to max
+        assert!(state.metrics_scroll.offset <= 6); // Should be clamped to max
 
         // Test with negative scroll offset (can't happen in practice, but test robustness)
-        state.metrics_scroll_offset = 0;
+        state.metrics_scroll.offset = 0;
         let up_key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         for _ in 0..10 {
             state.handle_key_event(up_key);
         }
-        assert_eq!(state.metrics_scroll_offset, 0); // Should never go negative
+        assert_eq!(state.metrics_scroll.offset, 0); // Should never go negative
     }
 
     // Cache tests
@@ -3575,11 +3575,12 @@ mod tests {
                 80 + i,
             ));
         }
-        state.visible_services = 10; // More visible space than services
+        state.services_scroll.visible_items = 10; // More visible space than services
 
         state.selected_service = 2;
-        state.update_services_scroll_offset();
-        assert_eq!(state.services_scroll_offset, 0); // Should stay at 0 since all fit
+        let filtered_len = state.get_filtered_services().len();
+        state.services_scroll.update_offset(state.selected_service, filtered_len);
+        assert_eq!(state.services_scroll.offset, 0); // Should stay at 0 since all fit
     }
 
     #[test]
@@ -3597,11 +3598,11 @@ mod tests {
         }
 
         state.selected_service = 5;
-        state.services_scroll_offset = 3;
+        state.services_scroll.offset = 3;
 
         state.update_service_type_selection(Some(1));
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -3817,11 +3818,11 @@ mod tests {
             ));
         }
         state.selected_service = 3;
-        state.services_scroll_offset = 2;
+        state.services_scroll.offset = 2;
 
         state.update_sort_field(SortField::Port);
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -3836,11 +3837,11 @@ mod tests {
             ));
         }
         state.selected_service = 3;
-        state.services_scroll_offset = 2;
+        state.services_scroll.offset = 2;
 
         state.update_sort_direction(SortDirection::Descending);
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -4148,14 +4149,14 @@ mod tests {
         state.filter_query = "test".to_string();
         state.filter_input_mode = true;
         state.selected_service = 5;
-        state.services_scroll_offset = 2;
+        state.services_scroll.offset = 2;
 
         state.clear_filter();
 
         assert_eq!(state.filter_query, "");
         assert!(!state.filter_input_mode);
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -4164,14 +4165,14 @@ mod tests {
         state.filter_query = "test".to_string();
         state.filter_input_mode = true;
         state.selected_service = 5;
-        state.services_scroll_offset = 2;
+        state.services_scroll.offset = 2;
 
         state.apply_filter();
 
         assert_eq!(state.filter_query, "test");
         assert!(!state.filter_input_mode);
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -4391,7 +4392,7 @@ mod tests {
         state.filter_query = "test".to_string();
         // Note: not in filter_input_mode so 'n' is handled by normal mode
         state.selected_service = 5;
-        state.services_scroll_offset = 2;
+        state.services_scroll.offset = 2;
 
         let key = KeyEvent::from(KeyCode::Char('n'));
         let should_continue = state.handle_key_event(key);
@@ -4400,7 +4401,7 @@ mod tests {
         assert_eq!(state.filter_query, "");
         assert!(!state.filter_input_mode);
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
     }
 
     #[test]
@@ -4441,13 +4442,13 @@ mod tests {
 
         // Navigate to a specific service
         state.selected_service = 5;
-        state.services_scroll_offset = 3;
+        state.services_scroll.offset = 3;
 
         // Clear filter when it's already empty should NOT reset selection
         state.clear_filter();
 
         assert_eq!(state.selected_service, 5);
-        assert_eq!(state.services_scroll_offset, 3);
+        assert_eq!(state.services_scroll.offset, 3);
     }
 
     #[test]
@@ -4466,14 +4467,14 @@ mod tests {
 
         // Navigate to a specific service and set a filter
         state.selected_service = 5;
-        state.services_scroll_offset = 3;
+        state.services_scroll.offset = 3;
         state.filter_query = "test5".to_string();
 
         // Clear filter when it has content SHOULD reset selection
         state.clear_filter();
 
         assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll_offset, 0);
+        assert_eq!(state.services_scroll.offset, 0);
         assert_eq!(state.filter_query, "");
     }
 
@@ -4746,7 +4747,7 @@ mod tests {
         state
             .services
             .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.visible_services = 10; // Page size larger than item count
+        state.services_scroll.visible_items = 10; // Page size larger than item count
 
         state.selected_service = 0;
         state.navigate_services_page_down();
@@ -4848,7 +4849,7 @@ mod tests {
                 80 + i,
             ));
         }
-        state.visible_services = 5;
+        state.services_scroll.visible_items = 5;
 
         // Navigate down beyond visible area
         for _ in 0..7 {
@@ -4856,9 +4857,9 @@ mod tests {
         }
 
         // Scroll offset should be adjusted to keep selected item visible
-        assert!(state.services_scroll_offset > 0);
-        assert!(state.selected_service >= state.services_scroll_offset);
-        assert!(state.selected_service < state.services_scroll_offset + state.visible_services);
+        assert!(state.services_scroll.offset > 0);
+        assert!(state.selected_service >= state.services_scroll.offset);
+        assert!(state.selected_service < state.services_scroll.offset + state.services_scroll.visible_items);
     }
 
     #[test]
