@@ -1149,11 +1149,10 @@ fn start_browsing_service_type(
 
 fn handle_browse_failure(
     service_type: &str,
-    state: Arc<RwLock<AppState>>,
+    state: &mut AppState,
     notification_sender: flume::Sender<Notification>,
     failure_metric_key: &str,
 ) {
-    let mut state = state.blocking_write();
     if state.remove_service_type(service_type) {
         state.update_metric(failure_metric_key);
         let _ = notification_sender.send(Notification::ServiceChanged);
@@ -1833,7 +1832,7 @@ pub async fn run_tui(
                     Err(_) => {
                         handle_browse_failure(
                             service_type,
-                            Arc::clone(&state_clone),
+                            &mut state_write,
                             notification_sender_clone.clone(),
                             "user_requested_service_browse_failures",
                         );
@@ -1906,7 +1905,7 @@ pub async fn run_tui(
                                     Err(_) => {
                                         handle_browse_failure(
                                             &service_type,
-                                            Arc::clone(&state_clone),
+                                            &mut state,
                                             notification_sender_clone.clone(),
                                             "discovered_service_browse_failures",
                                         );
