@@ -1219,10 +1219,9 @@ pub fn normalize_service_type(service_type: &str) -> String {
     }
 }
 
-fn is_valid_service_type(service_type: &str) -> bool {
-    // Just ignore subtypes in enumeration, other
-    // invalid types are covered by browse resulting in an error
-    !service_type.contains("_sub.")
+fn is_sub_type(service_type: &str) -> bool {
+    // Check if this is a subtype (contains _sub.)
+    service_type.contains("_sub.")
 }
 
 fn current_timestamp_micros() -> u64 {
@@ -1926,9 +1925,7 @@ pub async fn run_tui(
     };
 
     for service_type in &user_types {
-        if !is_valid_service_type(service_type) {
-            continue; // Skip invalid service type format
-        }
+        // Allow subtypes for user-requested service types
 
         {
             let mut state_write = state_clone.write().await;
@@ -1999,8 +1996,8 @@ pub async fn run_tui(
                     }
                     ServiceEvent::ServiceFound(_service_type, fullname) => {
                         let service_type = fullname.to_string();
-                        if !is_valid_service_type(&service_type) {
-                            continue; // invalid service type format
+                        if is_sub_type(&service_type) {
+                            continue; // skip subtypes in auto-discovery
                         }
                         {
                             let mut state = state_clone.write().await;
@@ -2204,7 +2201,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_service_type_with_user_requested_types() {
+    fn test_is_sub_type_comprehensive() {
         let valid_types = vec![
             "_http._tcp.local.",
             "_ssh._tcp.local.",
@@ -2218,8 +2215,21 @@ mod tests {
 
         for service_type in valid_types {
             assert!(
-                is_valid_service_type(service_type),
-                "Expected {} to be valid",
+                !is_sub_type(service_type),
+                "Expected {} to not be a subtype",
+                service_type
+            );
+        }
+
+        // Test that actual subtypes are detected correctly
+        let subtypes = vec![
+            "_printer._sub._http._tcp.local.", // Contains _sub.
+        ];
+
+        for service_type in subtypes {
+            assert!(
+                is_sub_type(service_type),
+                "Expected {} to be a subtype",
                 service_type
             );
         }
@@ -2232,8 +2242,8 @@ mod tests {
 
         for service_type in invalid_types {
             assert!(
-                !is_valid_service_type(service_type),
-                "Expected {} to be invalid",
+                is_sub_type(service_type),
+                "Expected {} to be a subtype",
                 service_type
             );
         }
@@ -3304,11 +3314,11 @@ mod tests {
 
     // Utility function tests
     #[test]
-    fn test_is_valid_service_type() {
-        assert!(is_valid_service_type("_http._tcp.local."));
-        assert!(is_valid_service_type("_ssh._tcp.local."));
-        assert!(!is_valid_service_type("_sub._http._tcp.local."));
-        assert!(!is_valid_service_type("test_sub.something"));
+    fn test_is_sub_type() {
+        assert!(!is_sub_type("_http._tcp.local."));
+        assert!(!is_sub_type("_ssh._tcp.local."));
+        assert!(is_sub_type("_sub._http._tcp.local."));
+        assert!(is_sub_type("test_sub.something"));
     }
 
     #[test]
@@ -3317,6 +3327,31 @@ mod tests {
         let ts2 = current_timestamp_micros();
         assert!(ts2 >= ts1);
         assert!(ts1 > 0);
+    }
+
+    #[test]
+    fn test_normalize_service_type_with_subtypes() {
+        // Test basic subtype normalization (correct format: _subtype._sub._service._protocol)
+        assert_eq!(
+            normalize_service_type("_printer._sub._http._tcp"),
+            "_printer._sub._http._tcp.local."
+        );
+        assert_eq!(
+            normalize_service_type("_airplay._sub._raop._tcp"),
+            "_airplay._sub._raop._tcp.local."
+        );
+        
+        // Test subtype with existing .local. suffix
+        assert_eq!(
+            normalize_service_type("_printer._sub._http._tcp.local."),
+            "_printer._sub._http._tcp.local."
+        );
+        
+        // Test subtype with trailing dot
+        assert_eq!(
+            normalize_service_type("_printer._sub._http._tcp."),
+            "_printer._sub._http._tcp.local."
+        );
     }
 
     // Formatting tests
