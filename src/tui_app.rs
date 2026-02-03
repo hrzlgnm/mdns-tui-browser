@@ -3575,7 +3575,9 @@ mod tests {
 
         state.selected_service = 2;
         let filtered_len = state.get_filtered_services().len();
-        state.services_scroll.update_offset(state.selected_service, filtered_len);
+        state
+            .services_scroll
+            .update_offset(state.selected_service, filtered_len);
         assert_eq!(state.services_scroll.offset, 0); // Should stay at 0 since all fit
     }
 
@@ -4855,7 +4857,10 @@ mod tests {
         // Scroll offset should be adjusted to keep selected item visible
         assert!(state.services_scroll.offset > 0);
         assert!(state.selected_service >= state.services_scroll.offset);
-        assert!(state.selected_service < state.services_scroll.offset + state.services_scroll.visible_items);
+        assert!(
+            state.selected_service
+                < state.services_scroll.offset + state.services_scroll.visible_items
+        );
     }
 
     #[test]
