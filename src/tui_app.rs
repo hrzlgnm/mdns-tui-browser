@@ -3340,13 +3340,13 @@ mod tests {
             normalize_service_type("_airplay._sub._raop._tcp"),
             "_airplay._sub._raop._tcp.local."
         );
-        
+
         // Test subtype with existing .local. suffix
         assert_eq!(
             normalize_service_type("_printer._sub._http._tcp.local."),
             "_printer._sub._http._tcp.local."
         );
-        
+
         // Test subtype with trailing dot
         assert_eq!(
             normalize_service_type("_printer._sub._http._tcp."),
