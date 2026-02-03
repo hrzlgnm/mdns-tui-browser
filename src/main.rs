@@ -12,6 +12,7 @@ use clap::Parser;
 )]
 struct Cli {
     /// Service types to browse for (e.g., _http._tcp.local., _ssh._tcp.local., or _http._tcp, _ssh._tcp)
+    /// Supports subtypes using the format _subtype._sub._service._protocol (e.g., _printer._sub._http._tcp, _airplay._sub._raop._tcp)
     #[arg(long, short, value_delimiter = ',')]
     service_types: Option<Vec<String>>,
 }
