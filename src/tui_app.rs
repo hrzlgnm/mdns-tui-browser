@@ -1210,12 +1210,116 @@ pub fn normalize_service_type(service_type: &str) -> String {
         return String::new();
     }
 
-    // If the service type already ends with ".local.", return as-is
-    if service_type.ends_with(".local.") {
-        service_type.to_string()
-    } else {
-        // Add ".local." suffix if missing
-        format!("{}.local.", service_type.trim_end_matches('.'))
+    let input = service_type.trim();
+
+    // If already has .local. suffix, return as-is
+    if input.ends_with(".local.") {
+        return input.to_string();
+    }
+
+    let trimmed = input.trim_end_matches('.');
+
+    // If already has .local. suffix after trimming dots, return as-is
+    if trimmed.ends_with(".local.") {
+        return trimmed.to_string();
+    }
+
+    // Check if it's already a complete service type (contains ._tcp or ._udp)
+    if (trimmed.contains("._tcp") || trimmed.contains("._udp")) && trimmed.starts_with('_') {
+        return format!("{}.local.", trimmed);
+    }
+
+    let parts: Vec<&str> = trimmed.split('.').collect();
+
+    match parts.len() {
+        1 => {
+            // Simple name: "http" -> "_http._tcp.local."
+            let name = if parts[0].starts_with('_') {
+                parts[0].to_string()
+            } else {
+                format!("_{}", parts[0])
+            };
+            format!("{}._tcp.local.", name)
+        }
+        2 => {
+            // Name + protocol: "http.tcp" or "_http.tcp"
+            let name = if parts[0].starts_with('_') {
+                parts[0].to_string()
+            } else {
+                format!("_{}", parts[0])
+            };
+            let protocol = if parts[1].starts_with('_') {
+                parts[1].to_string()
+            } else if parts[1] == "tcp" || parts[1] == "udp" {
+                format!("_{}", parts[1])
+            } else {
+                // If second part is not a recognized protocol, treat it as tcp by default
+                "_tcp".to_string()
+            };
+            format!("{}.{}.local.", name, protocol)
+        }
+        3 => {
+            // Subtype format: "printer.sub.http" or "_printer.sub._http"
+            let subtype = if parts[0].starts_with('_') {
+                parts[0].to_string()
+            } else {
+                format!("_{}", parts[0])
+            };
+
+            let sub_marker = if parts[1] == "sub" || parts[1] == "_sub" {
+                "_sub"
+            } else {
+                // If middle part is not a subtype marker, treat as regular format
+                return format!("{}.local.", trimmed);
+            };
+
+            let service_name = if parts[2].starts_with('_') {
+                parts[2].to_string()
+            } else {
+                format!("_{}", parts[2])
+            };
+
+            format!("{}.{}.{}._tcp.local.", subtype, sub_marker, service_name)
+        }
+        4 => {
+            // Subtype format with protocol: "printer.sub.http.tcp" or "_printer.sub._http.tcp"
+            let subtype = if parts[0].starts_with('_') {
+                parts[0].to_string()
+            } else {
+                format!("_{}", parts[0])
+            };
+
+            let sub_marker = if parts[1] == "sub" || parts[1] == "_sub" {
+                "_sub"
+            } else {
+                // If middle part is not a subtype marker, treat as regular format
+                return format!("{}.local.", trimmed);
+            };
+
+            let service_name = if parts[2].starts_with('_') {
+                parts[2].to_string()
+            } else {
+                format!("_{}", parts[2])
+            };
+
+            let protocol = if parts[3].starts_with('_') {
+                parts[3].to_string()
+            } else if parts[3] == "tcp" || parts[3] == "udp" {
+                format!("_{}", parts[3])
+            } else {
+                // If fourth part is not a recognized protocol, treat it as tcp by default
+                "_tcp".to_string()
+            };
+
+            format!(
+                "{}.{}.{}.{}.local.",
+                subtype, sub_marker, service_name, protocol
+            )
+        }
+        _ => {
+            // Already complex format (like existing subtypes), just add .local. if missing
+            format!("{}.local.", trimmed)
+        }
     }
 }
 
@@ -2275,7 +2379,7 @@ mod tests {
     fn test_normalize_service_type_short_form() {
         let service_type = "_printer";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, "_printer.local.");
+        assert_eq!(normalized, "_printer._tcp.local.");
     }
 
     #[test]
@@ -2297,6 +2401,102 @@ mod tests {
         let service_type = "_raop._tcp.local.";
         let normalized = normalize_service_type(service_type);
         assert_eq!(normalized, "_raop._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_simple_name() {
+        // Test simple service name without underscore or protocol
+        let service_type = "http";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_missing_underscore() {
+        // Test service name with underscore but missing protocol
+        let service_type = "_http";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_with_tcp_protocol() {
+        // Test service name with tcp protocol (without underscore)
+        let service_type = "http.tcp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_with_udp_protocol() {
+        // Test service name with udp protocol (without underscore)
+        let service_type = "dns.udp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_dns._udp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_with_protocol_and_underscore() {
+        // Test service name with protocol that already has underscore
+        let service_type = "http._tcp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_with_unrecognized_protocol() {
+        // Test service name where second part is not a recognized protocol
+        let service_type = "http.unknown";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_subtype_compact_format() {
+        // Test compact subtype format: "printer.sub.http" -> "_printer._sub._http._tcp.local."
+        let service_type = "printer.sub.http";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_subtype_with_underscores() {
+        // Test subtype format with some underscores: "_printer.sub._http" -> "_printer._sub._http._tcp.local."
+        let service_type = "_printer.sub._http";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_subtype_full_underscores() {
+        // Test subtype format with all underscores: "_printer._sub._http" -> "_printer._sub._http._tcp.local."
+        let service_type = "_printer._sub._http";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_subtype_with_protocol() {
+        // Test subtype format with explicit protocol: "printer.sub.http.tcp" -> "_printer._sub._http._tcp.local."
+        let service_type = "printer.sub.http.tcp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_subtype_not_recognized() {
+        // Test when middle part is not "sub" - should treat as regular format
+        let service_type = "printer.middle.http";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "printer.middle.http.local.");
+    }
+
+    #[test]
+    fn test_normalize_service_type_subtype_with_udp_protocol() {
+        // Test subtype format with UDP as service name: "dns.sub.udp" -> "_dns._sub._udp._tcp.local."
+        let service_type = "dns.sub.udp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(normalized, "_dns._sub._udp._tcp.local.");
     }
 
     // Integration test to simulate CLI parsing behavior

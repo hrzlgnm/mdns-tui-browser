@@ -58,6 +58,10 @@ mdns-tui-browser -h
 mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
 mdns-tui-browser -s "_printer._tcp.local."
 
+# Browse with shortened service types (auto-completed)
+mdns-tui-browser -s "http,ssh"
+mdns-tui-browser -s "_http,_ssh"
+
 # Browse with multiple service types (comma-separated)
 mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp.local.,_airplay._tcp.local."
 ```
@@ -68,28 +72,47 @@ Some mDNS service implementations don't properly announce their PTR records to `
 
 **Usage:**
 - Accepts comma-separated list of mDNS service types
-- Service types can be specified with or without `.local.` suffix (auto-completed if missing)
-- Examples: `_http._tcp.local.`, `_http._tcp`, `_ssh._tcp.local.`, `_ssh._tcp`
+- Service types support intelligent auto-completion:
+  - Simple names: `http` → `_http._tcp.local.`
+  - Missing underscores: `_http` → `_http._tcp.local.`  
+  - Protocol specification: `http.tcp` → `_http._tcp.local.`
+  - Subtype format: `printer.sub.http` → `_printer._sub._http._tcp.local.`
+  - Full forms: `_http._tcp.local.`, `_http._tcp` (auto-completed with `.local.` if missing)
+- Examples: `http`, `_http`, `_http._tcp`, `_http._tcp.local.`, `printer.sub.http`
 
 **Common Service Types:**
-- `_http._tcp.local.` or `_http._tcp` - HTTP servers
-- `_ssh._tcp.local.` or `_ssh._tcp` - SSH servers  
-- `_printer._tcp.local.` or `_printer._tcp` - Network printers
-- `_airplay._tcp.local.` or `_airplay._tcp` - Apple AirPlay devices
-- `_raop._tcp.local.` or `_raop._tcp` - AirPlay audio devices
+- `http`, `_http`, `_http._tcp`, `_http._tcp.local.` - HTTP servers
+- `ssh`, `_ssh`, `_ssh._tcp`, `_ssh._tcp.local.` - SSH servers  
+- `printer`, `_printer`, `_printer._tcp`, `_printer._tcp.local.` - Network printers
+- `printer.sub.http` → `_printer._sub._http._tcp.local.` - Network printer subtypes
+- `airplay`, `_airplay`, `_airplay._tcp`, `_airplay._tcp.local.` - Apple AirPlay devices
+- `raop`, `_raop`, `_raop._tcp`, `_raop._tcp.local.` - AirPlay audio devices
 
 **Auto-completion Examples:**
 ```bash
-# Browse with custom service types (full form)
-mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
-mdns-tui-browser -s "_printer._tcp.local."
+# Browse with simple service names (fully auto-completed)
+mdns-tui-browser -s "http,ssh,printer"
+# Results: "_http._tcp.local.", "_ssh._tcp.local.", "_printer._tcp.local."
+
+# Browse with partial forms (auto-completed)
+mdns-tui-browser -s "_http,_ssh,_printer"
+# Results: "_http._tcp.local.", "_ssh._tcp.local.", "_printer._tcp.local."
+
+# Browse with protocol specification (auto-completed)
+mdns-tui-browser -s "http.tcp,ssh.tcp"
+# Results: "_http._tcp.local.", "_ssh._tcp.local."
 
 # Browse with shortened service types (auto-completed with .local.)
 mdns-tui-browser -s "_http._tcp,_ssh._tcp"
 mdns-tui-browser -s "_printer._tcp.,_airplay._tcp"
 
-# Mixed usage (full and shortened forms)
-mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp,_airplay._tcp"
+# Mixed usage (various auto-completion levels)
+mdns-tui-browser -s "_http._tcp.local.,ssh,http.tcp,_printer"
+# Results: "_http._tcp.local.", "_ssh._tcp.local.", "_http._tcp.local.", "_printer._tcp.local."
+
+# Subtype auto-completion
+mdns-tui-browser -s "printer.sub.http,airplay.sub.raop"
+# Results: "_printer._sub._http._tcp.local.", "_airplay._sub._raop._tcp.local."
 ```
 
 ## Controls
