@@ -76,15 +76,16 @@ Some mDNS service implementations don't properly announce their PTR records to `
   - Simple names: `http` → `_http._tcp.local.`
   - Missing underscores: `_http` → `_http._tcp.local.`  
   - Protocol specification: `http.tcp` → `_http._tcp.local.`
-  - Subtype format: `printer.sub.http` → `_printer._sub._http._tcp.local.`
+  - Subtype format: `printer.sub.http` → `printer._sub._http._tcp.local.`
   - Full forms: `_http._tcp.local.`, `_http._tcp` (auto-completed with `.local.` if missing)
+  - Protocol specification with subtypes: `printer.sub.http.tcp` → `printer._sub._http._tcp.local.`
 - Examples: `http`, `_http`, `_http._tcp`, `_http._tcp.local.`, `printer.sub.http`
 
 **Common Service Types:**
 - `http`, `_http`, `_http._tcp`, `_http._tcp.local.` - HTTP servers
 - `ssh`, `_ssh`, `_ssh._tcp`, `_ssh._tcp.local.` - SSH servers  
 - `printer`, `_printer`, `_printer._tcp`, `_printer._tcp.local.` - Network printers
-- `printer.sub.http` → `_printer._sub._http._tcp.local.` - Network printer subtypes
+- `printer.sub.http` → `printer._sub._http._tcp.local.` - Network printer subtypes
 - `airplay`, `_airplay`, `_airplay._tcp`, `_airplay._tcp.local.` - Apple AirPlay devices
 - `raop`, `_raop`, `_raop._tcp`, `_raop._tcp.local.` - AirPlay audio devices
 
@@ -112,7 +113,7 @@ mdns-tui-browser -s "_http._tcp.local.,ssh,http.tcp,_printer"
 
 # Subtype auto-completion
 mdns-tui-browser -s "printer.sub.http,airplay.sub.raop"
-# Results: "_printer._sub._http._tcp.local.", "_airplay._sub._raop._tcp.local."
+# Results: "printer._sub._http._tcp.local.", "airplay._sub._raop._tcp.local."
 ```
 
 ## Controls

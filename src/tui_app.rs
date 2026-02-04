@@ -1329,9 +1329,9 @@ pub fn normalize_service_type(service_type: &str) -> String {
         3 => {
             // Subtype format: "printer.sub.http" or "_printer.sub._http"
             let subtype = if parts[0].starts_with('_') {
-                parts[0].to_string()
+                parts[0].trim_start_matches('_').to_string()
             } else {
-                format!("_{}", parts[0])
+                parts[0].to_string()
             };
 
             let sub_marker = if parts[1] == "sub" || parts[1] == "_sub" {
@@ -1352,9 +1352,9 @@ pub fn normalize_service_type(service_type: &str) -> String {
         4 => {
             // Subtype format with protocol: "printer.sub.http.tcp" or "_printer.sub._http.tcp"
             let subtype = if parts[0].starts_with('_') {
-                parts[0].to_string()
+                parts[0].trim_start_matches('_').to_string()
             } else {
-                format!("_{}", parts[0])
+                parts[0].to_string()
             };
 
             let sub_marker = if parts[1] == "sub" || parts[1] == "_sub" {
@@ -2549,34 +2549,34 @@ mod tests {
 
     #[test]
     fn test_normalize_service_type_subtype_compact_format() {
-        // Test compact subtype format: "printer.sub.http" -> "_printer._sub._http._tcp.local."
+        // Test compact subtype format: "printer.sub.http" -> "printer._sub._http._tcp.local."
         let service_type = "printer.sub.http";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+        assert_eq!(normalized, "printer._sub._http._tcp.local.");
     }
 
     #[test]
     fn test_normalize_service_type_subtype_with_underscores() {
-        // Test subtype format with some underscores: "_printer.sub._http" -> "_printer._sub._http._tcp.local."
+        // Test subtype format with some underscores: "_printer.sub._http" -> "printer._sub._http._tcp.local."
         let service_type = "_printer.sub._http";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+        assert_eq!(normalized, "printer._sub._http._tcp.local.");
     }
 
     #[test]
     fn test_normalize_service_type_subtype_full_underscores() {
-        // Test subtype format with all underscores: "_printer._sub._http" -> "_printer._sub._http._tcp.local."
+        // Test subtype format with all underscores: "_printer._sub._http" -> "printer._sub._http._tcp.local."
         let service_type = "_printer._sub._http";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+        assert_eq!(normalized, "printer._sub._http._tcp.local.");
     }
 
     #[test]
     fn test_normalize_service_type_subtype_with_protocol() {
-        // Test subtype format with explicit protocol: "printer.sub.http.tcp" -> "_printer._sub._http._tcp.local."
+        // Test subtype format with explicit protocol: "printer.sub.http.tcp" -> "printer._sub._http._tcp.local."
         let service_type = "printer.sub.http.tcp";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, "_printer._sub._http._tcp.local.");
+        assert_eq!(normalized, "printer._sub._http._tcp.local.");
     }
 
     #[test]
@@ -2589,13 +2589,23 @@ mod tests {
 
     #[test]
     fn test_normalize_service_type_subtype_with_udp_protocol() {
-        // Test subtype format with UDP as service name: "dns.sub.udp" -> "_dns._sub._udp._tcp.local."
+        // Test subtype format with UDP as service name: "dns.sub.udp" -> "dns._sub._udp._tcp.local."
         let service_type = "dns.sub.udp";
         let normalized = normalize_service_type(service_type);
-        assert_eq!(normalized, "_dns._sub._udp._tcp.local.");
+        assert_eq!(normalized, "dns._sub._udp._tcp.local.");
     }
 
     // Integration test to simulate CLI parsing behavior
+    #[test]
+    fn test_normalize_service_type_pr_case() {
+        let service_type = "pr-qtatbtbi-de-efife7vt.sub.nabto.udp";
+        let normalized = normalize_service_type(service_type);
+        assert_eq!(
+            normalized,
+            "pr-qtatbtbi-de-efife7vt._sub._nabto._udp.local."
+        );
+    }
+
     #[test]
     fn test_cli_service_types_parsing() {
         // This test simulates behavior that happens in main.rs with normalization
