@@ -1693,10 +1693,14 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
         let clamped_offset = if details_lines.is_empty() {
             0
         } else {
-            app_state
-                .details_scroll
-                .offset
-                .min(details_lines.len().saturating_sub(1))
+            let total_lines = details_lines.len();
+            let visible_items = app_state.details_scroll.visible_items;
+            let max_scroll_offset = if total_lines <= visible_items {
+                0
+            } else {
+                total_lines.saturating_sub(visible_items)
+            };
+            app_state.details_scroll.offset.min(max_scroll_offset)
         };
 
         let visible_details: Vec<Line> = details_lines.into_iter().skip(clamped_offset).collect();
