@@ -132,7 +132,11 @@ mdns-tui-browser -s "printer.sub.http,airplay.sub.raop"
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show service metrics
 - <kbd>?</kbd> - Toggle help popup
+- <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
+
+### Service Details Controls
+- <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details
 
 ### Help Popup Controls
 - <kbd>↑</kbd>/<kbd>↓</kbd> - Scroll help content

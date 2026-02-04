@@ -244,6 +244,7 @@ struct AppState {
     services_scroll: ScrollState,
     help_scroll: ScrollState,
     metrics_scroll: ScrollState,
+    details_scroll: ScrollState,
     cached_filtered_services: Vec<usize>,
     cache_dirty: bool,
     cached_sorted: bool,
@@ -269,6 +270,7 @@ impl AppState {
             services_scroll: ScrollState::new(),
             help_scroll: ScrollState::new(),
             metrics_scroll: ScrollState::new(),
+            details_scroll: ScrollState::new(),
             cached_filtered_services: Vec::new(),
             cache_dirty: true,
             cached_sorted: false,
@@ -462,6 +464,7 @@ impl AppState {
         self.selected_type = new_type;
         self.selected_service = 0;
         self.services_scroll.reset();
+        self.details_scroll.reset();
         self.invalidate_cache_and_validate();
     }
 
@@ -752,6 +755,35 @@ impl AppState {
                 true
             }
 
+            // Service Details scrolling with Shift+Up/Down and J/K (handled first to avoid conflicts)
+            KeyCode::Up
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::SHIFT) =>
+            {
+                self.scroll_details_up();
+                true
+            }
+
+            KeyCode::Down
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::SHIFT) =>
+            {
+                self.scroll_details_down();
+                true
+            }
+
+            KeyCode::Char('J') => {
+                self.scroll_details_down();
+                true
+            }
+
+            KeyCode::Char('K') => {
+                self.scroll_details_up();
+                true
+            }
+
             // Service navigation
             KeyCode::Char('k') | KeyCode::Up => {
                 self.navigate_services_up();
@@ -954,6 +986,7 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
+        self.details_scroll.reset(); // Reset details scroll when navigating
     }
 
     fn navigate_services_down(&mut self) {
@@ -966,6 +999,7 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
+        self.details_scroll.reset(); // Reset details scroll when navigating
     }
 
     fn navigate_service_types_up(&mut self) {
@@ -1102,6 +1136,7 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
+        self.details_scroll.reset(); // Reset details scroll when navigating
     }
 
     fn navigate_services_page_down(&mut self) {
@@ -1114,10 +1149,12 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
+        self.details_scroll.reset(); // Reset details scroll when navigating
     }
 
     fn navigate_services_to_first(&mut self) {
         navigate_list_to_first(&mut self.selected_service, &mut self.services_scroll);
+        self.details_scroll.reset(); // Reset details scroll when navigating
     }
 
     fn navigate_services_to_last(&mut self) {
@@ -1130,6 +1167,7 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
+        self.details_scroll.reset(); // Reset details scroll when navigating
     }
 
     // Filter methods
@@ -1146,6 +1184,7 @@ impl AppState {
         if had_filter {
             self.selected_service = 0;
             self.services_scroll.reset();
+            self.details_scroll.reset();
         }
         self.invalidate_cache_and_validate();
     }
@@ -1155,6 +1194,7 @@ impl AppState {
         // Reset selection and scroll when exiting filter mode
         self.selected_service = 0;
         self.services_scroll.reset();
+        self.details_scroll.reset();
         self.invalidate_cache_and_validate();
     }
 
@@ -1168,6 +1208,32 @@ impl AppState {
         self.filter_query.pop();
         // Invalidate cache to trigger real-time filtering
         self.invalidate_cache_and_validate();
+    }
+
+    fn scroll_details_up(&mut self) {
+        if self.details_scroll.offset > 0 {
+            self.details_scroll.offset -= 1;
+        }
+    }
+
+    fn scroll_details_down(&mut self) {
+        let selected_service_idx = self.selected_service;
+        let filtered_indices = self.get_filtered_services();
+
+        if let Some(&service_idx) = filtered_indices.get(selected_service_idx) {
+            if let Some(service) = self.services.get(service_idx) {
+                let details_text = create_service_details_text(service);
+                let details_lines: Vec<&str> = details_text.lines().collect();
+                let total_lines = details_lines.len();
+
+                if total_lines > 0 && self.details_scroll.visible_items > 0 {
+                    let max_scroll_offset =
+                        total_lines.saturating_sub(self.details_scroll.visible_items);
+                    self.details_scroll.offset =
+                        std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
+                }
+            }
+        }
     }
 }
 
@@ -1606,6 +1672,10 @@ fn render_services_list(
 fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui::layout::Rect) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
+
+    // Update visible items for details scroll state
+    app_state.details_scroll.visible_items = area.height.saturating_sub(2) as usize; // Account for borders
+
     let filtered_indices = app_state.get_filtered_services();
 
     let selected_service = filtered_indices
@@ -1614,11 +1684,28 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
 
     if let Some(service) = selected_service {
         let details_text = create_service_details_text(service);
-        let details = Paragraph::new(details_text.clone())
+        let details_lines: Vec<Line> = details_text
+            .lines()
+            .map(|line| Line::from(line.to_string()))
+            .collect();
+
+        // Apply scroll offset
+        let clamped_offset = if details_lines.is_empty() {
+            0
+        } else {
+            app_state
+                .details_scroll
+                .offset
+                .min(details_lines.len().saturating_sub(1))
+        };
+
+        let visible_details: Vec<Line> = details_lines.into_iter().skip(clamped_offset).collect();
+
+        let details = Paragraph::new(visible_details)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Service Details"),
+                    .title("Service Details (Shift+↑/↓, J/K to scroll)"),
             )
             .wrap(Wrap { trim: true });
         f.render_widget(details, area);
@@ -1764,6 +1851,9 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   b/f/Space           - Scroll services list by page"),
         Line::from("   Home/End            - Jump to first/last service"),
         Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
+        Line::from(" "),
+        Line::from(" Service Details:"),
+        Line::from("   Shift+↑/↓ or J/K     - Scroll service details"),
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from("   d                   - Remove offline services"),
