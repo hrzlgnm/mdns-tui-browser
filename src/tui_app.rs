@@ -472,6 +472,7 @@ impl AppState {
         self.sort_field = field;
         self.selected_service = 0;
         self.services_scroll.reset();
+        self.details_scroll.reset();
         self.invalidate_cache_and_validate();
     }
 
@@ -479,6 +480,7 @@ impl AppState {
         self.sort_direction = direction;
         self.selected_service = 0;
         self.services_scroll.reset();
+        self.details_scroll.reset();
         self.invalidate_cache_and_validate();
     }
 
