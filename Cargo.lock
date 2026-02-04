@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "mdns-tui-browser"
-version = "1.9.2"
+version = "1.10.0"
 dependencies = [
  "chrono",
  "clap",
