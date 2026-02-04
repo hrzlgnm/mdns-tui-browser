@@ -126,6 +126,7 @@ typos
 - Use `///` for module-level documentation
 - Include examples in doc comments when helpful
 - Keep documentation concise and focused
+- Document all key bindings in README
 
 ### Performance Considerations
 - Use `--release` builds for performance testing
