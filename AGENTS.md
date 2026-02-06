@@ -151,7 +151,20 @@ src/
 3. Run `cargo clippy --tests -- -D warnings` to check for issues
 4. Run `cargo nextest run --profile ci` to run tests
 5. Test the application manually with `cargo run`
-6. Commit only when all checks pass
+6. If README.md was updated, update the manpage (`mdns-tui-browser.1`)
+7. Commit only when all checks pass
+
+## Documentation Maintenance
+
+### Manpage Updates
+The manpage (`mdns-tui-browser.1`) must be kept in sync with `README.md`. When updating documentation:
+
+1. **CLI Options**: Update both README.md CLI Options section and manpage OPTIONS section
+2. **Controls**: Update both README.md Controls section and manpage CONTROLS section  
+3. **Service Types**: Update both README.md Service Types section and manpage SERVICE TYPES section
+4. **Examples**: Update both README.md Examples section and manpage EXAMPLES section
+
+The manpage should contain only essential usage information without excessive detail, focusing on what users need to know to use the program effectively.
 
 ## CI/CD Integration
 
