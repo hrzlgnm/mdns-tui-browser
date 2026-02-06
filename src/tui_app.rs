@@ -63,6 +63,9 @@ struct ServiceSession {
 
 impl ServiceEntry {
     fn go_offline_at(&mut self, timestamp_micros: u64) {
+        if !self.online {
+            return;
+        }
         self.online = false;
         self.updated_at_micros = timestamp_micros;
         self.last_offline_micros = Some(timestamp_micros);
@@ -89,8 +92,11 @@ impl ServiceEntry {
     }
 
     fn go_online_at(&mut self, timestamp_micros: u64) {
-        self.online = true;
         self.updated_at_micros = timestamp_micros;
+        if self.online {
+            return;
+        }
+        self.online = true;
         self.last_online_micros = Some(timestamp_micros);
 
         // Add new session to history
@@ -102,7 +108,9 @@ impl ServiceEntry {
     }
 
     fn get_session_history(&self) -> String {
-        if self.session_history.is_empty() {
+        if self.session_history.is_empty()
+            || self.session_history.len() == 1 && self.session_history[0].end_time.is_none()
+        {
             "No session history".to_string()
         } else {
             // First, collect completed sessions and find max widths
@@ -1047,8 +1055,13 @@ impl AppState {
             if significant_fields_changed {
                 // Handle service coming back online
                 if !existing.online && service_entry.online {
+                    println!("Service coming back online");
                     existing.go_online_at(service_entry.updated_at_micros);
                 } else if existing.online && !service_entry.online {
+                    println!(
+                        "Service going offline - existing.online: {}, service_entry.online: {}",
+                        existing.online, service_entry.online
+                    );
                     existing.go_offline_at(service_entry.updated_at_micros);
                 }
 
@@ -2540,25 +2553,34 @@ pub async fn run_tui(
 mod tests {
     use super::*;
 
-    // ServiceEntry tests
-    #[test]
-    fn test_service_entry_go_offline_at() {
-        let mut service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
+    // Helper function for creating test services
+    fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        ServiceEntry {
+            fullname: format!("{}.{}", name, service_type),
+            host: format!("{}.local.", name),
+            service_type: service_type.to_string(),
             subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
+            addrs: vec![format!("192.168.1.{}", port)],
+            port,
             txt: vec![],
             online: true,
             updated_at_micros: 1000,
-            session_history: Vec::new(),
+            session_history: vec![ServiceSession {
+                start_time: 1000,
+                end_time: None,
+                duration_micros: 0,
+            }],
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
             total_online_duration_micros: 0,
-        };
+        }
+    }
+
+    // ServiceEntry tests
+    #[test]
+    fn test_service_entry_go_offline_at() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
 
         assert!(service.online);
         service.go_offline_at(2000);
@@ -2566,30 +2588,33 @@ mod tests {
         assert_eq!(service.updated_at_micros, 2000);
         assert_eq!(service.last_offline_micros, Some(2000));
         assert_eq!(service.total_online_duration_micros, 1000); // 2000 - 1000
+        assert_eq!(service.session_history.len(), 1);
     }
 
     // Session timeline tests
     #[test]
     fn test_get_session_timeline_empty_history() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: None,
-            last_offline_micros: None,
-            total_online_duration_micros: 0,
-        };
-
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
         let timeline = service.get_session_history();
         assert_eq!(timeline, "No session history");
+    }
+
+    #[test]
+    fn test_service_entry_full_online_offline_cycle() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // First cycle: go offline
+        service.go_offline_at(2000);
+        assert_eq!(service.session_history.len(), 1);
+        assert_eq!(service.total_online_duration_micros, 1000);
+
+        // Second cycle: go online then offline
+        service.go_online_at(3000);
+        assert_eq!(service.session_history.len(), 2); // 1 completed + 1 active
+        service.go_offline_at(5000);
+
+        assert_eq!(service.session_history.len(), 2); // 2 completed + 0 active
+        assert_eq!(service.total_online_duration_micros, 3000); // 1000 + 2000
     }
 
     #[test]
@@ -5525,12 +5550,15 @@ mod tests {
     fn test_add_or_update_service_detects_online_status_change() {
         let mut state = AppState::new(HashSet::new());
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        println!("Initial service online: {}", service1.online);
 
         state.add_or_update_service(service1.clone());
+        println!("Service after add online: {}", state.services[0].online);
 
         // Update service to be offline
         let mut service2 = service1.clone();
         service2.online = false;
+        println!("Updated service online: {}", service2.online);
 
         let was_updated = state.add_or_update_service(service2);
 
@@ -6024,27 +6052,6 @@ mod tests {
         assert_eq!(state.service_types[0], "_http._tcp.local.");
         assert_eq!(state.service_types[1], "_printer._tcp.local.");
         assert_eq!(state.service_types[2], "_ssh._tcp.local.");
-    }
-
-    // Helper function for creating test services
-    fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
-        let _timestamp = current_timestamp_micros();
-        ServiceEntry {
-            fullname: format!("{}.{}", name, service_type),
-            host: format!("{}.local.", name),
-            service_type: service_type.to_string(),
-            subtype: None,
-            addrs: vec![format!("192.168.1.{}", port)],
-            port,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-            total_online_duration_micros: 0,
-        }
     }
 
     // Tests for service removal metric fix
