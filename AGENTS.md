@@ -156,6 +156,7 @@ src/
 8. Commit only when all checks pass
 9. After committing, push to the repository and create a pull request if applicable
 10. After the pull request is created, add a comment `@coderabbitai review`
+11. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
 
 ## Documentation Maintenance
 
