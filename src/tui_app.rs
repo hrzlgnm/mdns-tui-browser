@@ -5546,15 +5546,12 @@ mod tests {
     fn test_add_or_update_service_detects_online_status_change() {
         let mut state = AppState::new(HashSet::new());
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        println!("Initial service online: {}", service1.online);
 
         state.add_or_update_service(service1.clone());
-        println!("Service after add online: {}", state.services[0].online);
 
         // Update service to be offline
         let mut service2 = service1.clone();
         service2.online = false;
-        println!("Updated service online: {}", service2.online);
 
         let was_updated = state.add_or_update_service(service2);
 
