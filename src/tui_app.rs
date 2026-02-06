@@ -92,10 +92,10 @@ impl ServiceEntry {
     }
 
     fn go_online_at(&mut self, timestamp_micros: u64) {
-        self.updated_at_micros = timestamp_micros;
         if self.online {
             return;
         }
+        self.updated_at_micros = timestamp_micros;
         self.online = true;
         self.last_online_micros = Some(timestamp_micros);
 
