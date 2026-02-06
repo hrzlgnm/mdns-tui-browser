@@ -106,46 +106,40 @@ impl ServiceEntry {
     }
 
     fn get_session_history(&self) -> String {
-        if self.session_history.is_empty()
-            || self.session_history.len() == 1 && self.session_history[0].end_time.is_none()
-        {
-            "No session history".to_string()
-        } else {
-            // First, collect completed sessions and find max widths
-            let mut completed_sessions = Vec::new();
-            let mut max_duration_length = 0;
-            let mut max_session_num_length = 0;
+        // First, collect completed sessions and find max widths
+        let mut completed_sessions = Vec::new();
+        let mut max_session_num_length = 0;
 
-            for (i, session) in self.session_history.iter().enumerate() {
-                if session.end_time.is_some() {
-                    let session_num = i + 1;
-                    let duration_str = format_duration_micros(session.duration_micros);
-                    max_duration_length = max_duration_length.max(duration_str.len());
-                    max_session_num_length =
-                        max_session_num_length.max(session_num.to_string().len());
-                    completed_sessions.push((session_num, session));
-                }
-            }
-
-            // Now format with proper alignment for both session numbers and durations
-            let mut timeline = Vec::new();
-            for (session_num, session) in completed_sessions {
-                let start_str = format_timestamp_micros(session.start_time);
-                let end_str = format_timestamp_micros(session.end_time.unwrap());
-                let duration_str = format_duration_micros(session.duration_micros);
-
-                timeline.push(format!(
-                    "Session {:>session_width$}: {:<duration_width$} {} → {}",
-                    session_num,
-                    duration_str,
-                    start_str,
-                    end_str,
-                    session_width = max_session_num_length,
-                    duration_width = max_duration_length
-                ));
-            }
-            timeline.join("\n")
+        for (i, session) in self.session_history.iter().enumerate() {
+            let session_num = i + 1;
+            max_session_num_length = max_session_num_length.max(session_num.to_string().len());
+            completed_sessions.push((session_num, session));
         }
+
+        // Now format with proper alignment for both session numbers and durations
+        let mut timeline = Vec::new();
+        for (session_num, session) in completed_sessions {
+            let start_str = format_timestamp_micros(session.start_time);
+            let (duration_str, end_str) = if session.end_time.is_some() {
+                (
+                    format_duration_micros(session.duration_micros),
+                    format_timestamp_micros(session.end_time.unwrap()),
+                )
+            } else {
+                ("N/A".to_string(), "Ongoing".to_string())
+            };
+
+            timeline.push(format!(
+                "Session {:>session_width$}: {} → {:<timestamp_width$} = {}",
+                session_num,
+                start_str,
+                end_str,
+                duration_str,
+                session_width = max_session_num_length,
+                timestamp_width = 26, // Fixed width for timestamps
+            ));
+        }
+        timeline.join("\n")
     }
 }
 
@@ -2600,12 +2594,6 @@ mod tests {
     }
 
     // Session timeline tests
-    #[test]
-    fn test_get_session_timeline_empty_history() {
-        let service = create_test_service("test", "_http._tcp.local.", 8080);
-        let timeline = service.get_session_history();
-        assert_eq!(timeline, "No session history");
-    }
 
     #[test]
     fn test_service_entry_full_online_offline_cycle() {
@@ -2789,7 +2777,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_session_timeline_ignores_active_sessions() {
+    fn test_get_session_timeline_shows_active_session_as_ongoing_with_na() {
         let service = ServiceEntry {
             fullname: "test._http._tcp.local.".to_string(),
             host: "testhost.local.".to_string(),
@@ -2800,18 +2788,11 @@ mod tests {
             txt: vec![],
             online: true, // Currently online
             updated_at_micros: 3000000,
-            session_history: vec![
-                ServiceSession {
-                    start_time: 1000000,
-                    end_time: Some(2000000), // Completed session
-                    duration_micros: 1000000,
-                },
-                ServiceSession {
-                    start_time: 3000000,
-                    end_time: None, // Active session (no end time)
-                    duration_micros: 0,
-                },
-            ],
+            session_history: vec![ServiceSession {
+                start_time: 3000000,
+                end_time: None, // Active session (no end time)
+                duration_micros: 0,
+            }],
             first_seen_micros: 1000000,
             last_online_micros: Some(3000000),
             last_offline_micros: Some(2000000),
@@ -2820,10 +2801,11 @@ mod tests {
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
 
-        // Should only show the completed session
         assert_eq!(lines.len(), 1);
+        // ongoing session should indicate "Ongoing" and have "N/A" for duration
         assert!(lines[0].contains("Session 1:"));
-        assert!(lines[0].contains("1s"));
+        assert!(lines[0].contains("Ongoing"));
+        assert!(lines[0].contains("N/A"));
     }
 
     #[test]
