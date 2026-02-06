@@ -72,19 +72,19 @@ impl ServiceEntry {
             let session_duration = timestamp_micros.saturating_sub(last_online);
             self.total_online_duration_micros += session_duration;
 
-            // Update or add to session history
+            // Update existing session or add new one to session history
             if let Some(session) = self.session_history.iter_mut().last() {
                 // Complete the current session
                 session.end_time = Some(timestamp_micros);
                 session.duration_micros = session_duration;
+            } else {
+                // Add new completed session to history
+                self.session_history.push(ServiceSession {
+                    start_time: last_online,
+                    end_time: Some(timestamp_micros),
+                    duration_micros: session_duration,
+                });
             }
-
-            // Add new completed session to history
-            self.session_history.push(ServiceSession {
-                start_time: last_online,
-                end_time: Some(timestamp_micros),
-                duration_micros: session_duration,
-            });
         }
     }
 
@@ -186,7 +186,11 @@ impl From<ResolvedService> for ServiceEntry {
             last_online_micros: Some(current_timestamp),
             last_offline_micros: None,
             total_online_duration_micros: 0,
-            session_history: Vec::new(),
+            session_history: vec![ServiceSession {
+                start_time: current_timestamp,
+                end_time: None,
+                duration_micros: 0,
+            }],
         }
     }
 }
@@ -2250,7 +2254,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let subtype_text = service
         .subtype
         .as_ref()
-        .map(|s| format!("Subtype: {}", s))
+        .map(|s| s.to_string())
         .unwrap_or_default();
 
     lines.push(Line::from(vec![
@@ -4358,7 +4362,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_service_details_text_offline_service() {
+    fn test_create_service_details_text_online_service() {
         let service = ServiceEntry {
             fullname: "test._http._tcp.local.".to_string(),
             host: "testhost.local.".to_string(),
