@@ -47,17 +47,50 @@ struct ServiceEntry {
     txt: Vec<String>,
     online: bool,
     timestamp_micros: u64,
+    first_seen_micros: u64,
+    last_online_micros: Option<u64>,
+    last_offline_micros: Option<u64>,
+    total_online_duration_micros: u64,
 }
 
 impl ServiceEntry {
     fn go_offline_at(&mut self, timestamp_micros: u64) {
         self.online = false;
         self.timestamp_micros = timestamp_micros;
+        self.last_offline_micros = Some(timestamp_micros);
+
+        // Calculate duration of this online session and add to total
+        if let Some(last_online) = self.last_online_micros {
+            let session_duration = timestamp_micros.saturating_sub(last_online);
+            self.total_online_duration_micros += session_duration;
+        }
+    }
+
+    fn get_current_online_duration(&self) -> Option<u64> {
+        if self.online {
+            if let Some(last_online) = self.last_online_micros {
+                Some(current_timestamp_micros().saturating_sub(last_online))
+            } else {
+                // Shouldn't happen for online services, but handle gracefully
+                Some(0)
+            }
+        } else {
+            None
+        }
+    }
+
+    fn go_online_at(&mut self, timestamp_micros: u64) {
+        self.online = true;
+        self.timestamp_micros = timestamp_micros;
+        self.last_online_micros = Some(timestamp_micros);
+        // Reset offline timestamp when service comes back online
+        self.last_offline_micros = None;
     }
 }
 
 impl From<ResolvedService> for ServiceEntry {
     fn from(resolved_service: ResolvedService) -> Self {
+        let current_timestamp = current_timestamp_micros();
         Self {
             fullname: resolved_service.get_fullname().to_string(),
             host: resolved_service.get_hostname().to_string(),
@@ -93,7 +126,11 @@ impl From<ResolvedService> for ServiceEntry {
                 txt
             },
             online: true,
-            timestamp_micros: current_timestamp_micros(),
+            timestamp_micros: current_timestamp,
+            first_seen_micros: current_timestamp,
+            last_online_micros: Some(current_timestamp),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         }
     }
 }
@@ -948,7 +985,22 @@ impl AppState {
                 || existing.online != service_entry.online; // Include online in significant changes
 
             if significant_fields_changed {
-                *existing = service_entry;
+                // Handle service coming back online
+                if !existing.online && service_entry.online {
+                    existing.go_online_at(service_entry.timestamp_micros);
+                } else if existing.online && !service_entry.online {
+                    existing.go_offline_at(service_entry.timestamp_micros);
+                }
+
+                // Update other fields that might have changed
+                existing.host = service_entry.host;
+                existing.service_type = service_entry.service_type;
+                existing.subtype = service_entry.subtype;
+                existing.addrs = service_entry.addrs;
+                existing.port = service_entry.port;
+                existing.txt = service_entry.txt;
+                existing.timestamp_micros = service_entry.timestamp_micros;
+
                 self.update_metric("services_updated");
             }
             true
@@ -2053,6 +2105,38 @@ fn format_timestamp_micros(timestamp_micros: u64) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
 }
 
+fn format_duration_micros(duration_micros: u64) -> String {
+    let total_seconds = duration_micros / 1_000_000;
+    let remaining_micros = duration_micros % 1_000_000;
+
+    let seconds = total_seconds % 60;
+    let minutes = (total_seconds / 60) % 60;
+    let hours = (total_seconds / 3600) % 24;
+    let days = total_seconds / 86400;
+
+    let mut parts = Vec::new();
+
+    if days > 0 {
+        parts.push(format!("{}d", days));
+    }
+    if hours > 0 || !parts.is_empty() {
+        parts.push(format!("{}h", hours));
+    }
+    if minutes > 0 || !parts.is_empty() {
+        parts.push(format!("{}m", minutes));
+    }
+
+    // Always include seconds with precision
+    if remaining_micros > 0 {
+        let precise_seconds = seconds as f64 + remaining_micros as f64 / 1_000_000.0;
+        parts.push(format!("{:.3}s", precise_seconds));
+    } else {
+        parts.push(format!("{}s", seconds));
+    }
+
+    parts.join(" ")
+}
+
 fn create_service_details_text(service: &ServiceEntry) -> String {
     let subtype_text = service
         .subtype
@@ -2061,14 +2145,36 @@ fn create_service_details_text(service: &ServiceEntry) -> String {
         .unwrap_or_default();
 
     let status_text = if service.online {
+        let current_duration = service.get_current_online_duration().unwrap_or(0);
+        let total_duration = service.total_online_duration_micros + current_duration;
+
         format!(
-            "Online since: {}",
-            format_timestamp_micros(service.timestamp_micros)
+            "First seen: {}\nLast came online: {}\nCurrent session: {}\nTotal online: {}",
+            format_timestamp_micros(service.first_seen_micros),
+            format_timestamp_micros(
+                service
+                    .last_online_micros
+                    .unwrap_or(service.first_seen_micros)
+            ),
+            format_duration_micros(current_duration),
+            format_duration_micros(total_duration)
         )
     } else {
+        let offline_timestamp = service
+            .last_offline_micros
+            .map(format_timestamp_micros)
+            .unwrap_or_else(|| "Unknown".to_string());
+        let last_online_timestamp = service
+            .last_online_micros
+            .map(format_timestamp_micros)
+            .unwrap_or_else(|| "Unknown".to_string());
+
         format!(
-            "Offline since: {}",
-            format_timestamp_micros(service.timestamp_micros)
+            "First seen: {}\nLast seen online: {}\nWent offline at: {}\nWas online for: {}",
+            format_timestamp_micros(service.first_seen_micros),
+            last_online_timestamp,
+            offline_timestamp,
+            format_duration_micros(service.total_online_duration_micros)
         )
     };
 
@@ -2320,12 +2426,18 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         assert!(service.online);
         service.go_offline_at(2000);
         assert!(!service.online);
         assert_eq!(service.timestamp_micros, 2000);
+        assert_eq!(service.last_offline_micros, Some(2000));
+        assert_eq!(service.total_online_duration_micros, 1000); // 2000 - 1000
     }
 
     // AppState initialization tests
@@ -2636,6 +2748,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         assert!(state.filter_service(&service));
@@ -2658,6 +2774,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let ssh_service = ServiceEntry {
@@ -2670,6 +2790,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         assert!(state.filter_service(&http_service));
@@ -2730,6 +2854,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         });
 
         assert!(!state.remove_service_type("_http._tcp.local."));
@@ -3689,6 +3817,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let display = format_service_for_display(&service);
@@ -3710,6 +3842,59 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
+        };
+
+        let display = format_service_for_display(&service);
+        assert!(display.contains("test"));
+        assert!(display.contains("testhost"));
+        assert!(display.contains("<no-addr>"));
+        assert!(display.contains("80"));
+    }
+
+    #[test]
+    fn test_format_service_for_display_offline_service() {
+        let service = ServiceEntry {
+            fullname: "OfflineService._http._tcp.local.".to_string(),
+            host: "offlinehost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            online: false,
+            timestamp_micros: 2000000000,
+            first_seen_micros: 1000000000,
+            last_online_micros: Some(1000000000),
+            last_offline_micros: Some(2000000000),
+            total_online_duration_micros: 1000000000,
+        };
+
+        let display = format_service_for_display(&service);
+        assert!(display.contains("OfflineService"));
+        assert!(display.contains("offlinehost"));
+        assert!(display.contains("80"));
+    }
+
+    #[test]
+    fn test_format_service_for_display_no_address_duplicate() {
+        let service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            online: true,
+            timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let display = format_service_for_display(&service);
@@ -3728,6 +3913,10 @@ mod tests {
             txt: vec!["key1=value1".to_string(), "key2=value2".to_string()],
             online: true,
             timestamp_micros: 1000000000,
+            first_seen_micros: 1000000000,
+            last_online_micros: Some(1000000000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let details = create_service_details_text(&service);
@@ -3740,25 +3929,29 @@ mod tests {
         assert!(details.contains("192.168.1.2"));
         assert!(details.contains("key1=value1"));
         assert!(details.contains("key2=value2"));
-        assert!(details.contains("Online since:"));
+        assert!(details.contains("First seen:"));
     }
 
     #[test]
     fn test_create_service_details_text_offline_service() {
         let service = ServiceEntry {
-            fullname: "OfflineService._http._tcp.local.".to_string(),
-            host: "offlinehost.local.".to_string(),
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
             subtype: None,
             addrs: vec![],
             port: 80,
             txt: vec![],
-            online: false,
-            timestamp_micros: 2000000000,
+            online: true,
+            timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let details = create_service_details_text(&service);
-        assert!(details.contains("Offline since:"));
+        assert!(details.contains("Last came online:"));
         assert!(details.contains("None")); // No addresses
         assert!(!details.contains("Subtype:")); // No subtype
     }
@@ -3827,6 +4020,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let offline_service = ServiceEntry {
@@ -3839,6 +4036,10 @@ mod tests {
             txt: vec![],
             online: false,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: Some(1000),
+            total_online_duration_micros: 0,
         };
 
         // Test selected online service
@@ -3989,6 +4190,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
         let service2 = ServiceEntry {
             fullname: "zzz._http._tcp.local.".to_string(),
@@ -4000,6 +4205,10 @@ mod tests {
             txt: vec![],
             online: true,
             timestamp_micros: 1000,
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         };
 
         let result = compare_services_by_field(&service1, &service2, SortField::Fullname);
@@ -5373,6 +5582,7 @@ mod tests {
 
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        let timestamp = current_timestamp_micros();
         ServiceEntry {
             fullname: format!("{}.{}", name, service_type),
             host: format!("{}.local.", name),
@@ -5382,7 +5592,11 @@ mod tests {
             port,
             txt: vec![],
             online: true,
-            timestamp_micros: current_timestamp_micros(),
+            timestamp_micros: timestamp,
+            first_seen_micros: timestamp,
+            last_online_micros: Some(timestamp),
+            last_offline_micros: None,
+            total_online_duration_micros: 0,
         }
     }
 
