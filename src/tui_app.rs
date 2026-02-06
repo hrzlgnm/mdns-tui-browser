@@ -2201,29 +2201,52 @@ fn format_duration_micros(duration_micros: u64) -> String {
 fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
-    // Status lines with color-blind friendly colors (at the very top)
+    // Online status - use blue (color-blind friendly)
+    let online_style: Style = Style::default()
+        .fg(Color::Blue)
+        .add_modifier(Modifier::BOLD);
+    // Offline status - use orange (color-blind friendly)
+    let offline_style: Style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+
     if service.online {
-        // Online status - use blue (color-blind friendly)
         lines.push(Line::from(vec![
-            Span::styled("First seen: ", Style::default()),
+            Span::styled("Status:", Style::default()),
+            Span::styled(" Online", online_style),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::styled("First seen:        ", Style::default()),
             Span::raw(format_timestamp_micros(service.first_seen_micros)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("Last came online: ", Style::default()),
+            Span::styled("Last came online:  ", Style::default()),
             Span::raw(format_timestamp_micros(
                 service
                     .last_online_micros
                     .unwrap_or(service.first_seen_micros),
             )),
         ]));
-        lines.push(Line::from(vec![Span::styled(
-            "Currently online",
-            Style::default()
-                .fg(Color::Blue)
-                .add_modifier(Modifier::BOLD),
-        )]));
+        if service.last_offline_micros.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("Last seen offline: ", Style::default()),
+                Span::raw(format_timestamp_micros(
+                    service.last_offline_micros.unwrap_or(0),
+                )),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Last seen offline: ", Style::default()),
+                Span::raw("Never".to_string()),
+            ]));
+        }
     } else {
-        // Offline status - use orange (color-blind friendly)
+        lines.push(Line::from(vec![
+            Span::styled("Status:", Style::default()),
+            Span::styled(" Offline", offline_style),
+        ]));
+
         let offline_timestamp = service
             .last_offline_micros
             .map(format_timestamp_micros)
@@ -2234,23 +2257,17 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
             .unwrap_or_else(|| "Unknown".to_string());
 
         lines.push(Line::from(vec![
-            Span::styled("First seen: ", Style::default()),
+            Span::styled("First seen:        ", Style::default()),
             Span::raw(format_timestamp_micros(service.first_seen_micros)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("Last seen online: ", Style::default()),
+            Span::styled("Last seen online:  ", Style::default()),
             Span::raw(last_online_timestamp),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("Went offline at: ", Style::default()),
+            Span::styled("Went offline at:   ", Style::default()),
             Span::raw(offline_timestamp),
         ]));
-        lines.push(Line::from(vec![Span::styled(
-            "Currently offline",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]));
     }
 
     // Empty line for spacing
@@ -4357,7 +4374,7 @@ mod tests {
         assert!(details_text.contains("key1=value1"));
         assert!(details_text.contains("key2=value2"));
         assert!(details_text.contains("First seen:"));
-        assert!(details_text.contains("Currently online"));
+        assert!(details_text.contains("Online"));
     }
 
     #[test]
@@ -4393,7 +4410,40 @@ mod tests {
         assert!(details_text.contains("Last came online:"));
         assert!(details_text.contains("None")); // No addresses
         assert!(!details_text.contains("Subtype:")); // No subtype
-        assert!(details_text.contains("Currently online"));
+        assert!(details_text.contains("Status: Online"));
+    }
+
+    #[test]
+    fn test_create_service_details_text_offline_service() {
+        let service = ServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "testhost.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 80,
+            txt: vec![],
+            online: false,
+            updated_at_micros: 1000,
+            session_history: Vec::new(),
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+        };
+
+        let details_lines = create_service_details_text(&service);
+        let details_text: String = details_lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<String>>()
+            .join("");
+
+        assert!(details_text.contains("Status: Offline"));
     }
 
     #[test]
