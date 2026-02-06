@@ -2774,6 +2774,13 @@ mod tests {
         // All arrows should be at the same position, meaning durations are aligned
         assert_eq!(arrow_pos1, arrow_pos2);
         assert_eq!(arrow_pos2, arrow_pos3);
+
+        let eq_pos1 = lines[0].find(" = ").unwrap();
+        let eq_pos2 = lines[1].find(" = ").unwrap();
+        let eq_pos3 = lines[2].find(" = ").unwrap();
+
+        assert_eq!(eq_pos1, eq_pos2);
+        assert_eq!(eq_pos2, eq_pos3);
     }
 
     #[test]
