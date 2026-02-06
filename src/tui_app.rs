@@ -2187,10 +2187,10 @@ fn format_duration_micros(duration_micros: u64) -> String {
     if days > 0 {
         parts.push(format!("{}d", days));
     }
-    if hours > 0 || !parts.is_empty() {
+    if hours > 0 {
         parts.push(format!("{}h", hours));
     }
-    if minutes > 0 || !parts.is_empty() {
+    if minutes > 0 {
         parts.push(format!("{}m", minutes));
     }
 
