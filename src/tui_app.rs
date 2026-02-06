@@ -1,3 +1,5 @@
+// Copyright 2026 hrzlgnm
+// SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
 use crossterm::{
@@ -14,10 +16,10 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,3 +1,5 @@
+// Copyright 2026 hrzlgnm
+// SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
 mod tui_app;
