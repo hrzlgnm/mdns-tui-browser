@@ -50,7 +50,6 @@ struct ServiceEntry {
     first_seen_micros: u64,
     last_online_micros: Option<u64>,
     last_offline_micros: Option<u64>,
-    total_online_duration_micros: u64,
     session_history: Vec<ServiceSession>,
 }
 
@@ -73,7 +72,6 @@ impl ServiceEntry {
         // Calculate duration of this online session and add to history
         if let Some(last_online) = self.last_online_micros {
             let session_duration = timestamp_micros.saturating_sub(last_online);
-            self.total_online_duration_micros += session_duration;
 
             // Update existing session or add new one to session history
             if let Some(session) = self.session_history.iter_mut().last() {
@@ -193,7 +191,6 @@ impl From<ResolvedService> for ServiceEntry {
             first_seen_micros: current_timestamp,
             last_online_micros: Some(current_timestamp),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
             session_history: vec![ServiceSession {
                 start_time: current_timestamp,
                 end_time: None,
@@ -2569,7 +2566,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         }
     }
 
@@ -2583,7 +2579,6 @@ mod tests {
         assert!(!service.online);
         assert_eq!(service.updated_at_micros, 2000);
         assert_eq!(service.last_offline_micros, Some(2000));
-        assert_eq!(service.total_online_duration_micros, 1000); // 2000 - 1000
         assert_eq!(service.session_history.len(), 1);
     }
 
@@ -2602,7 +2597,6 @@ mod tests {
         // First cycle: go offline
         service.go_offline_at(2000);
         assert_eq!(service.session_history.len(), 1);
-        assert_eq!(service.total_online_duration_micros, 1000);
 
         // Second cycle: go online then offline
         service.go_online_at(3000);
@@ -2610,7 +2604,6 @@ mod tests {
         service.go_offline_at(5000);
 
         assert_eq!(service.session_history.len(), 2); // 2 completed + 0 active
-        assert_eq!(service.total_online_duration_micros, 3000); // 1000 + 2000
     }
 
     #[test]
@@ -2640,7 +2633,6 @@ mod tests {
             first_seen_micros: 1000000,
             last_online_micros: Some(6000000),
             last_offline_micros: Some(9000000),
-            total_online_duration_micros: 7000000,
         };
 
         let timeline = service.get_session_history();
@@ -2680,7 +2672,6 @@ mod tests {
             first_seen_micros: 1000000,
             last_online_micros: Some(3000000),
             last_offline_micros: Some(4000000),
-            total_online_duration_micros: 2000000,
         };
 
         let timeline = service.get_session_history();
@@ -2717,7 +2708,6 @@ mod tests {
             first_seen_micros: 1000000,
             last_online_micros: Some(91000000),
             last_offline_micros: Some(92000000),
-            total_online_duration_micros: 10000000,
         };
 
         let timeline = service.get_session_history();
@@ -2763,7 +2753,6 @@ mod tests {
             first_seen_micros: 1000000,
             last_online_micros: Some(10000000),
             last_offline_micros: Some(3700000000),
-            total_online_duration_micros: 3697000000,
         };
 
         let timeline = service.get_session_history();
@@ -2809,7 +2798,6 @@ mod tests {
             first_seen_micros: 1000000,
             last_online_micros: Some(3000000),
             last_offline_micros: Some(2000000),
-            total_online_duration_micros: 1000000,
         };
 
         let timeline = service.get_session_history();
@@ -2848,7 +2836,6 @@ mod tests {
             first_seen_micros: 1000000,
             last_online_micros: Some(6000000),
             last_offline_micros: Some(500000000000),
-            total_online_duration_micros: 499998000000,
         };
 
         let timeline = service.get_session_history();
@@ -3181,7 +3168,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         assert!(state.filter_service(&service));
@@ -3208,7 +3194,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let ssh_service = ServiceEntry {
@@ -3225,7 +3210,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         assert!(state.filter_service(&http_service));
@@ -3290,7 +3274,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         });
 
         assert!(!state.remove_service_type("_http._tcp.local."));
@@ -4254,7 +4237,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let display = format_service_for_display(&service);
@@ -4280,7 +4262,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let display = format_service_for_display(&service);
@@ -4306,7 +4287,6 @@ mod tests {
             first_seen_micros: 1000000000,
             last_online_micros: Some(1000000000),
             last_offline_micros: Some(2000000000),
-            total_online_duration_micros: 1000000000,
         };
 
         let display = format_service_for_display(&service);
@@ -4331,7 +4311,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let display = format_service_for_display(&service);
@@ -4354,7 +4333,6 @@ mod tests {
             first_seen_micros: 1000000000,
             last_online_micros: Some(1000000000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let details_lines = create_service_details_text(&service);
@@ -4398,7 +4376,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let details_lines = create_service_details_text(&service);
@@ -4487,7 +4464,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let offline_service = ServiceEntry {
@@ -4504,7 +4480,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: Some(1000),
-            total_online_duration_micros: 0,
         };
 
         // Test selected online service
@@ -4659,7 +4634,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
         let service2 = ServiceEntry {
             fullname: "zzz._http._tcp.local.".to_string(),
@@ -4675,7 +4649,6 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
-            total_online_duration_micros: 0,
         };
 
         let result = compare_services_by_field(&service1, &service2, SortField::Fullname);
