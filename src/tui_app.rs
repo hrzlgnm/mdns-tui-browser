@@ -1052,6 +1052,8 @@ impl AppState {
                 || existing.txt != service_entry.txt
                 || existing.online != service_entry.online; // Include online in significant changes
 
+            existing.updated_at_micros = service_entry.updated_at_micros; // Always update timestamp
+
             if significant_fields_changed {
                 // Handle service coming back online
                 if !existing.online && service_entry.online {
@@ -1067,7 +1069,6 @@ impl AppState {
                 existing.addrs = service_entry.addrs;
                 existing.port = service_entry.port;
                 existing.txt = service_entry.txt;
-                existing.updated_at_micros = service_entry.updated_at_micros;
 
                 self.update_metric("services_updated");
             }
