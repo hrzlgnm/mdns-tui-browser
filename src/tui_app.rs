@@ -54,7 +54,7 @@ struct ServiceEntry {
     session_history: Vec<ServiceSession>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct ServiceSession {
     start_time: u64,
     end_time: Option<u64>,
