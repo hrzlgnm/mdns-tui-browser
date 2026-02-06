@@ -120,10 +120,10 @@ impl ServiceEntry {
         let mut timeline = Vec::new();
         for (session_num, session) in completed_sessions {
             let start_str = format_timestamp_micros(session.start_time);
-            let (duration_str, end_str) = if session.end_time.is_some() {
+            let (duration_str, end_str) = if let Some(end_time) = session.end_time {
                 (
                     format_duration_micros(session.duration_micros),
-                    format_timestamp_micros(session.end_time.unwrap()),
+                    format_timestamp_micros(end_time),
                 )
             } else {
                 ("N/A".to_string(), "Ongoing".to_string())
