@@ -1055,13 +1055,8 @@ impl AppState {
             if significant_fields_changed {
                 // Handle service coming back online
                 if !existing.online && service_entry.online {
-                    println!("Service coming back online");
                     existing.go_online_at(service_entry.updated_at_micros);
                 } else if existing.online && !service_entry.online {
-                    println!(
-                        "Service going offline - existing.online: {}, service_entry.online: {}",
-                        existing.online, service_entry.online
-                    );
                     existing.go_offline_at(service_entry.updated_at_micros);
                 }
 
