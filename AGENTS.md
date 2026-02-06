@@ -146,12 +146,29 @@ src/
 
 ## Development Workflow
 
-1. Make changes to source code
-2. Run `cargo fmt` to format code
-3. Run `cargo clippy --tests -- -D warnings` to check for issues
-4. Run `cargo nextest run --profile ci` to run tests
-5. Test the application manually with `cargo run`
-6. Commit only when all checks pass
+1. REQUIRED: Create a branch for your changes 
+2. Make changes to source code
+3. Run `cargo fmt` to format code
+4. Run `cargo clippy --tests -- -D warnings` to check for issues
+5. Run `cargo nextest run --profile ci` to run tests
+6. Test the application manually with `cargo run`
+7. If README.md was updated, update the manpage (`mdns-tui-browser.1`)
+8. Commit only when all checks pass
+9. After committing, push to the repository and create a pull request if applicable
+10. After the pull request is created, add a comment `@coderabbitai review`
+11. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
+
+## Documentation Maintenance
+
+### Manpage Updates
+The manpage (`mdns-tui-browser.1`) must be kept in sync with `README.md`. When updating documentation:
+
+1. **CLI Options**: Update both README.md CLI Options section and manpage OPTIONS section
+2. **Controls**: Update both README.md Controls section and manpage CONTROLS section  
+3. **Service Types**: Update both README.md Service Types section and manpage SERVICE TYPES section
+4. **Examples**: Update both README.md Examples section and manpage EXAMPLES section
+
+The manpage should contain only essential usage information without excessive detail, focusing on what users need to know to use the program effectively.
 
 ## CI/CD Integration
 

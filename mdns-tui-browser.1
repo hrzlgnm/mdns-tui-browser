@@ -1,0 +1,107 @@
+.TH MDNS-TUI-BROWSER 1 "2026-02-06" "mdns-tui-browser" "User Commands"
+
+.SH NAME
+mdns-tui-browser \- terminal-based mDNS service browser
+
+.SH SYNOPSIS
+.B mdns-tui-browser
+[\fIOPTIONS\fR]
+
+.SH DESCRIPTION
+A terminal-based mDNS service browser built with Rust. It provides an interactive TUI interface for discovering and browsing mDNS services on the local network, with real-time updates, service filtering, and sorting capabilities.
+
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Display help message and exit.
+.TP
+.B \-V, \-\-version
+Display version information and exit.
+.TP
+.B \-s, \-\-service-types \fISERVICE_TYPES\fR
+Specify service types to browse for explicitly. If omitted, service types will be discovered automatically. Accepts comma-separated list or multiple instances of mDNS service types with intelligent auto-completion.
+
+.SH SERVICE TYPES
+The \fB\-\-service-types\fR argument supports various formats:
+.RS
+.IP \(bu
+Simple names: \fBhttp\fR → \fB_http._tcp.local.\fR
+.IP \(bu
+Missing underscores: \fB_http\fR → \fB_http._tcp.local.\fR
+.IP \(bu
+Protocol specification: \fBhttp.tcp\fR → \fB_http._tcp.local.\fR
+.IP \(bu
+Subtype format: \fBprinter.sub.http\fR → \fBprinter._sub._http._tcp.local.\fR
+.IP \(bu
+Full forms: \fB_http._tcp.local.\fR, \fB_http._tcp\fR
+.RE
+
+.PP
+Common service types:
+.RS
+.IP \(bu
+\fBhttp\fR, \fBssh\fR, \fBprinter\fR, \fBairplay\fR, \fBraop\fR
+.RE
+
+.SH CONTROLS
+.TP
+.B Navigation
+.br
+↑/↓ or j/k - Navigate services list
+.br
+←/→ or h/l - Switch between service types
+.br
+PageUp/PageDown or b/f - Scroll services list by page
+.br
+Home/End - Jump to first/last service
+.TP
+.B Sorting
+.br
+s - Cycle sort field forward
+.br
+S - Cycle sort field backward
+.br
+o - Toggle sort direction
+.TP
+.B Filtering
+.br
+/ - Enter quick filter mode
+.br
+n - Clear current filter
+.br
+d - Remove offline services
+.br
+D - Clear stale service types
+.TP
+.B Other
+.br
+m - Show service metrics
+.br
+? - Toggle help popup
+.br
+q or Ctrl+C - Quit
+
+.SH EXAMPLES
+.RS
+.IP \(bu
+Browse default services:
+.br
+.B mdns-tui-browser
+.IP \(bu
+Browse with additional service types:
+.br
+.B mdns-tui-browser \-\-service-types "_http._tcp.local.,_ssh._tcp.local."
+.IP \(bu
+Browse with shortened service types:
+.br
+.B mdns-tui-browser \-s "http,ssh"
+.RE
+
+.SH AUTHOR
+Written by hrzlgnm.
+
+.SH REPORTING BUGS
+Report bugs at: https://github.com/hrzlgnm/mdns-tui-browser/issues
+
+.SH LICENSE
+MIT License.
