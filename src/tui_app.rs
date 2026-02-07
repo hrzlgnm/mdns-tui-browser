@@ -143,7 +143,6 @@ fn is_zero_u16(v: &u16) -> bool {
 struct ServiceSession {
     start_time: u64,
     end_time: Option<u64>,
-    duration_micros: u64,
 }
 
 #[derive(Serialize)]
@@ -166,19 +165,15 @@ impl ServiceEntry {
 
         // Calculate duration of this online session and add to history
         if let Some(last_online) = self.last_online_micros {
-            let session_duration = timestamp_micros.saturating_sub(last_online);
-
             // Update existing session or add new one to session history
             if let Some(session) = self.session_history.iter_mut().last() {
                 // Complete the current session
                 session.end_time = Some(timestamp_micros);
-                session.duration_micros = session_duration;
             } else {
                 // Add new completed session to history
                 self.session_history.push(ServiceSession {
                     start_time: last_online,
                     end_time: Some(timestamp_micros),
-                    duration_micros: session_duration,
                 });
             }
         }
@@ -196,7 +191,6 @@ impl ServiceEntry {
         self.session_history.push(ServiceSession {
             start_time: timestamp_micros,
             end_time: None,
-            duration_micros: 0, // Will be calculated when session ends
         });
     }
 
@@ -217,7 +211,7 @@ impl ServiceEntry {
             let start_str = format_timestamp_micros(session.start_time);
             let (duration_str, end_str) = if let Some(end_time) = session.end_time {
                 (
-                    format_duration_micros(session.duration_micros),
+                    format_duration_micros(end_time - session.start_time),
                     format_timestamp_micros(end_time),
                 )
             } else {
@@ -283,7 +277,6 @@ impl From<ResolvedService> for ServiceEntry {
             session_history: vec![ServiceSession {
                 start_time: current_timestamp,
                 end_time: None,
-                duration_micros: 0,
             }],
         }
     }
