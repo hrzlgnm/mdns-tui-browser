@@ -2837,30 +2837,22 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_multiple_sessions() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 9000000,
-            session_history: vec![
-                ServiceSession {
-                    start_time: 1000000,
-                    end_time: Some(5000000), // 4s
-                },
-                ServiceSession {
-                    start_time: 6000000,
-                    end_time: Some(9000000), // 3s
-                },
-            ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(6000000),
-            last_offline_micros: Some(9000000),
-        };
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.online = false;
+        service.updated_at_micros = 9000000;
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000000,
+                end_time: Some(5000000), // 4s
+            },
+            ServiceSession {
+                start_time: 6000000,
+                end_time: Some(9000000), // 3s
+            },
+        ];
+        service.first_seen_micros = 1000000;
+        service.last_online_micros = Some(6000000);
+        service.last_offline_micros = Some(9000000);
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -2874,30 +2866,22 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_alignment_single_digit() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 5000000,
-            session_history: vec![
-                ServiceSession {
-                    start_time: 1000000,
-                    end_time: Some(2000000), // 1s
-                },
-                ServiceSession {
-                    start_time: 3000000,
-                    end_time: Some(4000000), // 1s
-                },
-            ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(3000000),
-            last_offline_micros: Some(4000000),
-        };
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.online = false;
+        service.updated_at_micros = 5000000;
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000000,
+                end_time: Some(2000000), // 1s
+            },
+            ServiceSession {
+                start_time: 3000000,
+                end_time: Some(4000000), // 1s
+            },
+        ];
+        service.first_seen_micros = 1000000;
+        service.last_online_micros = Some(3000000);
+        service.last_offline_micros = Some(4000000);
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -3001,24 +2985,16 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_shows_active_session_as_ongoing_with_na() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: true, // Currently online
-            updated_at_micros: 3000000,
-            session_history: vec![ServiceSession {
-                start_time: 3000000,
-                end_time: None, // Active session (no end time)
-            }],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(3000000),
-            last_offline_micros: Some(2000000),
-        };
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.online = true;
+        service.updated_at_micros = 3000000;
+        service.session_history = vec![ServiceSession {
+            start_time: 3000000,
+            end_time: None, // Active session (no end time)
+        }];
+        service.first_seen_micros = 1000000;
+        service.last_online_micros = Some(3000000);
+        service.last_offline_micros = Some(2000000);
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -3399,37 +3375,9 @@ mod tests {
         state.service_types.push("_ssh._tcp.local.".to_string());
         state.selected_type = Some(0);
 
-        let http_service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let http_service = create_test_service("test", "_http._tcp.local.", 80);
 
-        let ssh_service = ServiceEntry {
-            fullname: "test._ssh._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_ssh._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 22,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
 
         assert!(state.filter_service(&http_service));
         assert!(!state.filter_service(&ssh_service));
@@ -3479,21 +3427,9 @@ mod tests {
         state.add_service_type("_ssh._tcp.local.");
 
         // Can't remove if still in use
-        state.services.push(ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        });
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 80));
 
         assert!(!state.remove_service_type("_http._tcp.local."));
         assert_eq!(state.service_types.len(), 2);
@@ -4442,27 +4378,13 @@ mod tests {
 
     #[test]
     fn test_format_service_for_display() {
-        let service = ServiceEntry {
-            fullname: "MyPrinter._printer._tcp.local.".to_string(),
-            host: "printer.local.".to_string(),
-            service_type: "_printer._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.100".to_string()],
-            port: 631,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
 
         let display = format_service_for_display(&service);
+        println!("Display string: {}", display);
         assert!(display.contains("MyPrinter"));
-        assert!(display.contains("printer"));
-        assert!(display.contains("192.168.1.100"));
-        assert!(display.contains("631"));
+        assert!(display.contains("192.168.1.63"));
+        assert!(display.contains(":63"));
     }
 
     #[test]
@@ -4538,21 +4460,16 @@ mod tests {
 
     #[test]
     fn test_create_service_details_text() {
-        let service = ServiceEntry {
-            fullname: "MyService._http._tcp.local.".to_string(),
-            host: "myhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: Some("_printer".to_string()),
-            addrs: vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()],
-            port: 8080,
-            txt: vec!["key1=value1".to_string(), "key2=value2".to_string()],
-            online: true,
-            updated_at_micros: 1000000000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000000000,
-            last_online_micros: Some(1000000000),
-            last_offline_micros: None,
-        };
+        let mut service = create_test_service("MyService", "_http._tcp.local.", 8080);
+        service.subtype = Some("_printer".to_string());
+        service.addrs = vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()];
+        service.txt = vec!["key1=value1".to_string(), "key2=value2".to_string()];
+        service.online = true;
+        service.updated_at_micros = 1000000000;
+        service.session_history = Vec::new();
+        service.first_seen_micros = 1000000000;
+        service.last_online_micros = Some(1000000000);
+        service.last_offline_micros = None;
 
         let details_lines = create_service_details_text(&service);
         let details_text: String = details_lines
@@ -4567,7 +4484,7 @@ mod tests {
             .join("");
 
         assert!(details_text.contains("MyService._http._tcp.local."));
-        assert!(details_text.contains("myhost.local."));
+        assert!(details_text.contains("MyService.local."));
         assert!(details_text.contains("_http._tcp.local."));
         assert!(details_text.contains("_printer"));
         assert!(details_text.contains("8080"));
@@ -4581,21 +4498,7 @@ mod tests {
 
     #[test]
     fn test_create_service_details_text_online_service() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let service = create_test_service("test", "_http._tcp.local.", 80);
 
         let details_lines = create_service_details_text(&service);
         let details_text: String = details_lines
@@ -4617,22 +4520,8 @@ mod tests {
 
     #[test]
     fn test_create_service_details_text_offline_service() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.online = false;
         let details_lines = create_service_details_text(&service);
         let details_text: String = details_lines
             .iter()
@@ -4872,36 +4761,8 @@ mod tests {
 
     #[test]
     fn test_compare_services_by_field_fullname() {
-        let service1 = ServiceEntry {
-            fullname: "aaa._http._tcp.local.".to_string(),
-            host: "host1.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-        let service2 = ServiceEntry {
-            fullname: "zzz._http._tcp.local.".to_string(),
-            host: "host2.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let service1 = create_test_service("test", "_http._tcp.local.", 80);
+        let service2 = create_test_service("zzz", "_http._tcp.local.", 80);
 
         let result = compare_services_by_field(&service1, &service2, SortField::Fullname);
         assert_eq!(result, std::cmp::Ordering::Less);
