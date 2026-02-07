@@ -46,6 +46,11 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
         } else {
             None
         };
+        let last_online_at = if entry.last_online_micros != Some(entry.first_seen_micros) {
+            entry.last_online_micros.map(micros_to_iso_timestamp)
+        } else {
+            None
+        };
         Self {
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
@@ -56,7 +61,7 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
             is_online: entry.online,
             created_at: micros_to_iso_timestamp(entry.first_seen_micros),
             updated_at,
-            last_online_at: entry.last_online_micros.map(micros_to_iso_timestamp),
+            last_online_at,
             last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
             session_history: entry.session_history.iter().map(|s| s.into()).collect(),
         }
