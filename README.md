@@ -69,7 +69,7 @@ mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp.local.,_airplay._tcp.local."
 
 #### Service Types Argument (`--service-types/-s`)
 
-Service types to browse for (e.g., http, _http._tcp, printer). Auto-completes (_)service, (_)sub, .(_)[tc|ud]p and .local. suffix.
+Service types to browse for (e.g., http, _http._tcp, printer). Auto-completes `(_)service`, `(_)sub`, `.(_)[tc|ud]p` and `.local.` suffix.
 
 **Usage:**
 - Accepts comma-separated list of mDNS service types
