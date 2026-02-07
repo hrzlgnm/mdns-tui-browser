@@ -10,14 +10,16 @@ use clap::Parser;
 #[command(
     version = env!("CARGO_PKG_VERSION"),
     about = "A terminal-based mDNS service browser",
-    after_help = "TUI Controls:\n  ?\t- Show/hide help popup with all key bindings\n  q\t- Quit the application\n\nFor complete key binding reference, press '?' in the application.",
+    after_help = "TUI Controls:\n   ? - Show/hide help popup with all key bindings\n   q - Quit the application",
 )]
 struct Cli {
-    /// Service types to browse for (e.g., http, _http, _http._tcp, _http._tcp.local., printer.sub.http)
-    /// Auto-completes missing protocol (defaults to _tcp) and .local. suffix
-    /// Supports compact subtypes: printer.sub.http → _printer._sub._http._tcp.local.
-    /// Supports full subtypes using the format _subtype._sub._service._protocol (e.g., _printer._sub._http._tcp, _airplay._sub._raop._tcp)
-    #[arg(long, short, value_delimiter = ',')]
+    /// Service types to browse for
+    #[arg(
+        long,
+        short,
+        value_delimiter = ',',
+        long_help = "Service types to browse for (e.g., http, _http._tcp, printer)\nAuto-completes (_)service, (_)sub, .(_)[tc|ud]p and .local. suffix"
+    )]
     service_types: Option<Vec<String>>,
 }
 
