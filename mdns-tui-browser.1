@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-02-06" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-02-07" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -19,28 +19,37 @@ Display help message and exit.
 Display version information and exit.
 .TP
 .B \-s, \-\-service-types \fISERVICE_TYPES\fR
-Specify service types to browse for explicitly. If omitted, service types will be discovered automatically. Accepts comma-separated list or multiple instances of mDNS service types with intelligent auto-completion.
+Service types to browse for (e.g., http, _http._tcp, printer)
+Auto-completes (_)service, (_)sub, .(_)[tc|ud]p and .local. suffix
 
 .SH SERVICE TYPES
 The \fB\-\-service-types\fR argument supports various formats:
 .RS
 .IP \(bu
-Simple names: \fBhttp\fR → \fB_http._tcp.local.\fR
+Simple names: \fBhttp\fR, \fBssh\fR, \fBprinter\fR
 .IP \(bu
-Missing underscores: \fB_http\fR → \fB_http._tcp.local.\fR
+Partial forms: \fB_http\fR, \fB_http._tcp\fR
 .IP \(bu
-Protocol specification: \fBhttp.tcp\fR → \fB_http._tcp.local.\fR
+Protocol spec: \fBhttp.tcp\fR, \fBssh.tcp\fR
 .IP \(bu
-Subtype format: \fBprinter.sub.http\fR → \fBprinter._sub._http._tcp.local.\fR
+Subtypes: \fBprinter.sub.http\fR
 .IP \(bu
-Full forms: \fB_http._tcp.local.\fR, \fB_http._tcp\fR
+Full forms: \fB_http._tcp.local.\fR
 .RE
 
 .PP
 Common service types:
 .RS
 .IP \(bu
-\fBhttp\fR, \fBssh\fR, \fBprinter\fR, \fBairplay\fR, \fBraop\fR
+\fBhttp\fR - HTTP servers
+.IP \(bu
+\fBssh\fR - SSH servers
+.IP \(bu
+\fBprinter\fR - Network printers
+.IP \(bu
+\fBairplay\fR - Apple AirPlay devices
+.IP \(bu
+\fBraop\fR - AirPlay audio devices
 .RE
 
 .SH CONTROLS
@@ -51,37 +60,53 @@ Common service types:
 .br
 ←/→ or h/l             - Switch between service types
 .br
-PageUp/PageDown or b/f - Scroll services list by page
+H/L                    - Page through service types
+.br
+Ctrl+Home/End          - Jump to first/last service type
+.br
+PageUp/PageDown or b/f or Space - Scroll services list by page
 .br
 Home/End               - Jump to first/last service
+.br
+Shift+↑/↓ or J/K       - Scroll service details
 .TP
 .B Sorting
 .br
-s                      - Cycle sort field forward
+s                      - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
 .br
-S                      - Cycle sort field backward
+S                      - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
 .br
-o                      - Toggle sort direction
+o                      - Toggle sort direction (↑/↓)
 .TP
 .B Filtering
 .br
-/                      - Enter quick filter mode
+/                      - Enter quick filter mode (search across all service fields)
 .br
 n                      - Clear current filter
 .br
 d                      - Remove offline services
 .br
-D                      - Clear stale service types
+D                      - Clear stale service types (service types with no services)
 .TP
 .B Other
 .br
 m                      - Show service metrics
 .br
+Ctrl+J                 - Dump current state to JSON file
+.br
 ?                      - Toggle help popup
 .br
-Ctrl+j                 - Dump state to JSON file
+q or Ctrl+c            - Quit the application
+
+Quick filter mode (activated with /):
 .br
-q or Ctrl+c            - Quit
+Enter                  - Apply filter
+.br
+Esc                    - Cancel filter input
+.br
+Backspace              - Delete last character
+.br
+Any other key          - Type search text (case-insensitive)
 
 .SH EXAMPLES
 .RS
