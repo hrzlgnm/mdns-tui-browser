@@ -4767,7 +4767,7 @@ mod tests {
 
         // Test offline service
         let style = create_service_list_item_style(0, 0, &offline_service);
-        assert_eq!(style.fg, Some(Color::LightMagenta));
+        assert_eq!(style.fg, Some(Color::LightYellow));
         assert!(style.add_modifier.contains(Modifier::ITALIC));
     }
 
