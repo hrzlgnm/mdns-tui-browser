@@ -78,9 +78,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.100"
+version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
 name = "atomic"
@@ -197,6 +197,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -801,7 +802,7 @@ dependencies = [
 
 [[package]]
 name = "mdns-tui-browser"
-version = "1.11.1"
+version = "1.12.0"
 dependencies = [
  "chrono",
  "clap",
@@ -809,6 +810,8 @@ dependencies = [
  "flume 0.12.0",
  "mdns-sd",
  "ratatui",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -955,9 +958,9 @@ dependencies = [
 
 [[package]]
 name = "pest"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c9eb05c21a464ea704b53158d358a31e6425db2f63a1a7312268b05fe2b75f7"
+checksum = "e0848c601009d37dfa3430c4666e147e49cdcf1b92ecd3e63657d8a5f19da662"
 dependencies = [
  "memchr",
  "ucd-trie",
@@ -965,9 +968,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f9dbced329c441fa79d80472764b1a2c7e57123553b8519b36663a2fb234ed"
+checksum = "11f486f1ea21e6c10ed15d5a7c77165d0ee443402f0780849d1768e7d9d6fe77"
 dependencies = [
  "pest",
  "pest_generator",
@@ -975,9 +978,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bb96d5051a78f44f43c8f712d8e810adb0ebf923fc9ed2655a7f66f63ba8ee5"
+checksum = "8040c4647b13b210a963c1ed407c1ff4fdfa01c31d6d2a098218702e6664f94f"
 dependencies = [
  "pest",
  "pest_meta",
@@ -988,9 +991,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "602113b5b5e8621770cfd490cfd90b9f84ab29bd2b0e49ad83eb6d186cef2365"
+checksum = "89815c69d36021a140146f26659a81d6c2afa33d216d736dd4be5381a7362220"
 dependencies = [
  "pest",
  "sha2",
@@ -1302,6 +1305,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.149"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
+dependencies = [
+ "itoa",
+ "memchr",
+ "serde",
+ "serde_core",
+ "zmij",
 ]
 
 [[package]]
@@ -2049,3 +2065,9 @@ name = "wit-bindgen"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
+
+[[package]]
+name = "zmij"
+version = "1.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ff05f8caa9038894637571ae6b9e29466c1f4f829d26c9b28f869a29cbe3445"
