@@ -2803,7 +2803,6 @@ mod tests {
             session_history: vec![ServiceSession {
                 start_time: 1000,
                 end_time: None,
-                duration_micros: 0,
             }],
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
@@ -2858,12 +2857,10 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s
-                    duration_micros: 4000000,
                 },
                 ServiceSession {
                     start_time: 6000000,
                     end_time: Some(9000000), // 3s
-                    duration_micros: 3000000,
                 },
             ],
             first_seen_micros: 1000000,
@@ -2897,12 +2894,10 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(2000000), // 1s
-                    duration_micros: 1000000,
                 },
                 ServiceSession {
                     start_time: 3000000,
                     end_time: Some(4000000), // 1s
-                    duration_micros: 1000000,
                 },
             ],
             first_seen_micros: 1000000,
@@ -2926,7 +2921,6 @@ mod tests {
             sessions.push(ServiceSession {
                 start_time: (i * 10000000) + 1000000,
                 end_time: Some((i * 10000000) + 2000000), // 1s each
-                duration_micros: 1000000,
             });
         }
 
@@ -2973,17 +2967,14 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(2000000), // 1s (short duration)
-                    duration_micros: 1000000,
                 },
                 ServiceSession {
                     start_time: 3000000,
                     end_time: Some(9000000), // 6s (medium duration)
-                    duration_micros: 6000000,
                 },
                 ServiceSession {
                     start_time: 10000000,
                     end_time: Some(3700000000), // 1h 1m 30s (long duration)
-                    duration_micros: 3690000000,
                 },
             ],
             first_seen_micros: 1000000,
@@ -3029,7 +3020,6 @@ mod tests {
             session_history: vec![ServiceSession {
                 start_time: 3000000,
                 end_time: None, // Active session (no end time)
-                duration_micros: 0,
             }],
             first_seen_micros: 1000000,
             last_online_micros: Some(3000000),
@@ -3062,12 +3052,10 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s (short)
-                    duration_micros: 4000000,
                 },
                 ServiceSession {
                     start_time: 6000000,
                     end_time: Some(500000000000), // ~5d 21h 53m 20s (very long)
-                    duration_micros: 499994000000,
                 },
             ],
             first_seen_micros: 1000000,
