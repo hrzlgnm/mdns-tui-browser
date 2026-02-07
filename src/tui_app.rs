@@ -1547,8 +1547,8 @@ fn compare_services_by_field(
         SortField::Address => {
             use std::net::IpAddr;
 
-            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
-            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
+            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or_default();
+            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or_default();
 
             // Try to parse as IP addresses for numeric comparison, fall back to string comparison
             match (a_addr_str.parse::<IpAddr>(), b_addr_str.parse::<IpAddr>()) {
@@ -4834,8 +4834,7 @@ mod tests {
         service2.addrs = vec!["192.168.1.3".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
-        // "<no-addr>" should be compared as string ("<no-addr>" > "192.168.1.63")
-        assert_eq!(result, std::cmp::Ordering::Greater);
+        assert_eq!(result, std::cmp::Ordering::Less);
     }
 
     #[test]
