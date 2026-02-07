@@ -163,14 +163,10 @@ impl ServiceEntry {
         self.updated_at_micros = timestamp_micros;
         self.last_offline_micros = Some(timestamp_micros);
 
-        // Calculate duration of this online session and add to history
         if let Some(last_online) = self.last_online_micros {
-            // Update existing session or add new one to session history
             if let Some(session) = self.session_history.iter_mut().last() {
-                // Complete the current session
                 session.end_time = Some(timestamp_micros);
             } else {
-                // Add new completed session to history
                 self.session_history.push(ServiceSession {
                     start_time: last_online,
                     end_time: Some(timestamp_micros),
@@ -187,7 +183,6 @@ impl ServiceEntry {
         self.online = true;
         self.last_online_micros = Some(timestamp_micros);
 
-        // Add new session to history
         self.session_history.push(ServiceSession {
             start_time: timestamp_micros,
             end_time: None,
@@ -195,7 +190,6 @@ impl ServiceEntry {
     }
 
     fn get_session_history(&self) -> String {
-        // First, collect completed sessions and find max widths
         let mut completed_sessions = Vec::new();
         let mut max_session_num_length = 0;
 
@@ -205,13 +199,13 @@ impl ServiceEntry {
             completed_sessions.push((session_num, session));
         }
 
-        // Now format with proper alignment for both session numbers and durations
         let mut timeline = Vec::new();
         for (session_num, session) in completed_sessions {
             let start_str = format_timestamp_micros(session.start_time);
             let (duration_str, end_str) = if let Some(end_time) = session.end_time {
+                let duration = end_time.saturating_sub(session.start_time);
                 (
-                    format_duration_micros(end_time - session.start_time),
+                    format_duration_micros(duration),
                     format_timestamp_micros(end_time),
                 )
             } else {
