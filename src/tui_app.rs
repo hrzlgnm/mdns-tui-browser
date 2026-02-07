@@ -11,7 +11,7 @@ use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
@@ -20,9 +20,60 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+const STATUS_OK: Color = Color::Blue;
+const STATUS_ERROR: Color = Color::Yellow;
+
+// Timestamp conversion utilities for JSON serialization
+fn micros_to_iso_timestamp(micros: u64) -> String {
+    let duration = Duration::from_micros(micros);
+    let secs = duration.as_secs() as i64;
+    let nanos = duration.subsec_micros() * 1000;
+
+    match DateTime::<Utc>::from_timestamp(secs, nanos) {
+        Some(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
+        None => "1970-01-01T00:00:00.000000Z".to_string(), // Fallback for invalid timestamps
+    }
+}
+
+impl From<&ServiceEntry> for SerializableServiceEntry {
+    fn from(entry: &ServiceEntry) -> Self {
+        let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
+            Some(micros_to_iso_timestamp(entry.updated_at_micros))
+        } else {
+            None
+        };
+        Self {
+            host: entry.host.clone(),
+            service_type: entry.service_type.clone(),
+            subtype: entry.subtype.clone(),
+            addresses: entry.addrs.clone(),
+            port: entry.port,
+            txt_records: entry.txt.clone(),
+            is_online: entry.online,
+            created_at: micros_to_iso_timestamp(entry.first_seen_micros),
+            updated_at,
+            last_online_at: entry.last_online_micros.map(micros_to_iso_timestamp),
+            last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
+            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
+        }
+    }
+}
+
+impl From<&ServiceSession> for SerializableServiceSession {
+    fn from(session: &ServiceSession) -> Self {
+        Self {
+            start_time: Some(micros_to_iso_timestamp(session.start_time)),
+            end_time: session.end_time.map(micros_to_iso_timestamp),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 enum SortField {
     Host,
     ServiceType,
@@ -32,7 +83,8 @@ enum SortField {
     Timestamp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 enum SortDirection {
     Ascending,
     Descending,
@@ -55,11 +107,47 @@ struct ServiceEntry {
     session_history: Vec<ServiceSession>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SerializableServiceEntry {
+    host: String,
+    service_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subtype: Option<String>,
+    addresses: Vec<String>,
+    #[serde(skip_serializing_if = "is_zero_u16")]
+    port: u16,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    txt_records: Vec<String>,
+    is_online: bool,
+    created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_online_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_offline_at: Option<String>,
+    session_history: Vec<SerializableServiceSession>,
+}
+
+fn is_zero_u16(v: &u16) -> bool {
+    *v == 0
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct ServiceSession {
     start_time: u64,
     end_time: Option<u64>,
     duration_micros: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SerializableServiceSession {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_time: Option<String>,
 }
 
 impl ServiceEntry {
@@ -333,6 +421,40 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     &items[start..end]
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Metadata {
+    dump_timestamp: String,
+    application_name: String,
+    version: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StateDump {
+    metadata: Metadata,
+    services: Vec<SerializableServiceEntry>,
+    service_types: Vec<String>,
+    metrics: BTreeMap<String, u64>,
+    filters: FilterInfo,
+    sorting: SortInfo,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FilterInfo {
+    query: String,
+    active_service_types: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SortInfo {
+    field: String,
+    direction: String,
+}
+
+#[derive(Clone)]
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -355,6 +477,7 @@ struct AppState {
     filter_input_mode: bool,
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
+    status_message: Arc<tokio::sync::Mutex<String>>,
 }
 
 impl AppState {
@@ -381,6 +504,7 @@ impl AppState {
             filter_input_mode: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
+            status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
         };
         state.validate_selected_type();
         state
@@ -554,8 +678,48 @@ impl AppState {
 
             self.invalidate_cache_and_validate();
         }
-
         removed
+    }
+
+    // JSON state dump functionality
+    fn create_state_dump(&self) -> StateDump {
+        let meta = Metadata {
+            dump_timestamp: Utc::now().format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            application_name: env!("CARGO_PKG_NAME").to_string(),
+        };
+        StateDump {
+            metadata: meta,
+            services: self
+                .services
+                .iter()
+                .map(|s: &ServiceEntry| s.into())
+                .collect(),
+            service_types: self.service_types.clone(),
+            metrics: self.metrics.clone(),
+            filters: FilterInfo {
+                query: self.filter_query.clone(),
+                active_service_types: self.user_service_types.iter().cloned().collect(),
+            },
+            sorting: SortInfo {
+                field: format!("{:?}", self.sort_field),
+                direction: format!("{:?}", self.sort_direction),
+            },
+        }
+    }
+
+    fn dump_state_to_json(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let dump = self.create_state_dump();
+        Ok(serde_json::to_string_pretty(&dump)?)
+    }
+
+    async fn save_json_dump(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let timestamp = Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
+        let filename = format!("{}-state-dump.json", timestamp);
+        let json_content = self.dump_state_to_json()?;
+
+        tokio::fs::write(&filename, json_content).await?;
+        Ok(filename)
     }
 
     fn update_service_type_selection(&mut self, new_type: Option<usize>) {
@@ -720,6 +884,14 @@ impl AppState {
 
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        // Dismiss status message on any key press if it's displayed
+        if let Ok(mut msg) = self.status_message.try_lock() {
+            if !msg.is_empty() {
+                msg.clear();
+                return true;
+            }
+        }
+
         if self.show_help_popup {
             self.handle_help_popup_key(key)
         } else if self.show_metrics_popup {
@@ -881,6 +1053,25 @@ impl AppState {
 
             KeyCode::Char('K') => {
                 self.scroll_details_up();
+                true
+            }
+
+            // JSON state dump with Ctrl+J (must come before regular 'j' handler)
+            KeyCode::Char('j')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                let state_clone = self.clone();
+                tokio::spawn(async move {
+                    let result_str = {
+                        match state_clone.save_json_dump().await {
+                            Ok(filename) => format!("JSON dump saved to: {}", filename),
+                            Err(e) => format!("Failed to save JSON dump: {}", e),
+                        }
+                    };
+                    *state_clone.status_message.lock().await = result_str;
+                });
                 true
             }
 
@@ -1596,6 +1787,9 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         }
     }
 
+    // Render status message if present
+    render_status_message(f, app_state);
+
     // Render popups if active
     if app_state.show_help_popup {
         render_help_popup(f, app_state.help_scroll.offset);
@@ -1748,8 +1942,8 @@ fn render_services_list(
     let sort_field_highlighted = Span::styled(
         sort_field_display,
         Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD),
+            .fg(Color::White)
+            .add_modifier(Modifier::UNDERLINED),
     );
     let sort_dir_highlighted = Span::styled(
         sort_dir_display,
@@ -1762,7 +1956,7 @@ fn render_services_list(
         Span::raw("Services ["),
         Span::styled(
             format!("{}/{}", filtered_indices_len, services_clone.len()),
-            Style::default().fg(Color::Green),
+            Style::default().fg(STATUS_OK),
         ),
         Span::raw("] ["),
         sort_field_highlighted,
@@ -1866,6 +2060,45 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState) {
     f.render_widget(status, status_area);
 }
 
+fn render_status_message(f: &mut Frame, app_state: &AppState) {
+    // Try to read the message without blocking
+    if let Ok(msg) = app_state.status_message.try_lock() {
+        if !msg.is_empty() {
+            // Position status message centered on the screen
+            let area = f.area();
+            // Calculate width with padding and border (2 for left/right borders, 2 for padding)
+            let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
+            let popup_area = Rect::new(
+                (area.width.saturating_sub(msg_width as u16)) / 2,
+                (area.height.saturating_sub(3)) / 2,
+                msg_width as u16,
+                3,
+            );
+
+            // Clear the background first
+            f.render_widget(ratatui::widgets::Clear, popup_area);
+
+            // Create a block with border
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
+
+            // Create the inner area for text (accounting for borders)
+            let inner_area = block.inner(popup_area);
+
+            // Render the border/frame
+            f.render_widget(block, popup_area);
+
+            // Render the message text centered in the inner area
+            let paragraph = Paragraph::new(msg.as_str())
+                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
+                .alignment(ratatui::layout::Alignment::Center);
+
+            f.render_widget(paragraph, inner_area);
+        }
+    }
+}
+
 fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     let help_content = generate_help_content();
 
@@ -1955,45 +2188,46 @@ fn generate_help_content() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
         Line::from(" Help Controls:"),
-        Line::from("   ↑/↓                 - Scroll this help content"),
-        Line::from("   Any other key       - Close this help popup"),
+        Line::from("   ↑/↓               - Scroll this help content"),
+        Line::from("   Any other key     - Close this help popup"),
         Line::from(" "),
         Line::from(" Navigation:"),
-        Line::from("   ↑/↓ or j/k          - Navigate services list"),
-        Line::from("   ←/→ or h/l          - Switch between service types"),
-        Line::from("   H/L                 - Page through service types"),
-        Line::from("   PageUp/Down         - Scroll services list by page"),
-        Line::from("   b/f/Space           - Scroll services list by page"),
-        Line::from("   Home/End            - Jump to first/last service"),
-        Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
+        Line::from("   ↑/↓ or j/k        - Navigate services list"),
+        Line::from("   ←/→ or h/l        - Switch between service types"),
+        Line::from("   H/L               - Page through service types"),
+        Line::from("   PageUp/Down       - Scroll services list by page"),
+        Line::from("   b/f/Space         - Scroll services list by page"),
+        Line::from("   Home/End          - Jump to first/last service"),
+        Line::from("   Ctrl+Home/End     - Jump to first/last service type"),
         Line::from(" "),
         Line::from(" Service Details:"),
-        Line::from("   Shift+↑/↓ or J/K     - Scroll service details"),
+        Line::from("   Shift+↑/↓ or J/K  - Scroll service details"),
         Line::from(" "),
         Line::from(" Actions:"),
-        Line::from("   d                   - Remove offline services"),
-        Line::from("   D                   - Clear stale service types"),
-        Line::from("   m                   - Show service metrics"),
-        Line::from("   /                   - Enter quick filter mode"),
-        Line::from("   n                   - Clear current filter"),
-        Line::from("   ?                   - Toggle this help popup"),
-        Line::from("   q or Ctrl+C         - Quit the application"),
+        Line::from("   d                 - Remove offline services"),
+        Line::from("   D                 - Clear stale service types"),
+        Line::from("   m                 - Show service metrics"),
+        Line::from("   /                 - Enter quick filter mode"),
+        Line::from("   n                 - Clear current filter"),
+        Line::from("   ?                 - Toggle this help popup"),
+        Line::from("   Ctrl+j            - Dump state to json file"),
+        Line::from("   q or Ctrl+c       - Quit the application"),
         Line::from(" "),
         Line::from(" Sorting:"),
         Line::from(
-            "   s                   - Cycle sort field: Host → Type → Name → Port → Addr → Time",
+            "   s                 - Cycle sort field: Host → Type → Name → Port → Addr → Time",
         ),
-        Line::from("   S                   - Cycle sort field backward"),
-        Line::from("   o                   - Toggle sort direction (↑/↓)"),
+        Line::from("   S                 - Cycle sort field backward"),
+        Line::from("   o                 - Toggle sort direction (↑/↓)"),
         Line::from(" "),
         Line::from("   Sort field highlighted in yellow, direction in cyan"),
         Line::from(" "),
         Line::from(" Quick Filter:"),
-        Line::from("   /                   - Start typing to filter services"),
-        Line::from("   Enter               - Apply filter"),
-        Line::from("   Esc                 - Cancel filter input"),
-        Line::from("   Backspace           - Delete last character"),
-        Line::from("   n (normal mode)     - Clear current filter"),
+        Line::from("   /                 - Start typing to filter services"),
+        Line::from("   Enter             - Apply filter"),
+        Line::from("   Esc               - Cancel filter input"),
+        Line::from("   Backspace         - Delete last character"),
+        Line::from("   n (normal mode)   - Clear current filter"),
         Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
     ]
@@ -2003,8 +2237,8 @@ fn generate_metrics_content(metrics: &BTreeMap<String, u64>) -> Vec<Line<'static
     let mut metrics_content: Vec<Line> = vec![
         Line::from(""),
         Line::from(" Metrics Controls:"),
-        Line::from("   ↑/↓                 - Scroll this metrics content"),
-        Line::from("   Any other key       - Close this metrics popup"),
+        Line::from("   ↑/↓               - Scroll this metrics content"),
+        Line::from("   Any other key     - Close this metrics popup"),
         Line::from(" "),
         Line::from(" Service Discovery Metrics:"),
         Line::from(" "),
@@ -2113,7 +2347,7 @@ fn create_service_list_item_style(
     let foreground = if service.online {
         Color::White
     } else {
-        Color::LightMagenta
+        STATUS_ERROR
     };
 
     let mut style = if index == selected_index {
@@ -2198,12 +2432,10 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     // Online status - use blue (color-blind friendly)
-    let online_style: Style = Style::default()
-        .fg(Color::Blue)
-        .add_modifier(Modifier::BOLD);
+    let online_style: Style = Style::default().fg(STATUS_OK).add_modifier(Modifier::BOLD);
     // Offline status - use orange (color-blind friendly)
     let offline_style: Style = Style::default()
-        .fg(Color::Yellow)
+        .fg(STATUS_ERROR)
         .add_modifier(Modifier::BOLD);
 
     if service.online {
@@ -4535,7 +4767,7 @@ mod tests {
 
         // Test offline service
         let style = create_service_list_item_style(0, 0, &offline_service);
-        assert_eq!(style.fg, Some(Color::LightMagenta));
+        assert_eq!(style.fg, Some(Color::Yellow));
         assert!(style.add_modifier.contains(Modifier::ITALIC));
     }
 
@@ -6219,5 +6451,99 @@ mod tests {
         state.clear_stale_service_types();
 
         assert_eq!(state.service_types.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_json_state_dump() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add some test data
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 8081));
+
+        // Test JSON dump creation
+        let json_result = state.dump_state_to_json();
+        assert!(json_result.is_ok(), "JSON dump should succeed");
+
+        let json_str = json_result.unwrap();
+
+        // Verify it's valid JSON
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Generated JSON should be valid");
+
+        // Check required fields
+        assert!(parsed.get("metadata").is_some(), "Should have metadata");
+        assert!(
+            parsed.get("services").is_some(),
+            "Should have services array"
+        );
+        assert!(
+            parsed.get("serviceTypes").is_some(),
+            "Should have service types"
+        );
+        assert!(parsed.get("metrics").is_some(), "Should have metrics");
+        assert!(parsed.get("filters").is_some(), "Should have filters");
+        assert!(parsed.get("sorting").is_some(), "Should have sorting");
+
+        // Check services array
+        if let serde_json::Value::Array(services) = &parsed["services"] {
+            assert_eq!(services.len(), 2, "Should have 2 services");
+        } else {
+            panic!("Services should be an array");
+        }
+
+        // Check serviceTypes array
+        if let serde_json::Value::Array(service_types) = &parsed["serviceTypes"] {
+            assert_eq!(service_types.len(), 1, "Should have 1 service type");
+            assert_eq!(service_types[0], "_http._tcp.local.");
+        } else {
+            panic!("Service types should be an array");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_json_dump_file_creation() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add minimal test data
+        state.add_service_type("_test._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_test._tcp.local.", 1234));
+
+        // Test file creation
+        let filename_result = state.save_json_dump().await;
+        assert!(filename_result.is_ok(), "File creation should succeed");
+
+        let filename = filename_result.unwrap();
+
+        // Verify filename format
+        assert!(
+            filename.starts_with("20"),
+            "Filename should start with year"
+        );
+        assert!(
+            filename.ends_with("-state-dump.json"),
+            "Filename should end with suffix"
+        );
+
+        // Verify file exists and has content
+        let content = tokio::fs::read_to_string(&filename)
+            .await
+            .expect("Should be able to read the created file");
+
+        assert!(!content.is_empty(), "File should not be empty");
+
+        // Verify content is valid JSON
+        let _parsed: serde_json::Value =
+            serde_json::from_str(&content).expect("File content should be valid JSON");
+
+        // Clean up
+        tokio::fs::remove_file(&filename).await.ok();
     }
 }
