@@ -20,9 +20,57 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Timestamp conversion utilities for JSON serialization
+fn micros_to_iso_timestamp(micros: u64) -> String {
+    let duration = Duration::from_micros(micros);
+    let secs = duration.as_secs() as i64;
+    let nanos = duration.subsec_micros() * 1000;
+
+    match DateTime::<Utc>::from_timestamp(secs, nanos) {
+        Some(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
+        None => "1970-01-01T00:00:00.000000Z".to_string(), // Fallback for invalid timestamps
+    }
+}
+
+impl From<&ServiceEntry> for SerializableServiceEntry {
+    fn from(entry: &ServiceEntry) -> Self {
+        let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
+            Some(micros_to_iso_timestamp(entry.updated_at_micros))
+        } else {
+            None
+        };
+        Self {
+            host: entry.host.clone(),
+            service_type: entry.service_type.clone(),
+            subtype: entry.subtype.clone(),
+            addresses: entry.addrs.clone(),
+            port: entry.port,
+            txt_records: entry.txt.clone(),
+            is_online: entry.online,
+            created_at: micros_to_iso_timestamp(entry.first_seen_micros),
+            updated_at,
+            last_online_at: entry.last_online_micros.map(micros_to_iso_timestamp),
+            last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
+            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
+        }
+    }
+}
+
+impl From<&ServiceSession> for SerializableServiceSession {
+    fn from(session: &ServiceSession) -> Self {
+        Self {
+            start_time: Some(micros_to_iso_timestamp(session.start_time)),
+            end_time: session.end_time.map(micros_to_iso_timestamp),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 enum SortField {
     Host,
     ServiceType,
@@ -32,7 +80,8 @@ enum SortField {
     Timestamp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 enum SortDirection {
     Ascending,
     Descending,
@@ -55,11 +104,47 @@ struct ServiceEntry {
     session_history: Vec<ServiceSession>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SerializableServiceEntry {
+    host: String,
+    service_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subtype: Option<String>,
+    addresses: Vec<String>,
+    #[serde(skip_serializing_if = "is_zero_u16")]
+    port: u16,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    txt_records: Vec<String>,
+    is_online: bool,
+    created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_online_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_offline_at: Option<String>,
+    session_history: Vec<SerializableServiceSession>,
+}
+
+fn is_zero_u16(v: &u16) -> bool {
+    *v == 0
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct ServiceSession {
     start_time: u64,
     end_time: Option<u64>,
     duration_micros: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SerializableServiceSession {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_time: Option<String>,
 }
 
 impl ServiceEntry {
@@ -333,6 +418,40 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     &items[start..end]
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Metadata {
+    dump_timestamp: String,
+    application_name: String,
+    version: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StateDump {
+    metadata: Metadata,
+    services: Vec<SerializableServiceEntry>,
+    service_types: Vec<String>,
+    metrics: BTreeMap<String, u64>,
+    filters: FilterInfo,
+    sorting: SortInfo,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FilterInfo {
+    query: String,
+    active_service_types: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SortInfo {
+    field: String,
+    direction: String,
+}
+
+#[derive(Clone)]
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -554,8 +673,48 @@ impl AppState {
 
             self.invalidate_cache_and_validate();
         }
-
         removed
+    }
+
+    // JSON state dump functionality
+    fn create_state_dump(&self) -> StateDump {
+        let meta = Metadata {
+            dump_timestamp: Utc::now().format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            application_name: env!("CARGO_PKG_NAME").to_string(),
+        };
+        StateDump {
+            metadata: meta,
+            services: self
+                .services
+                .iter()
+                .map(|s: &ServiceEntry| s.into())
+                .collect(),
+            service_types: self.service_types.clone(),
+            metrics: self.metrics.clone(),
+            filters: FilterInfo {
+                query: self.filter_query.clone(),
+                active_service_types: self.user_service_types.iter().cloned().collect(),
+            },
+            sorting: SortInfo {
+                field: format!("{:?}", self.sort_field),
+                direction: format!("{:?}", self.sort_direction),
+            },
+        }
+    }
+
+    fn dump_state_to_json(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let dump = self.create_state_dump();
+        Ok(serde_json::to_string_pretty(&dump)?)
+    }
+
+    async fn save_json_dump(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let timestamp = Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
+        let filename = format!("{}-state-dump.json", timestamp);
+        let json_content = self.dump_state_to_json()?;
+
+        tokio::fs::write(&filename, json_content).await?;
+        Ok(filename)
     }
 
     fn update_service_type_selection(&mut self, new_type: Option<usize>) {
@@ -881,6 +1040,28 @@ impl AppState {
 
             KeyCode::Char('K') => {
                 self.scroll_details_up();
+                true
+            }
+
+            // JSON state dump with Ctrl+J (must come before regular 'j' handler)
+            KeyCode::Char('j')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                let state = self.clone();
+                tokio::spawn(async move {
+                    match state.save_json_dump().await {
+                        Ok(filename) => {
+                            // In a real implementation, we'd show a notification
+                            // For now, we'll just print to stderr (which won't interfere with TUI)
+                            eprintln!("JSON dump saved to: {}", filename);
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to save JSON dump: {}", e);
+                        }
+                    }
+                });
                 true
             }
 
@@ -1977,7 +2158,8 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   /                   - Enter quick filter mode"),
         Line::from("   n                   - Clear current filter"),
         Line::from("   ?                   - Toggle this help popup"),
-        Line::from("   q or Ctrl+C         - Quit the application"),
+        Line::from("   Ctrl+j              - Dump state to json file"),
+        Line::from("   q or Ctrl+c         - Quit the application"),
         Line::from(" "),
         Line::from(" Sorting:"),
         Line::from(
@@ -6219,5 +6401,99 @@ mod tests {
         state.clear_stale_service_types();
 
         assert_eq!(state.service_types.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_json_state_dump() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add some test data
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test1", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("test2", "_http._tcp.local.", 8081));
+
+        // Test JSON dump creation
+        let json_result = state.dump_state_to_json();
+        assert!(json_result.is_ok(), "JSON dump should succeed");
+
+        let json_str = json_result.unwrap();
+
+        // Verify it's valid JSON
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Generated JSON should be valid");
+
+        // Check required fields
+        assert!(parsed.get("metadata").is_some(), "Should have metadata");
+        assert!(
+            parsed.get("services").is_some(),
+            "Should have services array"
+        );
+        assert!(
+            parsed.get("serviceTypes").is_some(),
+            "Should have service types"
+        );
+        assert!(parsed.get("metrics").is_some(), "Should have metrics");
+        assert!(parsed.get("filters").is_some(), "Should have filters");
+        assert!(parsed.get("sorting").is_some(), "Should have sorting");
+
+        // Check services array
+        if let serde_json::Value::Array(services) = &parsed["services"] {
+            assert_eq!(services.len(), 2, "Should have 2 services");
+        } else {
+            panic!("Services should be an array");
+        }
+
+        // Check serviceTypes array
+        if let serde_json::Value::Array(service_types) = &parsed["serviceTypes"] {
+            assert_eq!(service_types.len(), 1, "Should have 1 service type");
+            assert_eq!(service_types[0], "_http._tcp.local.");
+        } else {
+            panic!("Service types should be an array");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_json_dump_file_creation() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add minimal test data
+        state.add_service_type("_test._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_test._tcp.local.", 1234));
+
+        // Test file creation
+        let filename_result = state.save_json_dump().await;
+        assert!(filename_result.is_ok(), "File creation should succeed");
+
+        let filename = filename_result.unwrap();
+
+        // Verify filename format
+        assert!(
+            filename.starts_with("20"),
+            "Filename should start with year"
+        );
+        assert!(
+            filename.ends_with("-state-dump.json"),
+            "Filename should end with suffix"
+        );
+
+        // Verify file exists and has content
+        let content = tokio::fs::read_to_string(&filename)
+            .await
+            .expect("Should be able to read the created file");
+
+        assert!(!content.is_empty(), "File should not be empty");
+
+        // Verify content is valid JSON
+        let _parsed: serde_json::Value =
+            serde_json::from_str(&content).expect("File content should be valid JSON");
+
+        // Clean up
+        tokio::fs::remove_file(&filename).await.ok();
     }
 }

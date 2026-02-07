@@ -20,6 +20,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🔍 **Quick Filter**: Text-based search across all service fields
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
 - ⚙️ **Custom Service Discovery**: Specify service types via CLI for hard-to-discover services
+- 💾 **JSON State Dump**: Export complete application state to JSON with Ctrl+J
 
 ## Quick Start
 
@@ -116,6 +117,83 @@ mdns-tui-browser -s "printer.sub.http,airplay.sub.raop"
 # Results: "printer._sub._http._tcp.local.", "airplay._sub._raop._tcp.local."
 ```
 
+## JSON State Dump
+
+The application can export the complete current state to a JSON file for debugging and analysis purposes.
+
+### Usage
+
+Press <kbd>Ctrl</kbd>+<kbd>J</kbd> in the TUI to trigger a state dump. The file will be saved with an ISO timestamp filename:
+
+```
+20260207T120102.089898-state-dump.json
+```
+
+### JSON Structure
+
+The exported JSON contains comprehensive information about the current application state:
+
+```json
+{
+  "metadata": {
+    "dumpTimestamp": "2026-02-07T00:40:10.950885Z",
+    "applicationName": "mdns-tui-browser",
+    "version": "1.11.1"
+  },
+  "services": [
+    {
+      "host": "my-device.local",
+      "serviceType": "_http._tcp.local.",
+      "addresses": ["192.168.1.100"],
+      "port": 8080,
+      "txtRecords": ["path=/api"],
+      "isOnline": true,
+      "createdAt": "2026-02-07T11:30:00.123456Z",
+      "updatedAt": "2026-02-07T12:00:00.123456Z",
+      "lastOnlineAt": "2026-02-07T12:00:00.123456Z",
+      "lastOfflineAt": null,
+      "sessionHistory": [
+        {
+          "startTime": "2026-02-07T00:39:53.820969Z",
+          "endTime": "2026-02-07T00:39:55.869714Z"
+        }
+      ]
+    }
+  ],
+  "serviceTypes": ["_http._tcp.local.", "_ssh._tcp.local."],
+  "metrics": {
+    "daemon_browse": 160,
+    "daemon_cache_refresh_addr": 0,
+    "daemon_cache_refresh_ptr": 0,
+    "daemon_cache_refresh_srv_txt": 0,
+    "daemon_cached_addr": 45,
+    "daemon_cached_nsec": 14,
+    "daemon_cached_ptr": 74,
+    "daemon_cached_srv": 42,
+    "daemon_cached_subtype": 1,
+    "daemon_cached_txt": 42,
+    "daemon_dns_registry_active": 0,
+    "daemon_dns_registry_name_change": 0,
+    "daemon_dns_registry_probe": 0,
+    "daemon_dns_registry_timer": 0,
+    "daemon_known_answer_suppression": 0,
+    "daemon_timer": 5607,
+    "service_types_discovered": 31,
+    "services_discovered": 38,
+    "services_marked_offline": 4,
+    "services_updated": 14
+  },
+   "filters": {
+    "query": "",
+    "activeServiceTypes": ["_http._tcp.local."]
+  },
+  "sorting": {
+    "field": "Host",
+    "direction": "Ascending"
+  }
+}
+```
+
 ## Controls
 
 - <kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>j</kbd>/<kbd>k</kbd> - Navigate services list
@@ -132,6 +210,7 @@ mdns-tui-browser -s "printer.sub.http,airplay.sub.raop"
 - <kbd>d</kbd> - Remove offline services
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show service metrics
+- <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
@@ -162,6 +241,8 @@ The application is built with:
 - **mdns-sd** - mDNS service discovery library
 - **clap** - Command line argument parsing library
 - **chrono** - Date and time handling for local timestamp display
+- **serde** - Serialization framework for JSON export
+- **serde_json** - JSON serialization support
 
 ### Safety Policy
 
@@ -256,8 +337,7 @@ This ensures that every release binary can be independently verified for securit
 
 ## Future Enhancements
 
-- [ ] Service discovery configuration
-- [ ] Export capabilities
+- [x] Export capabilities
 - [x] Service filtering and search
 - [x] Custom service type browsing
 - [ ] Network interface selection
