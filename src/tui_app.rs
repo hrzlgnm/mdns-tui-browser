@@ -11,7 +11,7 @@ use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
@@ -23,6 +23,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::sync::RwLock;
+
+const STATUS_OK: Color = Color::Blue;
+const STATUS_ERROR: Color = Color::Yellow;
 
 // Timestamp conversion utilities for JSON serialization
 fn micros_to_iso_timestamp(micros: u64) -> String {
@@ -474,6 +477,7 @@ struct AppState {
     filter_input_mode: bool,
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
+    status_message: Arc<tokio::sync::Mutex<String>>,
 }
 
 impl AppState {
@@ -500,6 +504,7 @@ impl AppState {
             filter_input_mode: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
+            status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
         };
         state.validate_selected_type();
         state
@@ -879,6 +884,14 @@ impl AppState {
 
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        // Dismiss status message on any key press if it's displayed
+        if let Ok(mut msg) = self.status_message.try_lock() {
+            if !msg.is_empty() {
+                msg.clear();
+                return true;
+            }
+        }
+
         if self.show_help_popup {
             self.handle_help_popup_key(key)
         } else if self.show_metrics_popup {
@@ -1049,18 +1062,15 @@ impl AppState {
                     .modifiers
                     .contains(crossterm::event::KeyModifiers::CONTROL) =>
             {
-                let state = self.clone();
+                let state_clone = self.clone();
                 tokio::spawn(async move {
-                    match state.save_json_dump().await {
-                        Ok(filename) => {
-                            // In a real implementation, we'd show a notification
-                            // For now, we'll just print to stderr (which won't interfere with TUI)
-                            eprintln!("JSON dump saved to: {}", filename);
+                    let result_str = {
+                        match state_clone.save_json_dump().await {
+                            Ok(filename) => format!("JSON dump saved to: {}", filename),
+                            Err(e) => format!("Failed to save JSON dump: {}", e),
                         }
-                        Err(e) => {
-                            eprintln!("Failed to save JSON dump: {}", e);
-                        }
-                    }
+                    };
+                    *state_clone.status_message.lock().await = result_str;
                 });
                 true
             }
@@ -1777,6 +1787,9 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         }
     }
 
+    // Render status message if present
+    render_status_message(f, app_state);
+
     // Render popups if active
     if app_state.show_help_popup {
         render_help_popup(f, app_state.help_scroll.offset);
@@ -1929,8 +1942,8 @@ fn render_services_list(
     let sort_field_highlighted = Span::styled(
         sort_field_display,
         Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD),
+            .fg(Color::White)
+            .add_modifier(Modifier::UNDERLINED),
     );
     let sort_dir_highlighted = Span::styled(
         sort_dir_display,
@@ -1943,7 +1956,7 @@ fn render_services_list(
         Span::raw("Services ["),
         Span::styled(
             format!("{}/{}", filtered_indices_len, services_clone.len()),
-            Style::default().fg(Color::Green),
+            Style::default().fg(STATUS_OK),
         ),
         Span::raw("] ["),
         sort_field_highlighted,
@@ -2047,6 +2060,45 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState) {
     f.render_widget(status, status_area);
 }
 
+fn render_status_message(f: &mut Frame, app_state: &AppState) {
+    // Try to read the message without blocking
+    if let Ok(msg) = app_state.status_message.try_lock() {
+        if !msg.is_empty() {
+            // Position status message centered on the screen
+            let area = f.area();
+            // Calculate width with padding and border (2 for left/right borders, 2 for padding)
+            let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
+            let popup_area = Rect::new(
+                (area.width.saturating_sub(msg_width as u16)) / 2,
+                (area.height.saturating_sub(3)) / 2,
+                msg_width as u16,
+                3,
+            );
+
+            // Clear the background first
+            f.render_widget(ratatui::widgets::Clear, popup_area);
+
+            // Create a block with border
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
+
+            // Create the inner area for text (accounting for borders)
+            let inner_area = block.inner(popup_area);
+
+            // Render the border/frame
+            f.render_widget(block, popup_area);
+
+            // Render the message text centered in the inner area
+            let paragraph = Paragraph::new(msg.as_str())
+                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
+                .alignment(ratatui::layout::Alignment::Center);
+
+            f.render_widget(paragraph, inner_area);
+        }
+    }
+}
+
 fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     let help_content = generate_help_content();
 
@@ -2136,46 +2188,46 @@ fn generate_help_content() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
         Line::from(" Help Controls:"),
-        Line::from("   ↑/↓                 - Scroll this help content"),
-        Line::from("   Any other key       - Close this help popup"),
+        Line::from("   ↑/↓               - Scroll this help content"),
+        Line::from("   Any other key     - Close this help popup"),
         Line::from(" "),
         Line::from(" Navigation:"),
-        Line::from("   ↑/↓ or j/k          - Navigate services list"),
-        Line::from("   ←/→ or h/l          - Switch between service types"),
-        Line::from("   H/L                 - Page through service types"),
-        Line::from("   PageUp/Down         - Scroll services list by page"),
-        Line::from("   b/f/Space           - Scroll services list by page"),
-        Line::from("   Home/End            - Jump to first/last service"),
-        Line::from("   Ctrl+Home/End       - Jump to first/last service type"),
+        Line::from("   ↑/↓ or j/k        - Navigate services list"),
+        Line::from("   ←/→ or h/l        - Switch between service types"),
+        Line::from("   H/L               - Page through service types"),
+        Line::from("   PageUp/Down       - Scroll services list by page"),
+        Line::from("   b/f/Space         - Scroll services list by page"),
+        Line::from("   Home/End          - Jump to first/last service"),
+        Line::from("   Ctrl+Home/End     - Jump to first/last service type"),
         Line::from(" "),
         Line::from(" Service Details:"),
-        Line::from("   Shift+↑/↓ or J/K     - Scroll service details"),
+        Line::from("   Shift+↑/↓ or J/K  - Scroll service details"),
         Line::from(" "),
         Line::from(" Actions:"),
-        Line::from("   d                   - Remove offline services"),
-        Line::from("   D                   - Clear stale service types"),
-        Line::from("   m                   - Show service metrics"),
-        Line::from("   /                   - Enter quick filter mode"),
-        Line::from("   n                   - Clear current filter"),
-        Line::from("   ?                   - Toggle this help popup"),
-        Line::from("   Ctrl+j              - Dump state to json file"),
-        Line::from("   q or Ctrl+c         - Quit the application"),
+        Line::from("   d                 - Remove offline services"),
+        Line::from("   D                 - Clear stale service types"),
+        Line::from("   m                 - Show service metrics"),
+        Line::from("   /                 - Enter quick filter mode"),
+        Line::from("   n                 - Clear current filter"),
+        Line::from("   ?                 - Toggle this help popup"),
+        Line::from("   Ctrl+j            - Dump state to json file"),
+        Line::from("   q or Ctrl+c       - Quit the application"),
         Line::from(" "),
         Line::from(" Sorting:"),
         Line::from(
-            "   s                   - Cycle sort field: Host → Type → Name → Port → Addr → Time",
+            "   s                 - Cycle sort field: Host → Type → Name → Port → Addr → Time",
         ),
-        Line::from("   S                   - Cycle sort field backward"),
-        Line::from("   o                   - Toggle sort direction (↑/↓)"),
+        Line::from("   S                 - Cycle sort field backward"),
+        Line::from("   o                 - Toggle sort direction (↑/↓)"),
         Line::from(" "),
         Line::from("   Sort field highlighted in yellow, direction in cyan"),
         Line::from(" "),
         Line::from(" Quick Filter:"),
-        Line::from("   /                   - Start typing to filter services"),
-        Line::from("   Enter               - Apply filter"),
-        Line::from("   Esc                 - Cancel filter input"),
-        Line::from("   Backspace           - Delete last character"),
-        Line::from("   n (normal mode)     - Clear current filter"),
+        Line::from("   /                 - Start typing to filter services"),
+        Line::from("   Enter             - Apply filter"),
+        Line::from("   Esc               - Cancel filter input"),
+        Line::from("   Backspace         - Delete last character"),
+        Line::from("   n (normal mode)   - Clear current filter"),
         Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
     ]
@@ -2185,8 +2237,8 @@ fn generate_metrics_content(metrics: &BTreeMap<String, u64>) -> Vec<Line<'static
     let mut metrics_content: Vec<Line> = vec![
         Line::from(""),
         Line::from(" Metrics Controls:"),
-        Line::from("   ↑/↓                 - Scroll this metrics content"),
-        Line::from("   Any other key       - Close this metrics popup"),
+        Line::from("   ↑/↓               - Scroll this metrics content"),
+        Line::from("   Any other key     - Close this metrics popup"),
         Line::from(" "),
         Line::from(" Service Discovery Metrics:"),
         Line::from(" "),
@@ -2295,7 +2347,7 @@ fn create_service_list_item_style(
     let foreground = if service.online {
         Color::White
     } else {
-        Color::LightMagenta
+        STATUS_ERROR
     };
 
     let mut style = if index == selected_index {
@@ -2380,12 +2432,10 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     // Online status - use blue (color-blind friendly)
-    let online_style: Style = Style::default()
-        .fg(Color::Blue)
-        .add_modifier(Modifier::BOLD);
+    let online_style: Style = Style::default().fg(STATUS_OK).add_modifier(Modifier::BOLD);
     // Offline status - use orange (color-blind friendly)
     let offline_style: Style = Style::default()
-        .fg(Color::Yellow)
+        .fg(STATUS_ERROR)
         .add_modifier(Modifier::BOLD);
 
     if service.online {
