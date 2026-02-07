@@ -2784,12 +2784,32 @@ mod tests {
 
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        // Use port modulo 254 to keep the last octet in valid range [1, 254]
+        let last_octet = (port % 254) + 1;
         ServiceEntry {
             fullname: format!("{}.{}", name, service_type),
             host: format!("{}.local.", name),
             service_type: service_type.to_string(),
             subtype: None,
-            addrs: vec![format!("192.168.1.{}", port)],
+            addrs: vec![format!("192.168.1.{}", last_octet)],
+            port,
+            txt: vec![],
+            online: true,
+            updated_at_micros: 1000,
+            session_history: vec![ServiceSession {
+                start_time: 1000,
+                end_time: None,
+            }],
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+        };
+    }
+            fullname: format!("{}.{}", name, service_type),
+            host: format!("{}.local.", name),
+            service_type: service_type.to_string(),
+            subtype: None,
+            addrs: vec![format!("192.168.1.{}", last_octet)],
             port,
             txt: vec![],
             online: true,
@@ -2938,7 +2958,7 @@ mod tests {
             host: "testhost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
             subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
+            addrs: vec!["192.168.1.2".to_string()],
             port: 8080,
             txt: vec![],
             online: false,
@@ -2967,7 +2987,7 @@ mod tests {
             host: "testhost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
             subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
+            addrs: vec!["192.168.1.2".to_string()],
             port: 8080,
             txt: vec![],
             online: false,
@@ -4410,11 +4430,11 @@ mod tests {
     #[test]
     fn test_format_service_for_display() {
         let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
-
         let display = format_service_for_display(&service);
         println!("Display string: {}", display);
         assert!(display.contains("MyPrinter"));
-        assert!(display.contains("192.168.1.63"));
+        assert!(display.contains("192.168.1.64"));
+        assert!(display.contains("192.168.1.2"));
         assert!(display.contains(":63"));
     }
 
@@ -4493,7 +4513,7 @@ mod tests {
     fn test_create_service_details_text() {
         let mut service = create_test_service("MyService", "_http._tcp.local.", 8080);
         service.subtype = Some("_printer".to_string());
-        service.addrs = vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()];
+        service.addrs = vec!["192.168.1.2".to_string(), "192.168.1.20".to_string()];
         service.txt = vec!["key1=value1".to_string(), "key2=value2".to_string()];
         service.online = true;
         service.updated_at_micros = 1000000000;
@@ -4519,8 +4539,8 @@ mod tests {
         assert!(details_text.contains("_http._tcp.local."));
         assert!(details_text.contains("_printer"));
         assert!(details_text.contains("8080"));
-        assert!(details_text.contains("192.168.1.1"));
         assert!(details_text.contains("192.168.1.2"));
+        assert!(details_text.contains("192.168.1.20"));
         assert!(details_text.contains("key1=value1"));
         assert!(details_text.contains("key2=value2"));
         assert!(details_text.contains("First seen:"));
@@ -4822,9 +4842,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_ip() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["192.168.1.10".to_string()];
+        service1.addrs = vec!["192.168.1.11".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["192.168.1.20".to_string()];
+        service2.addrs = vec!["192.168.1.22".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -4833,9 +4853,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_ipv6() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["2001:db8::1".to_string()];
+        service1.addrs = vec!["2001:db8::2".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["2001:db8::2".to_string()];
+        service2.addrs = vec!["2001:db8::3".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -4844,7 +4864,7 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_mixed_ipv4_ipv6() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["192.168.1.1".to_string()];
+        service1.addrs = vec!["192.168.1.2".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
         service2.addrs = vec!["2001:db8::1".to_string()];
 
@@ -4858,19 +4878,19 @@ mod tests {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
         service1.addrs = vec![];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["192.168.1.1".to_string()];
+        service2.addrs = vec!["192.168.1.3".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
-        // "<no-addr>" should be compared as string ("<no-addr>" > "192.168.1.1")
+        // "<no-addr>" should be compared as string ("<no-addr>" > "192.168.1.2")
         assert_eq!(result, std::cmp::Ordering::Greater);
     }
 
     #[test]
     fn test_compare_services_by_field_address_string_fallback() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["invalid-ip-1".to_string()];
+        service1.addrs = vec!["invalid-ip-2".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["invalid-ip-2".to_string()];
+        service2.addrs = vec!["invalid-ip-3".to_string()];
 
         // Falls back to string comparison when IP parsing fails
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
