@@ -512,12 +512,11 @@ impl AppState {
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
         // First filter by service type if one is selected
-        if let Some(selected_type_idx) = self.selected_type {
-            if let Some(selected_type) = self.service_types.get(selected_type_idx) {
-                if service.service_type != *selected_type {
-                    return false;
-                }
-            }
+        if let Some(selected_type_idx) = self.selected_type
+            && let Some(selected_type) = self.service_types.get(selected_type_idx)
+            && service.service_type != *selected_type
+        {
+            return false;
         }
 
         // Then filter by text query if present
@@ -885,11 +884,11 @@ impl AppState {
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
-        if let Ok(mut msg) = self.status_message.try_lock() {
-            if !msg.is_empty() {
-                msg.clear();
-                return true;
-            }
+        if let Ok(mut msg) = self.status_message.try_lock()
+            && !msg.is_empty()
+        {
+            msg.clear();
+            return true;
         }
 
         if self.show_help_popup {
@@ -1527,17 +1526,17 @@ impl AppState {
         let selected_service_idx = self.selected_service;
         let filtered_indices = self.get_filtered_services();
 
-        if let Some(&service_idx) = filtered_indices.get(selected_service_idx) {
-            if let Some(service) = self.services.get(service_idx) {
-                let details_lines = create_service_details_text(service);
-                let total_lines = details_lines.len();
+        if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
+            && let Some(service) = self.services.get(service_idx)
+        {
+            let details_lines = create_service_details_text(service);
+            let total_lines = details_lines.len();
 
-                if total_lines > 0 && self.details_scroll.visible_items > 0 {
-                    let max_scroll_offset =
-                        total_lines.saturating_sub(self.details_scroll.visible_items);
-                    self.details_scroll.offset =
-                        std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
-                }
+            if total_lines > 0 && self.details_scroll.visible_items > 0 {
+                let max_scroll_offset =
+                    total_lines.saturating_sub(self.details_scroll.visible_items);
+                self.details_scroll.offset =
+                    std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
             }
         }
     }
@@ -2062,40 +2061,40 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState) {
 
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
     // Try to read the message without blocking
-    if let Ok(msg) = app_state.status_message.try_lock() {
-        if !msg.is_empty() {
-            // Position status message centered on the screen
-            let area = f.area();
-            // Calculate width with padding and border (2 for left/right borders, 2 for padding)
-            let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
-            let popup_area = Rect::new(
-                (area.width.saturating_sub(msg_width as u16)) / 2,
-                (area.height.saturating_sub(3)) / 2,
-                msg_width as u16,
-                3,
-            );
+    if let Ok(msg) = app_state.status_message.try_lock()
+        && !msg.is_empty()
+    {
+        // Position status message centered on the screen
+        let area = f.area();
+        // Calculate width with padding and border (2 for left/right borders, 2 for padding)
+        let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
+        let popup_area = Rect::new(
+            (area.width.saturating_sub(msg_width as u16)) / 2,
+            (area.height.saturating_sub(3)) / 2,
+            msg_width as u16,
+            3,
+        );
 
-            // Clear the background first
-            f.render_widget(ratatui::widgets::Clear, popup_area);
+        // Clear the background first
+        f.render_widget(ratatui::widgets::Clear, popup_area);
 
-            // Create a block with border
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
+        // Create a block with border
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
 
-            // Create the inner area for text (accounting for borders)
-            let inner_area = block.inner(popup_area);
+        // Create the inner area for text (accounting for borders)
+        let inner_area = block.inner(popup_area);
 
-            // Render the border/frame
-            f.render_widget(block, popup_area);
+        // Render the border/frame
+        f.render_widget(block, popup_area);
 
-            // Render the message text centered in the inner area
-            let paragraph = Paragraph::new(msg.as_str())
-                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
-                .alignment(ratatui::layout::Alignment::Center);
+        // Render the message text centered in the inner area
+        let paragraph = Paragraph::new(msg.as_str())
+            .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
+            .alignment(ratatui::layout::Alignment::Center);
 
-            f.render_widget(paragraph, inner_area);
-        }
+        f.render_widget(paragraph, inner_area);
     }
 }
 
