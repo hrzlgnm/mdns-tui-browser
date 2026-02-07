@@ -143,7 +143,6 @@ fn is_zero_u16(v: &u16) -> bool {
 struct ServiceSession {
     start_time: u64,
     end_time: Option<u64>,
-    duration_micros: u64,
 }
 
 #[derive(Serialize)]
@@ -164,21 +163,13 @@ impl ServiceEntry {
         self.updated_at_micros = timestamp_micros;
         self.last_offline_micros = Some(timestamp_micros);
 
-        // Calculate duration of this online session and add to history
         if let Some(last_online) = self.last_online_micros {
-            let session_duration = timestamp_micros.saturating_sub(last_online);
-
-            // Update existing session or add new one to session history
             if let Some(session) = self.session_history.iter_mut().last() {
-                // Complete the current session
                 session.end_time = Some(timestamp_micros);
-                session.duration_micros = session_duration;
             } else {
-                // Add new completed session to history
                 self.session_history.push(ServiceSession {
                     start_time: last_online,
                     end_time: Some(timestamp_micros),
-                    duration_micros: session_duration,
                 });
             }
         }
@@ -192,16 +183,13 @@ impl ServiceEntry {
         self.online = true;
         self.last_online_micros = Some(timestamp_micros);
 
-        // Add new session to history
         self.session_history.push(ServiceSession {
             start_time: timestamp_micros,
             end_time: None,
-            duration_micros: 0, // Will be calculated when session ends
         });
     }
 
     fn get_session_history(&self) -> String {
-        // First, collect completed sessions and find max widths
         let mut completed_sessions = Vec::new();
         let mut max_session_num_length = 0;
 
@@ -211,13 +199,13 @@ impl ServiceEntry {
             completed_sessions.push((session_num, session));
         }
 
-        // Now format with proper alignment for both session numbers and durations
         let mut timeline = Vec::new();
         for (session_num, session) in completed_sessions {
             let start_str = format_timestamp_micros(session.start_time);
             let (duration_str, end_str) = if let Some(end_time) = session.end_time {
+                let duration = end_time.saturating_sub(session.start_time);
                 (
-                    format_duration_micros(session.duration_micros),
+                    format_duration_micros(duration),
                     format_timestamp_micros(end_time),
                 )
             } else {
@@ -283,7 +271,6 @@ impl From<ResolvedService> for ServiceEntry {
             session_history: vec![ServiceSession {
                 start_time: current_timestamp,
                 end_time: None,
-                duration_micros: 0,
             }],
         }
     }
@@ -2810,7 +2797,6 @@ mod tests {
             session_history: vec![ServiceSession {
                 start_time: 1000,
                 end_time: None,
-                duration_micros: 0,
             }],
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
@@ -2865,12 +2851,10 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s
-                    duration_micros: 4000000,
                 },
                 ServiceSession {
                     start_time: 6000000,
                     end_time: Some(9000000), // 3s
-                    duration_micros: 3000000,
                 },
             ],
             first_seen_micros: 1000000,
@@ -2904,12 +2888,10 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(2000000), // 1s
-                    duration_micros: 1000000,
                 },
                 ServiceSession {
                     start_time: 3000000,
                     end_time: Some(4000000), // 1s
-                    duration_micros: 1000000,
                 },
             ],
             first_seen_micros: 1000000,
@@ -2933,7 +2915,6 @@ mod tests {
             sessions.push(ServiceSession {
                 start_time: (i * 10000000) + 1000000,
                 end_time: Some((i * 10000000) + 2000000), // 1s each
-                duration_micros: 1000000,
             });
         }
 
@@ -2980,17 +2961,14 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(2000000), // 1s (short duration)
-                    duration_micros: 1000000,
                 },
                 ServiceSession {
                     start_time: 3000000,
                     end_time: Some(9000000), // 6s (medium duration)
-                    duration_micros: 6000000,
                 },
                 ServiceSession {
                     start_time: 10000000,
                     end_time: Some(3700000000), // 1h 1m 30s (long duration)
-                    duration_micros: 3690000000,
                 },
             ],
             first_seen_micros: 1000000,
@@ -3036,7 +3014,6 @@ mod tests {
             session_history: vec![ServiceSession {
                 start_time: 3000000,
                 end_time: None, // Active session (no end time)
-                duration_micros: 0,
             }],
             first_seen_micros: 1000000,
             last_online_micros: Some(3000000),
@@ -3069,12 +3046,10 @@ mod tests {
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s (short)
-                    duration_micros: 4000000,
                 },
                 ServiceSession {
                     start_time: 6000000,
                     end_time: Some(500000000000), // ~5d 21h 53m 20s (very long)
-                    duration_micros: 499994000000,
                 },
             ],
             first_seen_micros: 1000000,
