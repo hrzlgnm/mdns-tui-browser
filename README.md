@@ -125,7 +125,7 @@ The application can export the complete current state to a JSON file for debuggi
 
 Press <kbd>Ctrl</kbd>+<kbd>J</kbd> in the TUI to trigger a state dump. The file will be saved with an ISO timestamp filename:
 
-```
+```text
 20260207T120102.089898-state-dump.json
 ```
 
@@ -151,7 +151,6 @@ The exported JSON contains comprehensive information about the current applicati
       "createdAt": "2026-02-07T11:30:00.123456Z",
       "updatedAt": "2026-02-07T12:00:00.123456Z",
       "lastOnlineAt": "2026-02-07T12:00:00.123456Z",
-      "lastOfflineAt": null,
       "sessionHistory": [
         {
           "startTime": "2026-02-07T00:39:53.820969Z",
