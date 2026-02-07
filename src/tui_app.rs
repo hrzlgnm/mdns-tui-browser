@@ -2804,6 +2804,29 @@ mod tests {
         }
     }
 
+    // Helper function for creating test services with custom session history
+    #[allow(clippy::too_many_arguments)]
+    fn create_test_service_with_sessions(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        sessions: Vec<ServiceSession>,
+        online: bool,
+        updated_at_micros: u64,
+        first_seen_micros: u64,
+        last_online_micros: Option<u64>,
+        last_offline_micros: Option<u64>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.online = online;
+        service.updated_at_micros = updated_at_micros;
+        service.session_history = sessions;
+        service.first_seen_micros = first_seen_micros;
+        service.last_online_micros = last_online_micros;
+        service.last_offline_micros = last_offline_micros;
+        service
+    }
+
     // ServiceEntry tests
     #[test]
     fn test_service_entry_go_offline_at() {
@@ -2837,22 +2860,26 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_multiple_sessions() {
-        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
-        service.online = false;
-        service.updated_at_micros = 9000000;
-        service.session_history = vec![
-            ServiceSession {
-                start_time: 1000000,
-                end_time: Some(5000000), // 4s
-            },
-            ServiceSession {
-                start_time: 6000000,
-                end_time: Some(9000000), // 3s
-            },
-        ];
-        service.first_seen_micros = 1000000;
-        service.last_online_micros = Some(6000000);
-        service.last_offline_micros = Some(9000000);
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
+                ServiceSession {
+                    start_time: 1000000,
+                    end_time: Some(5000000), // 4s
+                },
+                ServiceSession {
+                    start_time: 6000000,
+                    end_time: Some(9000000), // 3s
+                },
+            ],
+            false,
+            9000000,
+            1000000,
+            Some(6000000),
+            Some(9000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -2866,22 +2893,26 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_alignment_single_digit() {
-        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
-        service.online = false;
-        service.updated_at_micros = 5000000;
-        service.session_history = vec![
-            ServiceSession {
-                start_time: 1000000,
-                end_time: Some(2000000), // 1s
-            },
-            ServiceSession {
-                start_time: 3000000,
-                end_time: Some(4000000), // 1s
-            },
-        ];
-        service.first_seen_micros = 1000000;
-        service.last_online_micros = Some(3000000);
-        service.last_offline_micros = Some(4000000);
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
+                ServiceSession {
+                    start_time: 1000000,
+                    end_time: Some(2000000), // 1s
+                },
+                ServiceSession {
+                    start_time: 3000000,
+                    end_time: Some(4000000), // 1s
+                },
+            ],
+            false,
+            5000000,
+            1000000,
+            Some(3000000),
+            Some(4000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -2985,16 +3016,20 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_shows_active_session_as_ongoing_with_na() {
-        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
-        service.online = true;
-        service.updated_at_micros = 3000000;
-        service.session_history = vec![ServiceSession {
-            start_time: 3000000,
-            end_time: None, // Active session (no end time)
-        }];
-        service.first_seen_micros = 1000000;
-        service.last_online_micros = Some(3000000);
-        service.last_offline_micros = Some(2000000);
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![ServiceSession {
+                start_time: 3000000,
+                end_time: None, // Active session (no end time)
+            }],
+            true,
+            3000000,
+            1000000,
+            Some(3000000),
+            Some(2000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -3008,17 +3043,11 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_long_duration_alignment() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 500000000000,
-            session_history: vec![
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s (short)
@@ -3028,10 +3057,12 @@ mod tests {
                     end_time: Some(500000000000), // ~5d 21h 53m 20s (very long)
                 },
             ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(6000000),
-            last_offline_micros: Some(500000000000),
-        };
+            false,
+            500000000000,
+            1000000,
+            Some(6000000),
+            Some(500000000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
