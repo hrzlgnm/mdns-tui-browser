@@ -512,13 +512,11 @@ impl AppState {
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
         // First filter by service type if one is selected
-        if let Some(selected_type_idx) = self.selected_type {
-            if let Some(selected_type) = self.service_types.get(selected_type_idx) {
-                if service.service_type != *selected_type {
+        if let Some(selected_type_idx) = self.selected_type
+            && let Some(selected_type) = self.service_types.get(selected_type_idx)
+                && service.service_type != *selected_type {
                     return false;
                 }
-            }
-        }
 
         // Then filter by text query if present
         if !self.filter_query.is_empty() {
@@ -885,12 +883,11 @@ impl AppState {
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
-        if let Ok(mut msg) = self.status_message.try_lock() {
-            if !msg.is_empty() {
+        if let Ok(mut msg) = self.status_message.try_lock()
+            && !msg.is_empty() {
                 msg.clear();
                 return true;
             }
-        }
 
         if self.show_help_popup {
             self.handle_help_popup_key(key)
@@ -1527,8 +1524,8 @@ impl AppState {
         let selected_service_idx = self.selected_service;
         let filtered_indices = self.get_filtered_services();
 
-        if let Some(&service_idx) = filtered_indices.get(selected_service_idx) {
-            if let Some(service) = self.services.get(service_idx) {
+        if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
+            && let Some(service) = self.services.get(service_idx) {
                 let details_lines = create_service_details_text(service);
                 let total_lines = details_lines.len();
 
@@ -1539,7 +1536,6 @@ impl AppState {
                         std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
                 }
             }
-        }
     }
 }
 
@@ -2062,8 +2058,8 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState) {
 
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
     // Try to read the message without blocking
-    if let Ok(msg) = app_state.status_message.try_lock() {
-        if !msg.is_empty() {
+    if let Ok(msg) = app_state.status_message.try_lock()
+        && !msg.is_empty() {
             // Position status message centered on the screen
             let area = f.area();
             // Calculate width with padding and border (2 for left/right borders, 2 for padding)
@@ -2096,7 +2092,6 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
 
             f.render_widget(paragraph, inner_area);
         }
-    }
 }
 
 fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
