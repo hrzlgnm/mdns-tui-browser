@@ -2326,8 +2326,7 @@ fn format_service_type_for_display(service_type: &str) -> String {
         .trim_start_matches('_')
         .trim_end_matches(".local.")
         .trim_end_matches(".")
-        .replace("._tcp", ".tcp")
-        .replace("._udp", ".udp")
+        .replace("._", ".")
 }
 
 fn create_service_list_item_style(
@@ -4387,12 +4386,12 @@ mod tests {
             "printer.tcp"
         );
         assert_eq!(
-            format_service_type_for_display("_airplay._sub._raop._tcp."),
-            "airplay._sub._raop.tcp"
+            format_service_type_for_display("airplay._sub._raop._tcp."),
+            "airplay.sub.raop.tcp"
         );
         assert_eq!(
-            format_service_type_for_display("_invalid._sub._service._protocol."),
-            "invalid._sub._service._protocol"
+            format_service_type_for_display("invalid._sub._service._protocol."),
+            "invalid.sub.service.protocol"
         );
         assert_eq!(
             format_service_type_for_display("_http._tcp.local."),
