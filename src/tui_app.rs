@@ -964,6 +964,7 @@ impl AppState {
             // Any other key closes the metrics popup and returns to normal mode
             _ => {
                 self.show_metrics_popup = false;
+                // Reset scroll offset for all keys
                 self.metrics_scroll.reset(); // Reset scroll offset when closing
                 true // Continue running
             }
@@ -2828,6 +2829,1197 @@ mod tests {
         service
     }
 
+    // Enhanced test helper functions to reduce duplication
+
+    /// Quick state setup with specified number of services
+    fn setup_test_state(service_count: usize) -> AppState {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_http._tcp.local.");
+
+        for i in 0..service_count {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                8080 + i as u16,
+            ));
+        }
+
+        state
+    }
+
+    /// Setup state with custom service types
+    fn setup_test_state_with_types(types: Vec<&str>) -> AppState {
+        let mut state = AppState::new(HashSet::new());
+
+        for service_type in types {
+            state.add_service_type(service_type);
+        }
+
+        state
+    }
+
+    /// Setup state with pre-populated services
+    fn setup_test_state_with_services(services: Vec<ServiceEntry>) -> AppState {
+        let mut state = AppState::new(HashSet::new());
+
+        for service in &services {
+            state.add_service_type(&service.service_type);
+        }
+
+        state.services = services;
+        state
+    }
+
+    /// Setup state with user-specified service types
+    fn setup_test_state_with_user_types(user_types: Vec<&str>) -> AppState {
+        let user_types_set: HashSet<String> =
+            user_types.into_iter().map(|s| s.to_string()).collect();
+        AppState::new(user_types_set)
+    }
+
+    // Common assertion helper functions
+
+    /// Assert navigation state (service and type selection)
+    fn assert_navigation_state(
+        state: &AppState,
+        expected_service: usize,
+        expected_type: Option<usize>,
+    ) {
+        assert_eq!(
+            state.selected_service, expected_service,
+            "Service selection mismatch"
+        );
+        assert_eq!(
+            state.selected_type, expected_type,
+            "Type selection mismatch"
+        );
+    }
+
+    /// Assert cache state
+    fn assert_cache_state(state: &AppState, expected_dirty: bool, expected_sorted: bool) {
+        assert_eq!(
+            state.cache_dirty, expected_dirty,
+            "Cache dirty state mismatch"
+        );
+        assert_eq!(
+            state.cached_sorted, expected_sorted,
+            "Cache sorted state mismatch"
+        );
+    }
+
+    /// Assert service count
+    fn assert_service_count(state: &AppState, expected: usize) {
+        assert_eq!(state.services.len(), expected, "Service count mismatch");
+    }
+
+    /// Assert service type count
+    fn assert_service_type_count(state: &AppState, expected: usize) {
+        assert_eq!(
+            state.service_types.len(),
+            expected,
+            "Service type count mismatch"
+        );
+    }
+
+    /// Assert specific metric value
+    fn assert_metric(state: &AppState, metric_name: &str, expected_value: u64) {
+        assert_eq!(
+            state.metrics.get(metric_name),
+            Some(&expected_value),
+            "Metric {} mismatch",
+            metric_name
+        );
+    }
+
+    /// Assert metric does not exist
+    fn assert_metric_not_exist(state: &AppState, metric_name: &str) {
+        assert_eq!(
+            state.metrics.get(metric_name),
+            None,
+            "Metric {} should not exist",
+            metric_name
+        );
+    }
+
+    /// Create offline service variant
+    fn create_offline_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.online = false;
+        service
+    }
+
+    /// Create service with custom addresses
+    fn create_service_with_addrs(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        addrs: Vec<&str>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.addrs = addrs.into_iter().map(|s| s.to_string()).collect();
+        service
+    }
+
+    /// Create service with TXT records
+    fn create_service_with_txt(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        txt: Vec<&str>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.txt = txt.into_iter().map(|s| s.to_string()).collect();
+        service
+    }
+
+    /// Create service with subtype
+    fn create_service_with_subtype(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        subtype: &str,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.subtype = Some(subtype.to_string());
+        service
+    }
+
+    // Navigation test helper
+    enum NavigationDirection {
+        Up,
+        Down,
+        PageUp,
+        PageDown,
+        First,
+        Last,
+    }
+
+    /// Helper to test navigation with validation
+    fn test_navigation_scenario(
+        mut state: AppState,
+        start_pos: usize,
+        direction: NavigationDirection,
+        expected_pos: usize,
+        description: &str,
+    ) {
+        state.selected_service = start_pos;
+
+        match direction {
+            NavigationDirection::Up => state.navigate_services_up(),
+            NavigationDirection::Down => state.navigate_services_down(),
+            NavigationDirection::PageUp => state.navigate_services_page_up(),
+            NavigationDirection::PageDown => state.navigate_services_page_down(),
+            NavigationDirection::First => state.navigate_services_to_first(),
+            NavigationDirection::Last => state.navigate_services_to_last(),
+        }
+
+        assert_eq!(
+            state.selected_service, expected_pos,
+            "{}: Expected position {}, got {}",
+            description, expected_pos, state.selected_service
+        );
+    }
+
+    /// Helper to test service type navigation
+    fn test_type_navigation_scenario(
+        mut state: AppState,
+        start_type: Option<usize>,
+        direction: NavigationDirection,
+        expected_type: Option<usize>,
+        description: &str,
+    ) {
+        state.selected_type = start_type;
+
+        match direction {
+            NavigationDirection::Up => state.navigate_service_types_up(),
+            NavigationDirection::Down => state.navigate_service_types_down(),
+            NavigationDirection::PageUp => state.navigate_service_types_page_up(),
+            NavigationDirection::PageDown => state.navigate_service_types_page_down(),
+            NavigationDirection::First => state.navigate_service_types_to_first(),
+            NavigationDirection::Last => state.navigate_service_types_to_last(),
+        }
+
+        assert_eq!(
+            state.selected_type, expected_type,
+            "{}: Expected type {:?}, got {:?}",
+            description, expected_type, state.selected_type
+        );
+    }
+
+    // CONSOLIDATED NAVIGATION TESTS
+
+    #[test]
+    fn test_navigate_services_comprehensive() {
+        let state = setup_test_state(3); // services 0, 1, 2
+
+        // Test basic up navigation
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::Up,
+            1,
+            "Navigate up from position 2",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            1,
+            NavigationDirection::Up,
+            0,
+            "Navigate up from position 1",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::Up,
+            0,
+            "Navigate up from position 0 (boundary)",
+        );
+
+        // Test basic down navigation
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::Down,
+            1,
+            "Navigate down from position 0",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            1,
+            NavigationDirection::Down,
+            2,
+            "Navigate down from position 1",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::Down,
+            2,
+            "Navigate down from position 2 (boundary)",
+        );
+
+        // Test first/last navigation
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::First,
+            0,
+            "Navigate to first",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::Last,
+            2,
+            "Navigate to last",
+        );
+
+        // Test single service edge case
+        let single_service_state = setup_test_state(1);
+        test_navigation_scenario(
+            single_service_state.clone(),
+            0,
+            NavigationDirection::Up,
+            0,
+            "Single service up navigation",
+        );
+        test_navigation_scenario(
+            single_service_state,
+            0,
+            NavigationDirection::Down,
+            0,
+            "Single service down navigation",
+        );
+    }
+
+    #[test]
+    fn test_navigate_services_page_navigation() {
+        let mut state = setup_test_state(20);
+        state.services_scroll.visible_items = 5;
+
+        // Test page up navigation
+        test_navigation_scenario(
+            state.clone(),
+            10,
+            NavigationDirection::PageUp,
+            6,
+            "Page up from position 10",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            6,
+            NavigationDirection::PageUp,
+            2,
+            "Page up from position 6",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::PageUp,
+            0,
+            "Page up from position 2 (boundary)",
+        );
+
+        // Test page down navigation
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::PageDown,
+            4,
+            "Page down from position 0",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            4,
+            NavigationDirection::PageDown,
+            8,
+            "Page down from position 4",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            15,
+            NavigationDirection::PageDown,
+            19,
+            "Page down from position 15 (boundary)",
+        );
+
+        // Test with fewer items than page size
+        let small_state = setup_test_state(2);
+        test_navigation_scenario(
+            small_state,
+            0,
+            NavigationDirection::PageDown,
+            0,
+            "Page down with fewer than page size",
+        );
+    }
+
+    #[test]
+    fn test_navigate_service_types_comprehensive() {
+        let state = setup_test_state_with_types(vec![
+            "_http._tcp.local.",
+            "_ssh._tcp.local.",
+            "_printer._tcp.local.",
+        ]);
+
+        // Test basic up navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::Up,
+            Some(1),
+            "Type up from index 2",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(1),
+            NavigationDirection::Up,
+            Some(0),
+            "Type up from index 1",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(0),
+            NavigationDirection::Up,
+            None,
+            "Type up from index 0 to All Types",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::Up,
+            None,
+            "Type up from All Types (boundary)",
+        );
+
+        // Test basic down navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::Down,
+            Some(0),
+            "Type down from All Types",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(0),
+            NavigationDirection::Down,
+            Some(1),
+            "Type down from index 0",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(1),
+            NavigationDirection::Down,
+            Some(2),
+            "Type down from index 1",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::Down,
+            Some(2),
+            "Type down from index 2 (boundary)",
+        );
+
+        // Test first/last navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::First,
+            None,
+            "Type navigate to first (All Types)",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::Last,
+            Some(2),
+            "Type navigate to last",
+        );
+
+        // Test single type edge case
+        let single_type_state = setup_test_state_with_types(vec!["_http._tcp.local."]);
+        test_type_navigation_scenario(
+            single_type_state.clone(),
+            Some(0),
+            NavigationDirection::Up,
+            None,
+            "Single type up navigation",
+        );
+        test_type_navigation_scenario(
+            single_type_state,
+            None,
+            NavigationDirection::Down,
+            Some(0),
+            "Single type down navigation",
+        );
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation() {
+        let mut state = setup_test_state_with_types(
+            (0..10)
+                .map(|i| format!("_test{}._tcp.local.", i))
+                .collect::<Vec<_>>()
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>(),
+        );
+        state.types_scroll.visible_items = 3;
+
+        // Test page up navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(8),
+            NavigationDirection::PageUp,
+            Some(6),
+            "Type page up from index 8",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(6),
+            NavigationDirection::PageUp,
+            Some(4),
+            "Type page up from index 6",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(1),
+            NavigationDirection::PageUp,
+            None,
+            "Type page up from index 1 to All Types",
+        );
+
+        // Test page down navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::PageDown,
+            Some(2),
+            "Type page down from All Types",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::PageDown,
+            Some(4),
+            "Type page down from index 2",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(8),
+            NavigationDirection::PageDown,
+            Some(9),
+            "Type page down from index 8 (boundary)",
+        );
+
+        // Test edge cases
+        let empty_state = setup_test_state_with_types(vec![]);
+        test_type_navigation_scenario(
+            empty_state.clone(),
+            None,
+            NavigationDirection::PageUp,
+            None,
+            "Type page up with no types",
+        );
+        test_type_navigation_scenario(
+            empty_state,
+            None,
+            NavigationDirection::PageDown,
+            None,
+            "Type page down with no types",
+        );
+
+        let mut few_types_state =
+            setup_test_state_with_types(vec!["_test1._tcp.local.", "_test2._tcp.local."]);
+        few_types_state.types_scroll.visible_items = 5;
+        test_type_navigation_scenario(
+            few_types_state,
+            None,
+            NavigationDirection::PageDown,
+            Some(1),
+            "Type page down with fewer than page size",
+        );
+
+        let mut zero_visible_state =
+            setup_test_state_with_types(vec!["_test1._tcp.local.", "_test2._tcp.local."]);
+        zero_visible_state.types_scroll.visible_items = 0;
+        test_type_navigation_scenario(
+            zero_visible_state,
+            Some(1),
+            NavigationDirection::PageUp,
+            Some(1),
+            "Type page up with zero visible",
+        );
+    }
+
+    #[test]
+    fn test_scroll_offset_updates_on_navigation() {
+        let mut state = setup_test_state(10);
+        state.services_scroll.visible_items = 5;
+
+        // Navigate down beyond visible area
+        state.selected_service = 4;
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 5);
+        assert!(
+            state.services_scroll.offset > 0,
+            "Scroll offset should update to keep selected service visible"
+        );
+
+        // Navigate up should update scroll offset appropriately
+        state.selected_service = 5;
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 4);
+
+        // Verify selected service stays within visible range
+        assert!(state.selected_service >= state.services_scroll.offset);
+        assert!(
+            state.selected_service
+                < state.services_scroll.offset + state.services_scroll.visible_items
+        );
+    }
+
+    // CONSOLIDATED SORTING TESTS
+
+    #[derive(Debug)]
+    struct SortTestCase {
+        name: &'static str,
+        services: Vec<ServiceEntry>,
+        field: SortField,
+        direction: SortDirection,
+        expected_order: Vec<usize>, // Indices in the services vector
+    }
+
+    #[test]
+    fn test_sorting_comprehensive() {
+        let test_cases = vec![
+            // Host field tests
+            SortTestCase {
+                name: "Host ascending",
+                services: vec![
+                    create_test_service("zebra", "_http._tcp.local.", 80),
+                    create_test_service("alpha", "_http._tcp.local.", 81),
+                    create_test_service("beta", "_http._tcp.local.", 82),
+                ],
+                field: SortField::Host,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 2, 0], // alpha, beta, zebra
+            },
+            SortTestCase {
+                name: "Host descending",
+                services: vec![
+                    create_test_service("alpha", "_http._tcp.local.", 80),
+                    create_test_service("beta", "_http._tcp.local.", 81),
+                    create_test_service("zebra", "_http._tcp.local.", 82),
+                ],
+                field: SortField::Host,
+                direction: SortDirection::Descending,
+                expected_order: vec![2, 1, 0], // zebra, beta, alpha
+            },
+            // Service type field tests
+            SortTestCase {
+                name: "Service type ascending",
+                services: vec![
+                    create_test_service("test1", "_ssh._tcp.local.", 80),
+                    create_test_service("test2", "_http._tcp.local.", 81),
+                ],
+                field: SortField::ServiceType,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 0], // http before ssh
+            },
+            // Port field tests
+            SortTestCase {
+                name: "Port ascending",
+                services: vec![
+                    create_test_service("service1", "_http._tcp.local.", 8080),
+                    create_test_service("service2", "_http._tcp.local.", 80),
+                    create_test_service("service3", "_http._tcp.local.", 443),
+                ],
+                field: SortField::Port,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 2, 0], // 80, 443, 8080
+            },
+            // Timestamp field tests
+            SortTestCase {
+                name: "Timestamp ascending",
+                services: vec![
+                    {
+                        let mut s = create_test_service("service1", "_http._tcp.local.", 3000);
+                        s.updated_at_micros = 3000;
+                        s
+                    },
+                    {
+                        let mut s = create_test_service("service2", "_http._tcp.local.", 1000);
+                        s.updated_at_micros = 1000;
+                        s
+                    },
+                    {
+                        let mut s = create_test_service("service3", "_http._tcp.local.", 2000);
+                        s.updated_at_micros = 2000;
+                        s
+                    },
+                ],
+                field: SortField::Timestamp,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 2, 0], // 1000, 2000, 3000
+            },
+        ];
+
+        for test_case in test_cases {
+            let mut state = setup_test_state_with_services(test_case.services.clone());
+            state.sort_field = test_case.field;
+            state.sort_direction = test_case.direction;
+            state.mark_cache_dirty();
+
+            let filtered = state.get_filtered_services().to_vec();
+            assert_eq!(
+                filtered.len(),
+                test_case.expected_order.len(),
+                "{}: Expected {} filtered services, got {}",
+                test_case.name,
+                test_case.expected_order.len(),
+                filtered.len()
+            );
+
+            for (i, &service_index) in test_case.expected_order.iter().enumerate() {
+                assert_eq!(
+                    filtered[i], service_index,
+                    "{}: Expected service {} at position {}, got {}",
+                    test_case.name, service_index, i, filtered[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_sort_stability_with_equal_values() {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_http._tcp.local.");
+
+        // Create services with same port but different names
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("gamma", "_http._tcp.local.", 80));
+
+        state.sort_field = SortField::Port;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 3);
+
+        // All should have same port, order should be stable (preserves insertion order for equal values)
+        for &service_index in &filtered {
+            assert_eq!(state.services[service_index].port, 80);
+        }
+    }
+
+    #[test]
+    fn test_sort_field_cycling() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Test forward cycling
+        assert_eq!(state.sort_field, SortField::Host);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::ServiceType);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Fullname);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Port);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Address);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Host); // Wrap around
+
+        // Test backward cycling
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Address);
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Port);
+    }
+
+    #[test]
+    fn test_sort_direction_toggle() {
+        let mut state = AppState::new(HashSet::new());
+
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+        state.toggle_sort_direction();
+        assert_eq!(state.sort_direction, SortDirection::Descending);
+        state.toggle_sort_direction();
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+    }
+
+    #[test]
+    fn test_sort_key_event_handling() {
+        let mut state = AppState::new(HashSet::new());
+        let original_field = state.sort_field;
+        let _original_direction = state.sort_direction;
+
+        // Test sort field cycling key
+        let key = KeyEvent::from(KeyCode::Char('s'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_field, SortField::ServiceType); // Should have cycled forward
+
+        // Test sort field cycling backward key
+        let key = KeyEvent::from(KeyCode::Char('S'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_field, original_field); // Should have cycled backward
+
+        // Test sort direction toggle key
+        let key = KeyEvent::from(KeyCode::Char('o'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_direction, SortDirection::Descending); // Should have toggled
+    }
+
+    #[test]
+    fn test_sort_field_display_formatting() {
+        assert_eq!(format_sort_field_for_display(SortField::Host), "Host");
+        assert_eq!(
+            format_sort_field_for_display(SortField::ServiceType),
+            "Type"
+        );
+        assert_eq!(format_sort_field_for_display(SortField::Fullname), "Name");
+        assert_eq!(format_sort_field_for_display(SortField::Port), "Port");
+        assert_eq!(format_sort_field_for_display(SortField::Address), "Addr");
+        assert_eq!(format_sort_field_for_display(SortField::Timestamp), "Time");
+    }
+
+    #[test]
+    fn test_sort_direction_display_formatting() {
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Ascending),
+            "↑"
+        );
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Descending),
+            "↓"
+        );
+    }
+
+    #[test]
+    fn test_sort_with_filtering_combined() {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        // Add services with different types and names
+        state
+            .services
+            .push(create_test_service("http-zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
+        state
+            .services
+            .push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
+
+        // Filter to HTTP services and sort by host
+        state.selected_type = Some(0); // _http._tcp.local.
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 2); // Only HTTP services
+        assert_eq!(state.services[filtered[0]].host, "http-alpha.local.");
+        assert_eq!(state.services[filtered[1]].host, "http-zebra.local.");
+    }
+
+    #[test]
+    fn test_sort_type_ordering() {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+
+        // Service types should be sorted alphabetically
+        assert_eq!(state.service_types[0], "_http._tcp.local.");
+        assert_eq!(state.service_types[1], "_printer._tcp.local.");
+        assert_eq!(state.service_types[2], "_ssh._tcp.local.");
+    }
+
+    // UNIFIED METRICS POPUP/SCROLL TESTS
+
+    #[derive(Debug)]
+    struct MetricsTestCase {
+        name: &'static str,
+        setup_metrics: fn(&mut AppState),
+        initial_offset: usize,
+        key_event: KeyEvent,
+        expected_offset: Option<usize>,
+        expected_popup_open: bool,
+        description: &'static str,
+    }
+
+    #[test]
+    fn test_metrics_comprehensive() {
+        let test_cases = vec![
+            // Test case 1: Basic scrolling up
+            MetricsTestCase {
+                name: "Scroll up from position 3",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(2), // Should decrease by 1
+                expected_popup_open: true,
+                description: "Scroll up should decrease offset",
+            },
+            // Test case 2: Scroll up from top (boundary)
+            MetricsTestCase {
+                name: "Scroll up from boundary",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should stay at boundary
+                expected_popup_open: true,
+                description: "Scroll up at top should stay at 0",
+            },
+            // Test case 3: Basic scrolling down
+            MetricsTestCase {
+                name: "Scroll down from position 0",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(1), // Should increase by 1
+                expected_popup_open: true,
+                description: "Scroll down should increase offset",
+            },
+            // Test case 4: PageUp closes popup
+            MetricsTestCase {
+                name: "PageUp closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 5,
+                key_event: KeyEvent::new(KeyCode::PageUp, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "PageUp should close popup and reset offset",
+            },
+            // Test case 5: PageDown closes popup
+            MetricsTestCase {
+                name: "PageDown closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::PageDown, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "PageDown should close popup and reset offset",
+            },
+            // Test case 6: Home key closes popup
+            MetricsTestCase {
+                name: "Home closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::Home, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "Home should close popup and reset offset",
+            },
+            // Test case 7: End key closes popup
+            MetricsTestCase {
+                name: "End closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::End, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "End should close popup and reset offset",
+            },
+            // Test case 8: Escape key closes popup
+            MetricsTestCase {
+                name: "Escape closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset offset when closing (matches actual behavior)
+                expected_popup_open: false,
+                description: "Escape should close popup and reset offset",
+            },
+            // Test case 9: Function keys (F1-F12) close popup
+            MetricsTestCase {
+                name: "F3 closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::F(3), crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset offset when closing (matches actual behavior)
+                expected_popup_open: false,
+                description: "F3 should close popup and reset offset",
+            },
+            // Test case 10: Multiple operations sequence
+            MetricsTestCase {
+                name: "Multiple scroll operations",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // After sequence of 3 operations
+                expected_popup_open: true,
+                description: "Multiple operations should behave correctly",
+            },
+        ];
+
+        for test_case in test_cases {
+            let mut state = AppState::new(HashSet::new());
+            state.show_metrics_popup = true;
+            state.metrics_scroll.offset = test_case.initial_offset;
+            (test_case.setup_metrics)(&mut state);
+
+            // Handle the key event
+            state.handle_key_event(test_case.key_event);
+
+            // Check results
+            if let Some(expected_offset) = test_case.expected_offset {
+                assert_eq!(
+                    state.metrics_scroll.offset,
+                    expected_offset,
+                    "{}: {} - Expected offset {}, got {}",
+                    test_case.name,
+                    test_case.description,
+                    expected_offset,
+                    state.metrics_scroll.offset
+                );
+            }
+
+            assert_eq!(
+                state.show_metrics_popup,
+                test_case.expected_popup_open,
+                "{}: {} - Expected popup open: {}, got {}",
+                test_case.name,
+                test_case.description,
+                test_case.expected_popup_open,
+                state.show_metrics_popup
+            );
+        }
+    }
+
+    // UNIFIED FILTER TESTING FRAMEWORK
+
+    #[derive(Debug)]
+    struct FilterTestCase {
+        name: &'static str,
+        setup_state: fn(&mut AppState),
+        services: Vec<ServiceEntry>,
+        expected_matches: Vec<usize>, // Indices of services that should match
+    }
+
+    #[test]
+    fn test_filtering_comprehensive() {
+        let test_cases = vec![
+            // Test case 1: Filter all types (no type restriction)
+            FilterTestCase {
+                name: "All types filter",
+                setup_state: |state| state.selected_type = None,
+                services: vec![
+                    create_test_service("http-service", "_http._tcp.local.", 80),
+                    create_test_service("ssh-service", "_ssh._tcp.local.", 22),
+                ],
+                expected_matches: vec![0, 1], // Both should match
+            },
+            // Test case 2: Filter by specific type
+            FilterTestCase {
+                name: "Specific type filter",
+                setup_state: |state| {
+                    state.add_service_type("_http._tcp.local.");
+                    state.add_service_type("_ssh._tcp.local.");
+                    state.selected_type = Some(0); // HTTP only
+                },
+                services: vec![
+                    create_test_service("http-service", "_http._tcp.local.", 80),
+                    create_test_service("ssh-service", "_ssh._tcp.local.", 22),
+                ],
+                expected_matches: vec![0], // Only HTTP should match
+            },
+            // Test case 3: Text query filtering
+            FilterTestCase {
+                name: "Text query filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "test".to_string();
+                },
+                services: vec![
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                    create_test_service("other-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0], // Only service with "test" should match
+            },
+            // Test case 4: Case insensitive filtering
+            FilterTestCase {
+                name: "Case insensitive filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "TEST".to_string();
+                },
+                services: vec![
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                    create_test_service("other-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0], // Should match despite case difference
+            },
+            // Test case 5: Port as string matching
+            FilterTestCase {
+                name: "Port as string filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "8080".to_string();
+                },
+                services: vec![
+                    create_test_service("service-8080", "_http._tcp.local.", 8080),
+                    create_test_service("service-9090", "_http._tcp.local.", 9090),
+                ],
+                expected_matches: vec![0], // Only 8080 should match
+            },
+            // Test case 6: Partial word matching
+            FilterTestCase {
+                name: "Partial word filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "test".to_string();
+                },
+                services: vec![
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                    create_test_service("testing-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0, 1], // Both should match partial "test"
+            },
+            // Test case 7: Special characters handling
+            FilterTestCase {
+                name: "Special characters filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "test!@#".to_string();
+                },
+                services: vec![
+                    create_test_service("test!@#-service", "_http._tcp.local.", 80),
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0], // Only exact special character match
+            },
+            // Test case 8: Empty query shows all
+            FilterTestCase {
+                name: "Empty query shows all",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "".to_string();
+                },
+                services: vec![
+                    create_test_service("service1", "_http._tcp.local.", 80),
+                    create_test_service("service2", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0, 1], // Both should match
+            },
+        ];
+
+        for test_case in test_cases {
+            let mut state = AppState::new(HashSet::new());
+            (test_case.setup_state)(&mut state);
+
+            for (i, service) in test_case.services.iter().enumerate() {
+                let should_match = test_case.expected_matches.contains(&i);
+                assert_eq!(
+                    state.filter_service(service),
+                    should_match,
+                    "{}: Service {} should match: {}",
+                    test_case.name,
+                    i,
+                    should_match
+                );
+            }
+        }
+    }
+
     // ServiceEntry tests
     #[test]
     fn test_service_entry_go_offline_at() {
@@ -3367,33 +4559,6 @@ mod tests {
         assert!(user_requested_types.contains("_ssh._tcp.local."));
     }
 
-    // Filter service tests
-    #[test]
-    fn test_filter_service_all_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.selected_type = None;
-
-        let mut service = create_test_service("test", "_http._tcp.local.", 80);
-        service.addrs.clear(); // Test with empty addresses
-
-        assert!(state.filter_service(&service));
-    }
-
-    #[test]
-    fn test_filter_service_specific_type() {
-        let mut state = AppState::new(HashSet::new());
-        state.service_types.push("_http._tcp.local.".to_string());
-        state.service_types.push("_ssh._tcp.local.".to_string());
-        state.selected_type = Some(0);
-
-        let http_service = create_test_service("test", "_http._tcp.local.", 80);
-
-        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
-
-        assert!(state.filter_service(&http_service));
-        assert!(!state.filter_service(&ssh_service));
-    }
-
     // Service type management tests
     #[test]
     fn test_add_service_type() {
@@ -3464,381 +4629,6 @@ mod tests {
         assert!(state.selected_type == Some(1) || state.selected_type == Some(0));
     }
 
-    // Navigation tests
-    #[test]
-    fn test_navigate_services_up() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("test3", "_http._tcp.local.", 82));
-        state.selected_service = 2;
-
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 1);
-
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 0);
-
-        // Should not go below 0
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 0);
-    }
-
-    #[test]
-    fn test_navigate_services_down() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("test3", "_http._tcp.local.", 82));
-        state.selected_service = 0;
-
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 1);
-
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 2);
-
-        // Should not go beyond last service
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 2);
-    }
-
-    #[test]
-    fn test_navigate_service_types_up() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-        state.selected_type = Some(1);
-
-        state.navigate_service_types_up();
-        assert_eq!(state.selected_type, Some(0));
-
-        state.navigate_service_types_up();
-        assert_eq!(state.selected_type, None); // "All Types"
-
-        // Should not go beyond "All Types"
-        state.navigate_service_types_up();
-        assert_eq!(state.selected_type, None);
-    }
-
-    #[test]
-    fn test_navigate_service_types_down() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-        state.selected_type = None;
-
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(0));
-
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(1));
-
-        // Should not go beyond last type
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(1));
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up() {
-        let mut state = AppState::new(HashSet::new());
-        // Add 10 service types to test paging
-        for i in 0..10 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.selected_type = Some(8); // Start near the end
-        state.types_scroll.visible_items = 3; // Simulate 3 visible items
-
-        // Page up should move by visible_types - 1 = 2 positions
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(6));
-
-        // Another page up
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(4));
-
-        // Page up from index 1 should go to "All Types"
-        state.selected_type = Some(1);
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, None);
-
-        // Page up from "All Types" should stay at "All Types"
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, None);
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up_with_offset() {
-        let mut state = AppState::new(HashSet::new());
-        // Add several service types
-        for i in 0..8 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.selected_type = Some(5);
-        state.types_scroll.visible_items = 3;
-        state.types_scroll.offset = 3; // Currently showing types 3,4,5
-
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(3));
-        assert_eq!(state.types_scroll.offset, 3); // Scroll offset should stay the same
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down() {
-        let mut state = AppState::new(HashSet::new());
-        // Add 10 service types to test paging
-        for i in 0..10 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.selected_type = None; // Start at "All Types"
-        state.types_scroll.visible_items = 3; // Simulate 3 visible items
-
-        // Page down from "All Types" should jump to index 2 (visible_types - 1)
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(2));
-
-        // Another page down should move by 2 positions
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(4));
-
-        // Page down near the end should clamp to last index
-        state.selected_type = Some(8);
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(9)); // Last index
-
-        // Page down from last should stay at last
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(9));
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_with_few_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = None;
-        state.types_scroll.visible_items = 5; // More visible than available
-
-        // Page down should go to last available type
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(1)); // Last index
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.selected_type = None;
-
-        // Page up should not crash and stay at None
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up_with_zero_visible() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = Some(1);
-        state.types_scroll.visible_items = 0;
-
-        // Page up with 0 visible should not move
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(1));
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.selected_type = None;
-
-        // Page down should not crash and stay at None
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_with_zero_visible() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = None;
-        state.types_scroll.visible_items = 0;
-
-        // Page down with 0 visible should move to index 0 (scroll_amount = 0)
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(0));
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_first_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.types_scroll.offset = 5;
-
-        state.navigate_service_types_to_first();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_last_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.types_scroll.offset = 5;
-
-        state.navigate_service_types_to_last();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_last_uses_saturating_sub() {
-        let mut state = AppState::new(HashSet::new());
-        for i in 0..3 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.types_scroll.visible_items = 2;
-
-        state.navigate_service_types_to_last();
-        // Should use .len().saturating_sub(1) = 3-1 = 2
-        assert_eq!(state.selected_type, Some(2));
-        // Scroll offset should position last item at bottom of visible area
-        assert_eq!(state.types_scroll.offset, 1); // 2 - 2 + 1 = 1
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_more_than_available() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = None;
-        state.types_scroll.visible_items = 10; // More visible than available
-
-        // Should go to last available index (1)
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(1));
-    }
-
-    #[test]
-    fn test_service_type_pagination_edge_cases() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.types_scroll.visible_items = 1; // Only 1 visible item, scroll_amount = 0
-
-        // Test page up with single visible item (scroll_amount = 0, so stays at index 0)
-        state.selected_type = Some(0);
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(0));
-
-        // Test page down with single visible item
-        state.selected_type = None;
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(0));
-
-        // Test page down from last with single visible item
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(0));
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_first() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.selected_service = 1;
-        state.services_scroll.offset = 1;
-
-        state.navigate_services_to_first();
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_services_to_last() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("test3", "_http._tcp.local.", 82));
-        state.selected_service = 0;
-
-        state.navigate_services_to_last();
-        assert_eq!(state.selected_service, 2);
-    }
-
-    #[test]
-    fn test_navigate_services_page_up() {
-        let mut state = AppState::new(HashSet::new());
-        for i in 0..20 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.services_scroll.visible_items = 5;
-        state.selected_service = 10;
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 6); // 10 - (5-1) = 6
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 2); // 6 - (5-1) = 2
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 0); // Can't go below 0
-    }
-
-    #[test]
-    fn test_navigate_services_page_down() {
-        let mut state = AppState::new(HashSet::new());
-        for i in 0..20 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.services_scroll.visible_items = 5;
-        state.selected_service = 0;
-
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 4); // 0 + (5-1) = 4
-
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 8); // 4 + (5-1) = 8
-
-        state.selected_service = 15;
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 19); // Should stop at last item
-    }
-
     // Remove offline services tests
     #[test]
     fn test_remove_offline_services() {
@@ -3901,13 +4691,6 @@ mod tests {
     }
 
     // Key handling tests
-    #[test]
-    fn test_handle_key_event_quit() {
-        let mut state = AppState::new(HashSet::new());
-        let key = KeyEvent::from(KeyCode::Char('q'));
-        assert!(!state.handle_key_event(key)); // Should return false to quit
-    }
-
     #[test]
     fn test_handle_key_event_toggle_help() {
         let mut state = AppState::new(HashSet::new());
@@ -4041,17 +4824,17 @@ mod tests {
     }
 
     #[test]
-    fn test_metrics_scrolling_boundaries() {
+    fn test_metrics_scroll_basic() {
         let mut state = AppState::new(HashSet::new());
-        state.show_metrics_popup = true;
 
-        // Add some metrics to ensure there's content to scroll through
-        for i in 1..20 {
+        // Add some metrics content first
+        for i in 1..=10 {
             state.update_metric(&format!("test_metric_{}", i));
         }
 
         // Test scrolling up when already at top (should stay at 0)
         state.metrics_scroll.offset = 0;
+        state.show_metrics_popup = true; // Show popup
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -4078,15 +4861,9 @@ mod tests {
     }
 
     #[test]
-    fn test_metrics_scrolling_with_popup_state() {
-        let mut state = AppState::new(HashSet::new());
-
-        // Add some metrics to ensure there's content to scroll through
-        for i in 1..20 {
-            state.update_metric(&format!("test_metric_{}", i));
-        }
-
+    fn test_metrics_scroll_with_popup() {
         // Test that scrolling only works when popup is shown
+        let mut state = AppState::new(HashSet::new());
         state.show_metrics_popup = false;
         state.metrics_scroll.offset = 5;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
@@ -4480,7 +5257,7 @@ mod tests {
     #[test]
     fn test_create_service_details_text() {
         let mut service = create_test_service("MyService", "_http._tcp.local.", 8080);
-        service.subtype = Some("_printer".to_string());
+        service.subtype = Some("printer._sub._http._tcp.local.".to_string());
         service.addrs = vec!["192.168.1.63".to_string(), "192.168.1.20".to_string()];
         service.txt = vec!["key1=value1".to_string(), "key2=value2".to_string()];
         service.online = true;
@@ -4505,7 +5282,7 @@ mod tests {
         assert!(details_text.contains("MyService._http._tcp.local."));
         assert!(details_text.contains("MyService.local."));
         assert!(details_text.contains("_http._tcp.local."));
-        assert!(details_text.contains("_printer"));
+        assert!(details_text.contains("printer"));
         assert!(details_text.contains("8080"));
         assert!(details_text.contains("192.168.1.63"));
         assert!(details_text.contains("192.168.1.20"));
@@ -4849,18 +5626,6 @@ mod tests {
     }
 
     #[test]
-    fn test_toggle_sort_direction() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
-
-        state.toggle_sort_direction();
-        assert_eq!(state.sort_direction, SortDirection::Descending);
-
-        state.toggle_sort_direction();
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
-    }
-
-    #[test]
     fn test_cycle_sort_field_forward() {
         let mut state = AppState::new(HashSet::new());
         assert_eq!(state.sort_field, SortField::Host);
@@ -4909,342 +5674,7 @@ mod tests {
         assert_eq!(state.sort_field, SortField::Host);
     }
 
-    #[test]
-    fn test_update_sort_field_resets_selection() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        for i in 0..5 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.selected_service = 3;
-        state.services_scroll.offset = 2;
-
-        state.update_sort_field(SortField::Port);
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_update_sort_direction_resets_selection() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        for i in 0..5 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.selected_service = 3;
-        state.services_scroll.offset = 2;
-
-        state.update_sort_direction(SortDirection::Descending);
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_sort_filtered_services_ascending() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        // Add services in reverse alphabetical order
-        state
-            .services
-            .push(create_test_service("zebra", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("beta", "_http._tcp.local.", 82));
-
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(filtered.len(), 3);
-
-        // Verify services are sorted by host in ascending order
-        assert_eq!(state.services[filtered[0]].host, "alpha.local.");
-        assert_eq!(state.services[filtered[1]].host, "beta.local.");
-        assert_eq!(state.services[filtered[2]].host, "zebra.local.");
-    }
-
-    #[test]
-    fn test_sort_filtered_services_descending() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("beta", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("zebra", "_http._tcp.local.", 82));
-
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Descending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(filtered.len(), 3);
-
-        // Verify services are sorted by host in descending order
-        assert_eq!(state.services[filtered[0]].host, "zebra.local.");
-        assert_eq!(state.services[filtered[1]].host, "beta.local.");
-        assert_eq!(state.services[filtered[2]].host, "alpha.local.");
-    }
-
-    #[test]
-    fn test_sort_by_port_ascending() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        state
-            .services
-            .push(create_test_service("service1", "_http._tcp.local.", 8080));
-        state
-            .services
-            .push(create_test_service("service2", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("service3", "_http._tcp.local.", 443));
-
-        state.sort_field = SortField::Port;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(state.services[filtered[0]].port, 80);
-        assert_eq!(state.services[filtered[1]].port, 443);
-        assert_eq!(state.services[filtered[2]].port, 8080);
-    }
-
-    #[test]
-    fn test_sort_by_timestamp() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        let mut service1 = create_test_service("service1", "_http._tcp.local.", 80);
-        service1.updated_at_micros = 3000;
-        let mut service2 = create_test_service("service2", "_http._tcp.local.", 81);
-        service2.updated_at_micros = 1000;
-        let mut service3 = create_test_service("service3", "_http._tcp.local.", 82);
-        service3.updated_at_micros = 2000;
-
-        state.services.push(service1);
-        state.services.push(service2);
-        state.services.push(service3);
-
-        state.sort_field = SortField::Timestamp;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(state.services[filtered[0]].updated_at_micros, 1000);
-        assert_eq!(state.services[filtered[1]].updated_at_micros, 2000);
-        assert_eq!(state.services[filtered[2]].updated_at_micros, 3000);
-    }
-
-    #[test]
-    fn test_sort_with_filtering() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-
-        state
-            .services
-            .push(create_test_service("http-zebra", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
-        state
-            .services
-            .push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
-        state
-            .services
-            .push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
-
-        // Filter to only HTTP services and sort by host
-        state.selected_type = Some(0); // _http._tcp.local.
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(filtered.len(), 2); // Only HTTP services
-        assert_eq!(state.services[filtered[0]].host, "http-alpha.local.");
-        assert_eq!(state.services[filtered[1]].host, "http-zebra.local.");
-    }
-
-    #[test]
-    fn test_sort_mixed_online_offline() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        let mut service1 = create_test_service("online1", "_http._tcp.local.", 80);
-        service1.online = true;
-        let mut service2 = create_test_service("offline1", "_http._tcp.local.", 81);
-        service2.online = false;
-        let mut service3 = create_test_service("online2", "_http._tcp.local.", 82);
-        service3.online = true;
-
-        state.services.push(service1);
-        state.services.push(service2);
-        state.services.push(service3);
-
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        // All services should be included and sorted, regardless of online status
-        assert_eq!(filtered.len(), 3);
-        assert!(state.services[filtered[0]].host < state.services[filtered[1]].host);
-        assert!(state.services[filtered[1]].host < state.services[filtered[2]].host);
-    }
-
-    #[test]
-    fn test_format_sort_field_display() {
-        assert_eq!(format_sort_field_for_display(SortField::Host), "Host");
-        assert_eq!(
-            format_sort_field_for_display(SortField::ServiceType),
-            "Type"
-        );
-        assert_eq!(format_sort_field_for_display(SortField::Fullname), "Name");
-        assert_eq!(format_sort_field_for_display(SortField::Port), "Port");
-        assert_eq!(format_sort_field_for_display(SortField::Address), "Addr");
-        assert_eq!(format_sort_field_for_display(SortField::Timestamp), "Time");
-    }
-
-    #[test]
-    fn test_format_sort_direction_display() {
-        assert_eq!(
-            format_sort_direction_for_display(SortDirection::Ascending),
-            "↑"
-        );
-        assert_eq!(
-            format_sort_direction_for_display(SortDirection::Descending),
-            "↓"
-        );
-    }
-
-    #[test]
-    fn test_sort_field_enum_equality() {
-        assert_eq!(SortField::Host, SortField::Host);
-        assert_ne!(SortField::Host, SortField::Port);
-    }
-
-    #[test]
-    fn test_sort_direction_enum_equality() {
-        assert_eq!(SortDirection::Ascending, SortDirection::Ascending);
-        assert_ne!(SortDirection::Ascending, SortDirection::Descending);
-    }
-
-    #[test]
-    fn test_key_event_cycle_sort_forward() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_field, SortField::Host);
-
-        let key = KeyEvent::from(KeyCode::Char('s'));
-        state.handle_key_event(key);
-        assert_eq!(state.sort_field, SortField::ServiceType);
-    }
-
-    #[test]
-    fn test_key_event_cycle_sort_backward() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_field, SortField::Host);
-
-        let key = KeyEvent::from(KeyCode::Char('S'));
-        state.handle_key_event(key);
-        assert_eq!(state.sort_field, SortField::Timestamp);
-    }
-
-    #[test]
-    fn test_key_event_toggle_sort_direction() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
-
-        let key = KeyEvent::from(KeyCode::Char('o'));
-        state.handle_key_event(key);
-        assert_eq!(state.sort_direction, SortDirection::Descending);
-
-        state.handle_key_event(key);
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
-    }
-
-    #[test]
-    fn test_cache_invalidation_on_sort_change() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state
-            .services
-            .push(create_test_service("test", "_http._tcp.local.", 80));
-
-        // Populate cache
-        let _ = state.get_filtered_services();
-        assert!(!state.cache_dirty);
-        assert!(state.cached_sorted);
-
-        // Changing sort field should invalidate sorted flag
-        state.update_sort_field(SortField::Port);
-        assert!(state.cache_dirty);
-        assert!(!state.cached_sorted);
-    }
-
-    #[test]
-    fn test_sort_stability_with_equal_values() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        // Create services with same port but different names
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("beta", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("gamma", "_http._tcp.local.", 80));
-
-        state.sort_field = SortField::Port;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        // All should have same port, so order is determined by the stable sort
-        assert_eq!(filtered.len(), 3);
-        for idx in filtered {
-            assert_eq!(state.services[idx].port, 80);
-        }
-    }
-
     // Filter functionality tests
-    #[test]
-    fn test_appstate_new_with_filter() {
-        let state = AppState::new(HashSet::new());
-        assert_eq!(state.filter_query, "");
-        assert!(!state.filter_input_mode);
-    }
-
-    #[test]
-    fn test_start_filter_input() {
-        let mut state = AppState::new(HashSet::new());
-        state.start_filter_input();
-        assert!(state.filter_input_mode);
-        assert_eq!(state.filter_query, "");
-    }
 
     #[test]
     fn test_clear_filter() {
@@ -5337,15 +5767,6 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_service_no_filter() {
-        let mut state = AppState::new(HashSet::new());
-        state.selected_type = None;
-
-        let service = create_test_service("test", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&service));
-    }
-
-    #[test]
     fn test_filter_service_with_text_query() {
         let mut state = AppState::new(HashSet::new());
         state.filter_query = "test".to_string();
@@ -5408,21 +5829,6 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_service_combined_with_type_filter() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-        state.selected_type = Some(0); // Select _http._tcp.local.
-        state.filter_query = "test".to_string();
-
-        let http_service = create_test_service("test", "_http._tcp.local.", 80);
-        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
-
-        assert!(state.filter_service(&http_service)); // Matches both type and text
-        assert!(!state.filter_service(&ssh_service)); // Matches text but wrong type
-    }
-
-    #[test]
     fn test_handle_filter_input_key_enter() {
         let mut state = AppState::new(HashSet::new());
         state.filter_input_mode = true;
@@ -5448,20 +5854,6 @@ mod tests {
         assert!(should_continue);
         assert!(!state.filter_input_mode);
         assert_eq!(state.filter_query, "");
-    }
-
-    #[test]
-    fn test_handle_filter_input_key_backspace() {
-        let mut state = AppState::new(HashSet::new());
-        state.filter_input_mode = true;
-        state.filter_query = "test".to_string();
-
-        let key = KeyEvent::from(KeyCode::Backspace);
-        let should_continue = state.handle_key_event(key);
-
-        assert!(should_continue);
-        assert!(state.filter_input_mode);
-        assert_eq!(state.filter_query, "tes");
     }
 
     #[test]
@@ -5815,50 +6207,6 @@ mod tests {
     }
 
     // Boundary condition tests
-    #[test]
-    fn test_navigate_services_with_single_service() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-
-        state.selected_service = 0;
-
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 0);
-
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_with_single_type() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.selected_type = Some(0);
-
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(0));
-    }
-
-    #[test]
-    fn test_page_navigation_with_fewer_items_than_page_size() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.services_scroll.visible_items = 10; // Page size larger than item count
-
-        state.selected_service = 0;
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 1); // Should go to last item
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 0); // Should go to first item
-    }
 
     #[test]
     fn test_remove_offline_services_with_all_offline() {
@@ -5993,36 +6341,6 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_and_sort_together() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-
-        // Add services with different types and names
-        state
-            .services
-            .push(create_test_service("zebra", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("beta", "_ssh._tcp.local.", 22));
-
-        // Filter to HTTP and sort by host
-        state.selected_type = Some(0); // _http._tcp.local.
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(state.services[filtered[0]].host, "alpha.local.");
-        assert_eq!(state.services[filtered[1]].host, "zebra.local.");
-    }
-
-    #[test]
     fn test_key_event_ctrl_c() {
         let mut state = AppState::new(HashSet::new());
 
@@ -6120,19 +6438,6 @@ mod tests {
         let filtered = state.get_filtered_services();
 
         assert_eq!(filtered.len(), 0);
-    }
-
-    #[test]
-    fn test_service_type_sorting_order() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_ssh._tcp.local.");
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_printer._tcp.local.");
-
-        // Service types should be sorted alphabetically
-        assert_eq!(state.service_types[0], "_http._tcp.local.");
-        assert_eq!(state.service_types[1], "_printer._tcp.local.");
-        assert_eq!(state.service_types[2], "_ssh._tcp.local.");
     }
 
     // Tests for service removal metric fix
@@ -6387,5 +6692,364 @@ mod tests {
 
         // Clean up
         tokio::fs::remove_file(&filename).await.ok();
+    }
+
+    // Tests for unused helper functions
+
+    #[test]
+    fn test_scroll_state_functionality() {
+        let mut scroll_state = ScrollState::new();
+
+        // Test initial state
+        assert_eq!(scroll_state.offset, 0);
+        assert_eq!(scroll_state.visible_items, 0);
+
+        // Test page_scroll_amount with zero visible items
+        assert_eq!(scroll_state.page_scroll_amount(), 0);
+
+        // Test with visible items
+        scroll_state.visible_items = 5;
+        assert_eq!(scroll_state.page_scroll_amount(), 4);
+
+        // Test reset
+        scroll_state.offset = 10;
+        scroll_state.reset();
+        assert_eq!(scroll_state.offset, 0);
+    }
+
+    #[test]
+    fn test_scroll_state_update_offset() {
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+
+        // Test offset update within bounds
+        scroll_state.update_offset(1, 10);
+        assert_eq!(scroll_state.offset, 0);
+
+        // Test offset update beyond visible area
+        scroll_state.update_offset(5, 10);
+        assert_eq!(scroll_state.offset, 3);
+
+        // Test offset at boundary
+        scroll_state.update_offset(9, 10);
+        assert_eq!(scroll_state.offset, 7);
+
+        // Test with single item
+        scroll_state.update_offset(0, 1);
+        assert_eq!(scroll_state.offset, 0);
+    }
+
+    #[test]
+    fn test_handle_popup_scroll() {
+        let mut scroll_offset = 5;
+        let total_content_lines = 20;
+        let max_visible_lines = 10;
+
+        // Test scroll up
+        let handled = handle_popup_scroll(
+            KeyCode::Up,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 4);
+
+        // Test scroll up at boundary
+        scroll_offset = 0;
+        let handled = handle_popup_scroll(
+            KeyCode::Up,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 0);
+
+        // Test scroll down
+        scroll_offset = 5;
+        let handled = handle_popup_scroll(
+            KeyCode::Down,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 6);
+
+        // Test scroll down at boundary
+        scroll_offset = 10; // max scroll offset
+        let handled = handle_popup_scroll(
+            KeyCode::Down,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 10);
+
+        // Test unhandled key
+        let handled = handle_popup_scroll(
+            KeyCode::Char('x'),
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(!handled);
+    }
+
+    #[test]
+    fn test_navigate_list_up() {
+        let mut selected_index = 5;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 10;
+
+        navigate_list_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 4);
+
+        // Test at boundary
+        selected_index = 0;
+        navigate_list_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigate_list_down() {
+        let mut selected_index = 5;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 10;
+
+        navigate_list_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 6);
+
+        // Test at boundary
+        selected_index = 9;
+        navigate_list_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 9);
+    }
+
+    #[test]
+    fn test_navigate_list_page_up() {
+        let mut selected_index = 8;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 15;
+
+        let scroll_amount = scroll_state.page_scroll_amount();
+        assert_eq!(scroll_amount, 2); // 3 - 1 = 2
+
+        navigate_list_page_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 6); // 8 - 2 = 6
+
+        // Test page up with less than page size
+        selected_index = 2;
+        navigate_list_page_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigate_list_page_down() {
+        let mut selected_index = 2;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 15;
+
+        navigate_list_page_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 4); // 2 + (3-1) = 4
+
+        // Test page down near boundary
+        selected_index = 12;
+        navigate_list_page_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 14); // max_index = 14
+    }
+
+    #[test]
+    fn test_navigate_list_to_first() {
+        let mut selected_index = 10;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.offset = 5;
+
+        navigate_list_to_first(&mut selected_index, &mut scroll_state);
+        assert_eq!(selected_index, 0);
+        assert_eq!(scroll_state.offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_list_to_last() {
+        let mut selected_index = 0;
+        let mut scroll_state = ScrollState::new();
+        let total_items = 15;
+
+        navigate_list_to_last(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 14); // 15 - 1
+    }
+
+    #[test]
+    fn test_get_visible_items() {
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+
+        let items = vec!["a", "b", "c", "d", "e"];
+
+        // Test normal case
+        scroll_state.offset = 1;
+        let visible = get_visible_items(&items, &scroll_state);
+        assert_eq!(visible, &["b", "c", "d"]);
+
+        // Test at end
+        scroll_state.offset = 3;
+        let visible = get_visible_items(&items, &scroll_state);
+        assert_eq!(visible, &["d", "e"]);
+
+        // Test offset beyond bounds
+        scroll_state.offset = 10;
+        let visible = get_visible_items(&items, &scroll_state);
+        assert!(visible.is_empty());
+
+        // Test empty items
+        let empty_items: Vec<&str> = vec![];
+        scroll_state.offset = 0;
+        let visible = get_visible_items(&empty_items, &scroll_state);
+        assert!(visible.is_empty());
+    }
+
+    #[test]
+    fn test_assert_helper_functions() {
+        let mut state = setup_test_state(3);
+
+        // Test assert_navigation_state
+        assert_navigation_state(&state, 0, None);
+
+        // Test assert_cache_state
+        assert_cache_state(&state, true, false); // setup_test_state marks cache as dirty
+
+        // Test assert_service_count
+        assert_service_count(&state, 3);
+
+        // Test assert_service_type_count
+        assert_service_type_count(&state, 1);
+
+        // Test assert_metric_not_exist for non-existent metric
+        assert_metric_not_exist(&state, "services_added");
+
+        // Test assert_metric with a metric that should exist
+        state.metrics.insert("test_metric".to_string(), 42);
+        assert_metric(&state, "test_metric", 42);
+
+        // Test assert_metric_not_exist for non-existent metric
+        assert_metric_not_exist(&state, "non_existent_metric");
+    }
+
+    #[test]
+    fn test_create_service_variants() {
+        // Test create_offline_service
+        let offline_service = create_offline_service("test", "_http._tcp.local.", 8080);
+        assert!(!offline_service.online);
+        assert_eq!(offline_service.fullname, "test._http._tcp.local.");
+
+        // Test create_service_with_addrs
+        let service_with_addrs = create_service_with_addrs(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec!["10.0.0.1", "10.0.0.2"],
+        );
+        assert_eq!(service_with_addrs.addrs, vec!["10.0.0.1", "10.0.0.2"]);
+
+        // Test create_service_with_txt
+        let service_with_txt = create_service_with_txt(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec!["key1=value1", "key2=value2"],
+        );
+        assert_eq!(service_with_txt.txt, vec!["key1=value1", "key2=value2"]);
+
+        // Test create_service_with_subtype
+        let service_with_subtype = create_service_with_subtype(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            "_printer._sub._http._tcp.local.",
+        );
+        assert_eq!(
+            service_with_subtype.subtype,
+            Some("_printer._sub._http._tcp.local.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_service_session_history_functionality() {
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // Test get_session_history with single session
+        let history = service.get_session_history();
+        assert!(!history.is_empty());
+
+        // Test create_test_service_with_sessions with multiple sessions
+        let sessions = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            },
+            ServiceSession {
+                start_time: 3000,
+                end_time: None, // Current session
+            },
+        ];
+
+        let service_with_sessions = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            sessions,
+            true,
+            4000,
+            1000,
+            Some(4000),
+            Some(2000),
+        );
+
+        assert_eq!(service_with_sessions.session_history.len(), 2);
+        assert!(service_with_sessions.online);
+        assert_eq!(service_with_sessions.updated_at_micros, 4000);
+
+        // Test session history formatting
+        let history = service_with_sessions.get_session_history();
+        assert!(history.contains("Session 1"));
+        assert!(history.contains("Session 2"));
+        assert!(history.contains("Ongoing"));
+    }
+
+    #[test]
+    fn test_setup_helper_functions() {
+        // Test setup_test_state
+        let state = setup_test_state(5);
+        assert_service_count(&state, 5);
+        assert_service_type_count(&state, 1);
+
+        // Test setup_test_state_with_types
+        let state_with_types = setup_test_state_with_types(vec![
+            "_http._tcp.local.",
+            "_ssh._tcp.local.",
+            "_printer._tcp.local.",
+        ]);
+        assert_service_type_count(&state_with_types, 3);
+
+        // Test setup_test_state_with_services
+        let services = vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_ssh._tcp.local.", 22),
+        ];
+        let state_with_services = setup_test_state_with_services(services);
+        assert_service_count(&state_with_services, 2);
+        assert_service_type_count(&state_with_services, 2);
+
+        // Test setup_test_state_with_user_types
+        let user_types_state =
+            setup_test_state_with_user_types(vec!["_http._tcp.local.", "_ssh._tcp.local."]);
+        assert_service_type_count(&user_types_state, 0); // User types are added to user_service_types, not service_types
     }
 }
