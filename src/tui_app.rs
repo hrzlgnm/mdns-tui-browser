@@ -5257,7 +5257,7 @@ mod tests {
     #[test]
     fn test_create_service_details_text() {
         let mut service = create_test_service("MyService", "_http._tcp.local.", 8080);
-        service.subtype = Some("_printer".to_string());
+        service.subtype = Some("printer._sub._http._tcp.local.".to_string());
         service.addrs = vec!["192.168.1.63".to_string(), "192.168.1.20".to_string()];
         service.txt = vec!["key1=value1".to_string(), "key2=value2".to_string()];
         service.online = true;
@@ -5282,7 +5282,7 @@ mod tests {
         assert!(details_text.contains("MyService._http._tcp.local."));
         assert!(details_text.contains("MyService.local."));
         assert!(details_text.contains("_http._tcp.local."));
-        assert!(details_text.contains("_printer"));
+        assert!(details_text.contains("printer"));
         assert!(details_text.contains("8080"));
         assert!(details_text.contains("192.168.1.63"));
         assert!(details_text.contains("192.168.1.20"));
