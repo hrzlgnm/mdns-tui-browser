@@ -2392,28 +2392,69 @@ fn format_duration_micros(duration_micros: u64) -> String {
     let remaining_micros = duration_micros % 1_000_000;
 
     let seconds = total_seconds % 60;
-    let minutes = (total_seconds / 60) % 60;
-    let hours = (total_seconds / 3600) % 24;
-    let days = total_seconds / 86400;
+    let mut minutes = (total_seconds / 60) % 60;
+    let mut hours = (total_seconds / 3600) % 24;
+    let mut days = total_seconds / 86400;
 
     let mut parts = Vec::new();
 
-    if days > 0 {
-        parts.push(format!("{}d", days));
-    }
-    if hours > 0 {
-        parts.push(format!("{}h", hours));
-    }
-    if minutes > 0 {
-        parts.push(format!("{}m", minutes));
-    }
-
-    // Always include seconds with precision
+    // Handle fractional seconds and potential rounding
     if remaining_micros > 0 {
         let precise_seconds = seconds as f64 + remaining_micros as f64 / 1_000_000.0;
-        parts.push(format!("{:.3}s", precise_seconds));
+        let rounded_seconds = (precise_seconds * 1000.0).round() / 1000.0;
+
+        // Check if rounding causes seconds to roll over to 60
+        if rounded_seconds >= 60.0 {
+            minutes += 1;
+
+            // Handle minute rollover
+            if minutes >= 60 {
+                minutes = 0;
+                hours += 1;
+
+                // Handle hour rollover
+                if hours >= 24 {
+                    hours = 0;
+                    days += 1;
+                }
+            }
+        }
+
+        let final_seconds = if rounded_seconds >= 60.0 {
+            0.0
+        } else {
+            rounded_seconds
+        };
+
+        if days > 0 {
+            parts.push(format!("{}d", days));
+        }
+        if hours > 0 {
+            parts.push(format!("{}h", hours));
+        }
+        if minutes > 0 {
+            parts.push(format!("{}m", minutes));
+        }
+
+        // Only show seconds if they're non-zero OR if there are no minutes/higher units
+        if final_seconds > 0.0 || (days == 0 && hours == 0 && minutes == 0) {
+            parts.push(format!("{:.3}s", final_seconds));
+        }
     } else {
-        parts.push(format!("{}s", seconds));
+        if days > 0 {
+            parts.push(format!("{}d", days));
+        }
+        if hours > 0 {
+            parts.push(format!("{}h", hours));
+        }
+        if minutes > 0 {
+            parts.push(format!("{}m", minutes));
+        }
+
+        // Only show seconds if they're non-zero OR if there are no minutes/higher units
+        if seconds > 0 || (days == 0 && hours == 0 && minutes == 0) {
+            parts.push(format!("{}s", seconds));
+        }
     }
 
     parts.join(" ")
@@ -5340,6 +5381,46 @@ mod tests {
         assert!(timestamp.contains("-"));
         assert!(timestamp.contains(":"));
         assert!(timestamp.len() > 20); // Should include date, time, and microseconds
+    }
+
+    #[test]
+    fn test_format_duration_micros_formats_various_durations_correctly() {
+        // Test basic seconds
+        assert_eq!(format_duration_micros(0), "0s"); // 0s shown when no other units
+        assert_eq!(format_duration_micros(1_000_000), "1s");
+        assert_eq!(format_duration_micros(30_000_000), "30s");
+
+        // Test minutes and seconds
+        assert_eq!(format_duration_micros(60_000_000), "1m");
+        assert_eq!(format_duration_micros(90_000_000), "1m 30s");
+        assert_eq!(format_duration_micros(120_000_000), "2m");
+
+        // Test when there are minutes but zero seconds - seconds should not be displayed
+        assert_eq!(format_duration_micros(60_000_000), "1m"); // Exactly 1 minute, no seconds shown
+
+        // Test fractional seconds
+        assert_eq!(format_duration_micros(1_500_000), "1.500s");
+        assert_eq!(format_duration_micros(59_500_000), "59.500s");
+
+        // Test the rounding edge case that was causing "60.000s"
+        // 59.999594s should round to 60.000s and become "1m"
+        assert_eq!(format_duration_micros(59_999_594), "1m");
+
+        // Test other rounding edge cases
+        assert_eq!(format_duration_micros(59_999_500), "1m"); // 59.9995s rounds up to 60.000s
+        assert_eq!(format_duration_micros(59_999_400), "59.999s"); // 59.9994s doesn't round up, stays under 60s
+
+        // Test hours
+        assert_eq!(format_duration_micros(3_600_000_000), "1h");
+        assert_eq!(format_duration_micros(3_660_000_000), "1h 1m");
+
+        // Test days
+        assert_eq!(format_duration_micros(86_400_000_000), "1d");
+        assert_eq!(format_duration_micros(90_000_000_000), "1d 1h");
+
+        // Test complex durations with fractional seconds
+        assert_eq!(format_duration_micros(3_661_500_000), "1h 1m 1.500s");
+        assert_eq!(format_duration_micros(86_401_500_000), "1d 1.500s");
     }
 
     // Layout tests
