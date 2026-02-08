@@ -127,7 +127,7 @@ jobs:
     if: always()
     steps:
       - name: Check whether the needed jobs succeeded or failed
-        uses: re-actors/alls-green@2765efec08f0fd63e83ad900f5fd75646be69ff6
+        uses: re-actors/alls-green@3de84547cb4afccc7b8cecf651c5508e7662cd53
         with:
           allowed-skips: >-
             aur,
