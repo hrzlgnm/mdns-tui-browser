@@ -5384,7 +5384,7 @@ mod tests {
     }
 
     #[test]
-    fn test_format_duration_micros() {
+    fn test_format_duration_micros_formats_various_durations_correctly() {
         // Test basic seconds
         assert_eq!(format_duration_micros(0), "0s"); // 0s shown when no other units
         assert_eq!(format_duration_micros(1_000_000), "1s");
