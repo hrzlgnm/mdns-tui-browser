@@ -2674,7 +2674,7 @@ pub async fn run_tui(
     let state_for_metrics = Arc::clone(&state);
     let notification_sender_for_metrics = notification_sender.clone();
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
             interval.tick().await;
 
