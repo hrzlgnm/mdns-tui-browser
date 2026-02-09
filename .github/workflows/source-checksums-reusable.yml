@@ -26,8 +26,13 @@ jobs:
         run: |
           if [ -n "${{ github.event.release.name }}" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          else
+          elif [ -n "${{ github.event.inputs.tagName }}" ]; then
+            echo "tag=${{ github.event.inputs.tagName }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.semver }}" ]; then
             echo "tag=v${{ github.event.inputs.semver }}" >> $GITHUB_OUTPUT
+          else
+            echo "Error: No tag information available"
+            exit 1
           fi
 
   generate_checksums:
