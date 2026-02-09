@@ -102,6 +102,7 @@ jobs:
           cargo check
 
       - name: ⏳ Temporary disable ruleset enforcement
+        if: ${{ !inputs.dry-run }}
         run: |
           gh api \
           -H "Accept: application/vnd.github+json" \
@@ -122,7 +123,7 @@ jobs:
           git push --tags
 
       - name: 👮 Re-enable enforcement of rules
-        if: always()
+        if: always() && !inputs.dry-run
         run: |
           gh api \
           -H "Accept: application/vnd.github+json" \
