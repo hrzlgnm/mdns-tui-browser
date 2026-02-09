@@ -8,6 +8,8 @@ on:
     types:
       - published
       - prereleased
+      - created
+      - released
 
 jobs:
   source:
