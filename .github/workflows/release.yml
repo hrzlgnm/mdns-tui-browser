@@ -66,6 +66,10 @@ jobs:
               "major")
                 NEW_VERSION="$((MAJOR + 1)).0.0"
                 ;;
+              *)
+                echo "Error: Invalid version bump type '${{ inputs.version }}'. Must be patch, minor, or major."
+                exit 1
+                ;;
             esac
             echo "semantic-version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "Dry run: would bump from $CURRENT_VERSION to $NEW_VERSION"
