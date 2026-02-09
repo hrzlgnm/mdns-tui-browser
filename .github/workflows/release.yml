@@ -90,8 +90,6 @@ jobs:
           git config --global user.name "hrzlgnm"
           git config --global user.email "hrzlgnm@users.noreply.github.com"
 
-
-
       - name: 🔐 Update Cargo.lock
         if: ${{ !inputs.dry-run }}
         run: |
@@ -138,6 +136,6 @@ jobs:
           name: mDNS TUI Browser v${{ steps.version.outputs.semantic-version }}
           prerelease: true
           latest: false
-          draft: false
+          publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
