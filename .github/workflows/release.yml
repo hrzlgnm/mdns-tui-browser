@@ -23,6 +23,8 @@ on:
 permissions:
   actions: write # to trigger other actions and workflow dispatch
   contents: write # to update version and create tag
+  id-token: write # for sbom association with build
+  attestations: write # to create attestations
 
 jobs:
   release:
