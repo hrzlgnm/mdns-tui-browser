@@ -144,3 +144,5 @@ jobs:
         run: |
           gh workflow run publish.yml \
             --field tagName=v${{ steps.version.outputs.semantic-version }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
