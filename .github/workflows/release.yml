@@ -90,15 +90,7 @@ jobs:
           git config --global user.name "hrzlgnm"
           git config --global user.email "hrzlgnm@users.noreply.github.com"
 
-      - name: 🧹 Delete old drafts
-        run: |
-          gh api repos/${{ github.repository }}/releases \
-            --jq '.[] | select(.draft == true) | .id' | \
-          while read -r release_id; do
-            if [ -n "$release_id" ]; then
-              gh api --method DELETE repos/${{ github.repository }}/releases/$release_id
-            fi
-          done
+
 
       - name: 🔐 Update Cargo.lock
         if: ${{ !inputs.dry-run }}
