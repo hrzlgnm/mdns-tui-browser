@@ -140,26 +140,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🔄 Convert draft to pre-release and publish
-        if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
-        run: |
-          # Wait a moment for release-drafter to create the release
-          sleep 5
-          
-          # Get the release ID for the specific tag
-          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
-            --jq '.[] | select(.tag_name == "v${{ steps.version.outputs.semantic-version }}") | .id')
-          
-          if [ -n "$RELEASE_ID" ]; then
-            echo "Found release ID: $RELEASE_ID, converting to published pre-release"
-            gh api \
-              --method PATCH \
-              repos/${{ github.repository }}/releases/$RELEASE_ID \
-              --field draft=false \
-              --field prerelease=true \
-              --field make_latest=false
-            echo "Successfully converted release to published pre-release"
-          else
-            echo "No release found for tag v${{ steps.version.outputs.semantic-version }}"
-            exit 1
-          fi
+
