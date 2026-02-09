@@ -4,6 +4,11 @@
 name: Create and publish source checksum
 on:
   workflow_call:
+    inputs:
+      tagName:
+        description: The tag name of the release to publish for
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       semver:
