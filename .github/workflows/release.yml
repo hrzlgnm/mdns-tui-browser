@@ -25,7 +25,6 @@ jobs:
     permissions:
       actions: write # to trigger other actions
       contents: write # to update version and create tag
-      releases: write # to create releases
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.semantic-version }}
