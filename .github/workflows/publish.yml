@@ -32,4 +32,4 @@ jobs:
     uses: ./.github/workflows/build-reusable.yml
     secrets: inherit
     with:
-      tagName: ${{ github.event.release.tag_name }}
+      tagName: ${{ github.event.inputs.tagName || github.event.release.tag_name }}
