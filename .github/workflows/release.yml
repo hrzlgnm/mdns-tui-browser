@@ -139,14 +139,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Generate source checksums
-        if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
-        uses: ./.github/workflows/source-checksums-reusable.yml
-        with:
-          tagName: v${{ steps.version.outputs.semantic-version }}
+  source-checksums:
+    if: ${{ !inputs.dry-run && needs.release.outputs.version != '' }}
+    needs: release
+    uses: ./.github/workflows/source-checksums-reusable.yml
+    with:
+      tagName: v${{ needs.release.outputs.version }}
 
-      - name: 🔨 Build and publish release artifacts
-        if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
-        uses: ./.github/workflows/build-reusable.yml
-        with:
-          tagName: v${{ steps.version.outputs.semantic-version }}
+  build-and-publish:
+    if: ${{ !inputs.dry-run && needs.release.outputs.version != '' }}
+    needs: release
+    uses: ./.github/workflows/build-reusable.yml
+    with:
+      tagName: v${{ needs.release.outputs.version }}
