@@ -23,7 +23,7 @@ on:
 jobs:
   release:
     permissions:
-      actions: write # to trigger other actions
+      actions: write # to trigger other actions and workflow dispatch
       contents: write # to update version and create tag
     runs-on: ubuntu-latest
     outputs:
