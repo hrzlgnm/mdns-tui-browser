@@ -139,10 +139,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🚀 Trigger publish workflow
+      - name: 🏷️ Generate source checksums
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
-        run: |
-          gh workflow run publish.yml \
-            --field tagName=v${{ steps.version.outputs.semantic-version }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ./.github/workflows/source-checksums-reusable.yml
+        with:
+          tagName: v${{ steps.version.outputs.semantic-version }}
+
+      - name: 🔨 Build and publish release artifacts
+        if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
+        uses: ./.github/workflows/build-reusable.yml
+        with:
+          tagName: v${{ steps.version.outputs.semantic-version }}
