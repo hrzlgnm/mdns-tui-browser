@@ -144,11 +144,11 @@ jobs:
     needs: release
     uses: ./.github/workflows/source-checksums-reusable.yml
     with:
-      tagName: ${{ needs.release.outputs.version }}
+      tagName: v${{ needs.release.outputs.version }}
 
   build-and-publish:
     if: ${{ !inputs.dry-run && needs.release.outputs.version != '' }}
     needs: release
     uses: ./.github/workflows/build-reusable.yml
     with:
-      tagName: ${{ needs.release.outputs.version }}
+      tagName: v${{ needs.release.outputs.version }}
