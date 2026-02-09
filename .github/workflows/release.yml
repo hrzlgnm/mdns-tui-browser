@@ -141,6 +141,8 @@ jobs:
 
       - name: 🚀 Trigger publish workflow
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
         run: |
           gh workflow run publish.yml \
             --field tagName=v${{ steps.version.outputs.semantic-version }}
