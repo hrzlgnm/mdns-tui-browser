@@ -2236,7 +2236,7 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   S                 - Cycle sort field backward"),
         Line::from("   o                 - Toggle sort direction (↑/↓)"),
         Line::from(" "),
-        Line::from("   Sort field highlighted in yellow, direction in cyan"),
+        Line::from("   Sort field highlighted in white (underlined), direction in cyan (bold)"),
         Line::from(" "),
         Line::from(" Quick Filter:"),
         Line::from("   /                 - Start typing to filter services"),
