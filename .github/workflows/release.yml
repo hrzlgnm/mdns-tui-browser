@@ -93,7 +93,7 @@ jobs:
       - name: 🔐 Update Cargo.lock
         if: ${{ !inputs.dry-run }}
         run: |
-          cargo check
+          cargo check --locked
 
       - name: ⏳ Temporary disable ruleset enforcement
         if: ${{ !inputs.dry-run }}
