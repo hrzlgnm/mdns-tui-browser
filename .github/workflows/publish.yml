@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tagName:
-        description: 'Tag name to publish'
+        description: "Tag name to publish"
         required: true
         type: string
   release:
@@ -22,6 +22,8 @@ jobs:
       actions: read
     uses: ./.github/workflows/source-checksums-reusable.yml
     secrets: inherit
+    with:
+      tagName: ${{ github.event.inputs.tagName || github.event.release.tag_name }}
 
   build:
     permissions:
