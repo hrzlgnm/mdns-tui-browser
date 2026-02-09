@@ -1276,6 +1276,7 @@ impl AppState {
     }
 
     fn navigate_services_up(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1285,10 +1286,14 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_down(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1298,7 +1303,10 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_service_types_up(&mut self) {
@@ -1426,6 +1434,7 @@ impl AppState {
     }
 
     fn navigate_services_page_up(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1435,10 +1444,14 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_page_down(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1448,15 +1461,23 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_to_first(&mut self) {
+        let old_selected_service = self.selected_service;
         navigate_list_to_first(&mut self.selected_service, &mut self.services_scroll);
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_to_last(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1466,7 +1487,10 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     // Filter methods
@@ -2959,6 +2983,140 @@ mod tests {
             state.service_types.len(),
             expected,
             "Service type count mismatch"
+        );
+    }
+
+    // Tests for details scroll fix
+    /// Test that details scroll is not reset when navigating with only one service
+    #[test]
+    fn test_details_scroll_not_reset_with_single_service() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            8080,
+        )]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Try to navigate up (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_up();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset when navigating up with single service"
+        );
+
+        // Try to navigate down (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_down();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset when navigating down with single service"
+        );
+    }
+
+    /// Test that details scroll is reset when actually changing services
+    #[test]
+    fn test_details_scroll_reset_when_changing_services() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_http._tcp.local.", 8081),
+        ]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Navigate down (should change selection and reset scroll)
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 1, "Should select second service");
+        assert_eq!(
+            state.details_scroll.offset, 0,
+            "Details scroll should reset when changing services"
+        );
+    }
+
+    /// Test that page navigation respects the same logic
+    #[test]
+    fn test_details_scroll_page_navigation_with_single_service() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            8080,
+        )]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Try page up (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_page_up();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on page up with single service"
+        );
+
+        // Try page down (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_page_down();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on page down with single service"
+        );
+    }
+
+    /// Test that home/end navigation respects the same logic
+    #[test]
+    fn test_details_scroll_home_end_with_single_service() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            8080,
+        )]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Try navigate to first (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_to_first();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on navigate to first with single service"
+        );
+
+        // Try navigate to last (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_to_last();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on navigate to last with single service"
+        );
+    }
+
+    /// Test that navigation resets scroll when there are multiple services
+    #[test]
+    fn test_details_scroll_reset_with_multiple_services() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_http._tcp.local.", 8081),
+            create_test_service("test3", "_http._tcp.local.", 8082),
+        ]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Navigate to last service
+        state.navigate_services_to_last();
+        assert_eq!(state.selected_service, 2, "Should select third service");
+        assert_eq!(
+            state.details_scroll.offset, 0,
+            "Details scroll should reset when navigating to last service"
         );
     }
 
