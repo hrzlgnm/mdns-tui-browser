@@ -148,7 +148,7 @@ jobs:
 
   build-and-publish:
     if: ${{ !inputs.dry-run && needs.release.outputs.version != '' }}
-    needs: [release, source-checksums]
+    needs: release
     uses: ./.github/workflows/build-reusable.yml
     with:
       tagName: ${{ needs.release.outputs.version }}
