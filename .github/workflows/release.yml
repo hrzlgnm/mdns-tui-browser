@@ -136,6 +136,11 @@ jobs:
           name: mDNS TUI Browser v${{ steps.version.outputs.semantic-version }}
           prerelease: true
           latest: false
-          publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🚀 Trigger publish workflow
+        if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
+        run: |
+          gh workflow run publish.yml \
+            --field tagName=v${{ steps.version.outputs.semantic-version }}

@@ -4,6 +4,12 @@
 name: Publish release artifacts
 
 on:
+  workflow_dispatch:
+    inputs:
+      tagName:
+        description: 'Tag name to publish'
+        required: true
+        type: string
   release:
     types:
       - published
