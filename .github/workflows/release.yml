@@ -123,7 +123,7 @@ jobs:
           git add -A
           git commit -S -m "Bump version to ${{ steps.version.outputs.semantic-version }}"
           git push
-          git tag -s -a v${{ steps.version.outputs.semantic-version }} -m "mDNS TUI Browser Release v${{ steps.version.outputs.semantic-version}}"
+          git tag -s -a v${{ steps.version.outputs.semantic-version }} -m "mDNS TUI Browser Release v${{ steps.version.outputs.semantic-version }}"
           git push --tags
 
       - name: 👮 Re-enable enforcement of rules
