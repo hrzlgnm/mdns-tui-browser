@@ -9,7 +9,7 @@
 # mDNS TUI Browser
 
 A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface.
-For a alternative running as a desktop app, check out [mDNS-Browser][https://github.com/hrzlgnm/mdns-browser]
+For a alternative running as a desktop app, check out [mDNS-Browser](https://github.com/hrzlgnm/mdns-browser)
 
 ## Features
 
