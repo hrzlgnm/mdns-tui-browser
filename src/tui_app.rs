@@ -1967,7 +1967,7 @@ fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> M
     let filter_status_area = if has_filter_status {
         Some(ratatui::layout::Rect::new(
             area.x,
-            area.y + area.height - 3,
+            area.y + area.height.saturating_sub(3),
             area.width,
             3,
         ))
@@ -2184,7 +2184,7 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
 }
 
 fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
-    let filter_area = ratatui::layout::Rect::new(area.x, area.y + area.height - 3, area.width, 3);
+    let filter_area = ratatui::layout::Rect::new(area.x, area.y + area.height.saturating_sub(3), area.width, 3);
 
     let input_text = format!("/{}_", app_state.filter_query);
 
