@@ -28,8 +28,8 @@ const STATUS_OK: Color = Color::Blue;
 const STATUS_ERROR: Color = Color::Yellow;
 
 // Service debouncing constants
-const DEBOUNCE_DURATION_MICROS: u64 = 2_000_000; // 2 seconds
-const CLEANUP_INTERVAL_MS: u64 = 500; // Check every 500ms
+const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
+const CLEANUP_INTERVAL_MS: u64 = 250;
 
 // Timestamp conversion utilities for JSON serialization
 fn micros_to_iso_timestamp(micros: u64) -> String {
@@ -1358,14 +1358,12 @@ impl AppState {
             .metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
-        // Note: cleanup task will be started by ServiceEvent handler since this is sync context
     }
 
     fn cancel_pending_removal(&mut self, fullname: &str) -> bool {
         if self.pending_removals.remove(fullname).is_some() {
             // Service was scheduled for removal and came back online within debounce window
             self.update_metric("flapping_services_detected");
-            self.update_metric("flapping_prevented_ui_updates");
             *self
                 .metrics
                 .entry("pending_removals_active".to_string())
@@ -1392,9 +1390,7 @@ impl AppState {
 
         // Mark expired services as offline
         for fullname in expired_services {
-            if self.mark_service_offline(&fullname) {
-                // Service was successfully marked offline after debounce period
-            }
+            self.mark_service_offline(&fullname);
         }
 
         // Update pending removals count metric
@@ -1869,7 +1865,6 @@ fn start_browsing_service_type(
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
                     state.schedule_service_removal(&fullname);
-                    // No need to start cleanup task - it runs continuously
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
@@ -7483,7 +7478,6 @@ mod tests {
         assert!(was_cancelled);
         assert!(!state.pending_removals.contains_key(fullname));
         assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
-        assert_eq!(state.metrics.get("flapping_prevented_ui_updates"), Some(&1));
     }
 
     #[test]
@@ -7495,7 +7489,6 @@ mod tests {
 
         assert!(!was_cancelled);
         assert_eq!(state.metrics.get("flapping_services_detected"), None);
-        assert_eq!(state.metrics.get("flapping_prevented_ui_updates"), None);
     }
 
     #[test]
