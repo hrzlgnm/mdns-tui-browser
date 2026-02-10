@@ -1327,7 +1327,7 @@ impl AppState {
             .metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
-        self.start_cleanup_task_if_needed();
+        // Note: cleanup task will be started by ServiceEvent handler since this is sync context
     }
 
     fn cancel_pending_removal(&mut self, fullname: &str) -> bool {
@@ -1371,13 +1371,6 @@ impl AppState {
             .metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
-    }
-
-    fn start_cleanup_task_if_needed(&mut self) {
-        if self.cleanup_task_handle.is_none() && !self.pending_removals.is_empty() {
-            // We need to start a cleanup task, but we can't spawn it here directly
-            // because we're in a non-async context. This will be handled by the caller.
-        }
     }
 
     fn navigate_services_up(&mut self) {
@@ -1896,7 +1889,12 @@ fn start_browsing_service_type(
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
+                    let was_empty_before = state.pending_removals.is_empty();
                     state.schedule_service_removal(&fullname);
+                    // Start cleanup task if this is the first pending removal
+                    if was_empty_before {
+                        start_cleanup_task_for_state(state_inner.clone()).await;
+                    }
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
