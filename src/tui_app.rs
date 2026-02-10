@@ -1323,7 +1323,8 @@ impl AppState {
         let current_time = current_timestamp_micros();
         self.pending_removals
             .insert(fullname.to_string(), current_time);
-        *self.metrics
+        *self
+            .metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
         self.start_cleanup_task_if_needed();
@@ -1334,7 +1335,8 @@ impl AppState {
             // Service was scheduled for removal and came back online within debounce window
             self.update_metric("flapping_services_detected");
             self.update_metric("flapping_prevented_ui_updates");
-            *self.metrics
+            *self
+                .metrics
                 .entry("pending_removals_active".to_string())
                 .or_insert(0) = self.pending_removals.len() as u64;
             true
@@ -1365,7 +1367,8 @@ impl AppState {
         }
 
         // Update pending removals count metric
-        *self.metrics
+        *self
+            .metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
     }
