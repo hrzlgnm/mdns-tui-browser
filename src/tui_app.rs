@@ -2922,82 +2922,72 @@ pub async fn run_tui(
         {
             let mut state = state.write().await;
             state.prepare_for_rendering(terminal_area);
-        }
-        {
-            let state = state.read().await;
             terminal.draw(|f| ui(f, &state))?;
         }
     }
 
     let result = loop {
         tokio::select! {
-            // Handle user input events
-            event_result = async {
-                match event::poll(Duration::from_millis(50)) {
-                    Ok(true) => {
-                        match event::read() {
-                            Ok(event) => Some(event),
+                    // Handle user input events
+                    event_result = async {
+                        match event::poll(Duration::from_millis(50)) {
+                            Ok(true) => {
+                                match event::read() {
+                                    Ok(event) => Some(event),
+                                    Err(e) => {
+                                        eprintln!("Error reading event: {}", e);
+                                        None
+                                    }
+                                }
+                            }
+                            Ok(false) => None,
                             Err(e) => {
-                                eprintln!("Error reading event: {}", e);
+                                eprintln!("Error polling for events: {}", e);
                                 None
                             }
                         }
-                    }
-                    Ok(false) => None,
-                    Err(e) => {
-                        eprintln!("Error polling for events: {}", e);
-                        None
-                    }
-                }
-            } => {
-                if let Some(event) = event_result {
-                    match event {
-                        Event::Key(key) => {
-                            #[cfg(target_os = "windows")]
-                            {
-                                // On Windows, ignore key release events to prevent duplicate handling
-                                if key.kind == crossterm::event::KeyEventKind::Release {
-                                    continue;
+                    } => {
+                        if let Some(event) = event_result {
+                            match event {
+                                Event::Key(key) => {
+                                    #[cfg(target_os = "windows")]
+                                    {
+                                        // On Windows, ignore key release events to prevent duplicate handling
+                                        if key.kind == crossterm::event::KeyEventKind::Release {
+                                            continue;
+                                        }
+                                    }
+
+                                    let mut state = state.write().await;
+                                    let should_continue = state.handle_key_event(key);
+                                    if should_continue {
+                                        let _ = notification_sender.send(Notification::UserInput);
+                                    } else {
+                                        break Ok(());
+                                    }
                                 }
+                                Event::Resize(_, _) => {
+                                    // Trigger a redraw on terminal resize
+                                    let _ = notification_sender.send(Notification::UserInput);
+                                }
+                                _ => {}
                             }
+                        }
+                    }
 
+        // Handle notifications for rendering
+                    _notification = notification_receiver.recv_async() => {
+                        // Draw UI only when there's a notification
+                        // Acquire write lock once for both preparation and rendering to prevent race conditions
+                        let terminal_size = terminal.size().unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
+                        let terminal_area = ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                        {
                             let mut state = state.write().await;
-                            let should_continue = state.handle_key_event(key);
-                            if should_continue {
-                                let _ = notification_sender.send(Notification::UserInput);
-                            } else {
-                                break Ok(());
-                            }
+                            state.prepare_for_rendering(terminal_area);
+                            terminal.draw(|f| ui(f, &state))?;
                         }
-                        Event::Resize(_, _) => {
-                            // Trigger a redraw on terminal resize
-                            let _ = notification_sender.send(Notification::UserInput);
-                        }
-                        _ => {}
                     }
                 }
-            }
-
-            // Handle notifications for rendering
-            _notification = notification_receiver.recv_async() => {
-                // Draw UI only when there's a notification
-                // First prepare state for rendering, then render with read lock
-
-                // Prepare state for rendering (acquire write lock briefly)
-                let terminal_size = terminal.size().unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
-                let terminal_area = ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
-                {
-                    let mut state = state.write().await;
-                    state.prepare_for_rendering(terminal_area);
-                }
-
-                // Render the UI (with read lock)
-                {
-                    let state = state.read().await;
-                    terminal.draw(|f| ui(f, &state))?;
-                }
-            }
-        }
     };
 
     // Restore terminal
