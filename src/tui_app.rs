@@ -24,8 +24,9 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::sync::RwLock;
 
-const STATUS_OK: Color = Color::Blue;
-const STATUS_ERROR: Color = Color::Yellow;
+const STATUS_OK_COLOR: Color = Color::Blue;
+const STATUS_ERROR_COLOR: Color = Color::Yellow;
+const UI_CONTROLS_COLOR: Color = Color::Cyan;
 
 // Service debouncing constants
 const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
@@ -922,7 +923,7 @@ impl AppState {
         let layout = if self.filter_input_mode {
             create_filter_input_layout(terminal_area)
         } else {
-            create_main_layout(terminal_area)
+            create_main_layout(terminal_area, !self.filter_query.is_empty())
         };
         let visible_counts = calculate_visible_counts(&layout);
 
@@ -1899,7 +1900,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     let layout = if app_state.filter_input_mode {
         create_filter_input_layout(f.area())
     } else {
-        create_main_layout(f.area())
+        create_main_layout(f.area(), !app_state.filter_query.is_empty())
     };
     let visible_counts = calculate_visible_counts(&layout);
 
@@ -1914,8 +1915,10 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         render_service_details(f, app_state, layout.details_area);
 
         // Render filter status if not empty
-        if !app_state.filter_query.is_empty() {
-            render_filter_status(f, app_state);
+        if !app_state.filter_query.is_empty()
+            && let Some(filter_status_area) = layout.filter_status_area
+        {
+            render_filter_status(f, app_state, filter_status_area);
         }
     }
 
@@ -1934,6 +1937,7 @@ struct MainLayout {
     left_panel: ratatui::layout::Rect,
     services_area: ratatui::layout::Rect,
     details_area: ratatui::layout::Rect,
+    filter_status_area: Option<ratatui::layout::Rect>,
 }
 
 struct VisibleCounts {
@@ -1941,21 +1945,41 @@ struct VisibleCounts {
     services: usize,
 }
 
-fn create_main_layout(area: ratatui::layout::Rect) -> MainLayout {
+fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> MainLayout {
+    let main_area = if has_filter_status {
+        // Reserve 3 rows at the bottom for filter status
+        let remaining_height = area.height.saturating_sub(3);
+        ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
+    } else {
+        area
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-        .split(area);
+        .split(main_area);
 
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
 
+    let filter_status_area = if has_filter_status {
+        Some(ratatui::layout::Rect::new(
+            area.x,
+            area.y + area.height.saturating_sub(3),
+            area.width,
+            3,
+        ))
+    } else {
+        None
+    };
+
     MainLayout {
         left_panel: chunks[0],
         services_area: services_chunks[0],
         details_area: services_chunks[1],
+        filter_status_area,
     }
 }
 
@@ -1981,10 +2005,12 @@ fn create_filter_input_layout(area: ratatui::layout::Rect) -> MainLayout {
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
 
+    // Filter input layout doesn't have a separate filter status area
     MainLayout {
         left_panel: chunks[0],
         services_area: services_chunks[0],
         details_area: services_chunks[1],
+        filter_status_area: None,
     }
 }
 
@@ -2088,7 +2114,7 @@ fn render_services_list(
         Span::raw("Services ["),
         Span::styled(
             format!("{}/{}", filtered_indices_len, services_clone.len()),
-            Style::default().fg(STATUS_OK),
+            Style::default().fg(STATUS_OK_COLOR),
         ),
         Span::raw("] ["),
         sort_field_highlighted,
@@ -2158,7 +2184,12 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
 }
 
 fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
-    let filter_area = ratatui::layout::Rect::new(area.x, area.y + area.height - 3, area.width, 3);
+    let filter_area = ratatui::layout::Rect::new(
+        area.x,
+        area.y + area.height.saturating_sub(3),
+        area.width,
+        3,
+    );
 
     let input_text = format!("/{}_", app_state.filter_query);
 
@@ -2168,25 +2199,23 @@ fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layou
                 .borders(Borders::ALL)
                 .title("Quick Filter (Enter to apply, Esc to cancel)"),
         )
-        .style(Style::default().fg(Color::Yellow));
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
 
     f.render_widget(filter_input, filter_area);
 }
 
-fn render_filter_status(f: &mut Frame, app_state: &AppState) {
-    let status_area = ratatui::layout::Rect::new(
-        f.area().x,
-        f.area().y + f.area().height - 1,
-        f.area().width,
-        1,
-    );
-
+fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
     let status_text = format!("Filter: '{}' (Press 'n' to clear)", app_state.filter_query);
 
-    let status =
-        Paragraph::new(status_text).style(Style::default().fg(Color::Cyan).bg(Color::DarkGray));
+    let status = Paragraph::new(status_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Active Filter"),
+        )
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
 
-    f.render_widget(status, status_area);
+    f.render_widget(status, area);
 }
 
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
@@ -2211,7 +2240,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
         // Create a block with border
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
+            .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray));
 
         // Create the inner area for text (accounting for borders)
         let inner_area = block.inner(popup_area);
@@ -2221,7 +2250,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
 
         // Render the message text centered in the inner area
         let paragraph = Paragraph::new(msg.as_str())
-            .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
+            .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center);
 
         f.render_widget(paragraph, inner_area);
@@ -2475,7 +2504,7 @@ fn create_service_list_item_style(
     let foreground = if service.online {
         Color::White
     } else {
-        STATUS_ERROR
+        STATUS_ERROR_COLOR
     };
 
     let mut style = if index == selected_index {
@@ -2601,10 +2630,12 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     // Online status - use blue (color-blind friendly)
-    let online_style: Style = Style::default().fg(STATUS_OK).add_modifier(Modifier::BOLD);
+    let online_style: Style = Style::default()
+        .fg(STATUS_OK_COLOR)
+        .add_modifier(Modifier::BOLD);
     // Offline status - use orange (color-blind friendly)
     let offline_style: Style = Style::default()
-        .fg(STATUS_ERROR)
+        .fg(STATUS_ERROR_COLOR)
         .add_modifier(Modifier::BOLD);
 
     if service.online {
@@ -5747,19 +5778,20 @@ mod tests {
     #[test]
     fn test_create_main_layout() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area);
+        let layout = create_main_layout(area, false);
 
         assert!(layout.left_panel.width > 0);
         assert!(layout.services_area.width > 0);
         assert!(layout.details_area.width > 0);
         assert!(layout.services_area.height > 0);
         assert!(layout.details_area.height > 0);
+        assert!(layout.filter_status_area.is_none());
     }
 
     #[test]
     fn test_calculate_visible_counts() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area);
+        let layout = create_main_layout(area, false);
         let counts = calculate_visible_counts(&layout);
 
         assert!(counts.types > 0);
