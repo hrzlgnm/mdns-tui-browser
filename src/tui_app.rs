@@ -25,6 +25,7 @@ use serde::Serialize;
 use tokio::sync::RwLock;
 
 // Type alias for HashMap that can store both String and &str keys
+// Type alias for HashMap that stores String keys (from service fullname) to u64 timestamps
 type PendingRemovalsMap = HashMap<String, u64>;
 
 const STATUS_OK: Color = Color::Blue;
@@ -1825,12 +1826,10 @@ fn current_timestamp_micros() -> u64 {
 }
 
 async fn start_cleanup_task_for_state(state: Arc<RwLock<AppState>>) {
-    // Check if cleanup task is already running
-    {
-        let state_guard = state.read().await;
-        if state_guard.cleanup_task_handle.is_some() {
-            return; // Task already running
-        }
+    // Check if cleanup task is already running for this service type
+    let state_guard = state.read().await;
+    if state_guard.cleanup_task_handle.is_some() {
+        return; // Task already running
     }
 
     let state_clone = Arc::clone(&state);
@@ -1890,19 +1889,30 @@ fn start_browsing_service_type(
 
         while let Ok(service_event) = service_receiver.recv_async().await {
             match service_event {
-                ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
                     let was_empty_before = state.pending_removals.is_empty();
                     state.schedule_service_removal(&fullname);
                     // Start cleanup task if this is the first pending removal
                     if was_empty_before {
+                        // Drop the write lock before calling async function to avoid deadlock
+                        drop(state);
                         start_cleanup_task_for_state(state_inner.clone()).await;
                     }
+                }
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
                     let fullname = entry.fullname.clone();
                     let mut state = state_inner.write().await;
+
+                    // Always use the resolved service entry to ensure metadata is up-to-date
+                    // This handles both normal updates and flapping cases correctly
+                    state.add_or_update_service(entry);
+
+                    state.invalidate_cache_and_validate();
+                    let _ = notification_sender_inner.send(Notification::ServiceChanged);
+                }
 
                     // Check if this was a pending removal (flapping service)
                     let was_flapping = state.cancel_pending_removal(&fullname);
