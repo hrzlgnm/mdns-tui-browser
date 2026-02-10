@@ -1888,13 +1888,12 @@ fn start_browsing_service_type(
         while let Ok(service_event) = service_receiver.recv_async().await {
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
-                    let mut state = state_inner.write().await;
-                    let was_empty_before = state.pending_removals.is_empty();
+let mut state = state_inner.write().await;
                     state.schedule_service_removal(&fullname);
-                    // Start cleanup task if this is the first pending removal
-                    if was_empty_before {
-                        start_cleanup_task_for_state(state_inner.clone()).await;
-                    }
+                    // Always start cleanup task when scheduling a removal
+                    // This ensures cleanup runs even for subsequent removals
+                    start_cleanup_task_for_state(state_inner.clone()).await;
+                }
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
@@ -1919,6 +1918,9 @@ fn start_browsing_service_type(
                             // Service doesn't exist yet, add it
                             state.add_or_update_service(entry);
                         }
+                    }
+                }
+                    }
                     }
 
                     state.invalidate_cache_and_validate();
