@@ -16,7 +16,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -26,6 +26,10 @@ use tokio::sync::RwLock;
 
 const STATUS_OK: Color = Color::Blue;
 const STATUS_ERROR: Color = Color::Yellow;
+
+// Service debouncing constants
+const DEBOUNCE_DURATION_MICROS: u64 = 2_000_000; // 2 seconds
+const CLEANUP_INTERVAL_MS: u64 = 500; // Check every 500ms
 
 // Timestamp conversion utilities for JSON serialization
 fn micros_to_iso_timestamp(micros: u64) -> String {
@@ -446,7 +450,6 @@ struct SortInfo {
     direction: String,
 }
 
-#[derive(Clone)]
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -470,6 +473,39 @@ struct AppState {
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
+    pending_removals: HashMap<String, u64>,
+    cleanup_task_handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl Clone for AppState {
+    fn clone(&self) -> Self {
+        Self {
+            services: self.services.clone(),
+            service_types: self.service_types.clone(),
+            selected_service: self.selected_service,
+            selected_type: self.selected_type,
+            types_scroll: self.types_scroll.clone(),
+            services_scroll: self.services_scroll.clone(),
+            help_scroll: self.help_scroll.clone(),
+            metrics_scroll: self.metrics_scroll.clone(),
+            details_scroll: self.details_scroll.clone(),
+            cached_filtered_services: self.cached_filtered_services.clone(),
+            cache_dirty: self.cache_dirty,
+            cached_sorted: self.cached_sorted,
+            show_help_popup: self.show_help_popup,
+            show_metrics_popup: self.show_metrics_popup,
+            metrics: self.metrics.clone(),
+            sort_field: self.sort_field,
+            sort_direction: self.sort_direction,
+            filter_query: self.filter_query.clone(),
+            filter_input_mode: self.filter_input_mode,
+            terminal_area: self.terminal_area,
+            user_service_types: self.user_service_types.clone(),
+            status_message: self.status_message.clone(),
+            pending_removals: self.pending_removals.clone(),
+            cleanup_task_handle: None, // Don't clone the task handle
+        }
+    }
 }
 
 impl AppState {
@@ -497,6 +533,8 @@ impl AppState {
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
+            pending_removals: HashMap::new(),
+            cleanup_task_handle: None,
         };
         state.validate_selected_type();
         state
@@ -1259,6 +1297,11 @@ impl AppState {
     }
 
     fn mark_service_offline(&mut self, fullname: &str) -> bool {
+        // Don't mark offline if service is pending removal (debounce window)
+        if self.pending_removals.contains_key(fullname) {
+            return false;
+        }
+
         let service_idx = self.services.iter().position(|s| s.fullname == fullname);
 
         if let Some(idx) = service_idx {
@@ -1273,6 +1316,61 @@ impl AppState {
         } else {
             false
         }
+    }
+
+    // Debouncing methods for handling flapping services
+    fn schedule_service_removal(&mut self, fullname: &str) {
+        let current_time = current_timestamp_micros();
+        self.pending_removals
+            .insert(fullname.to_string(), current_time);
+        *self
+            .metrics
+            .entry("pending_removals_active".to_string())
+            .or_insert(0) = self.pending_removals.len() as u64;
+        // Note: cleanup task will be started by ServiceEvent handler since this is sync context
+    }
+
+    fn cancel_pending_removal(&mut self, fullname: &str) -> bool {
+        if self.pending_removals.remove(fullname).is_some() {
+            // Service was scheduled for removal and came back online within debounce window
+            self.update_metric("flapping_services_detected");
+            self.update_metric("flapping_prevented_ui_updates");
+            *self
+                .metrics
+                .entry("pending_removals_active".to_string())
+                .or_insert(0) = self.pending_removals.len() as u64;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn process_expired_removals(&mut self) {
+        let current_time = current_timestamp_micros();
+        let mut expired_services = Vec::new();
+
+        // Find expired services
+        self.pending_removals.retain(|fullname, scheduled_time| {
+            if current_time.saturating_sub(*scheduled_time) >= DEBOUNCE_DURATION_MICROS {
+                expired_services.push(fullname.clone());
+                false // Remove from pending
+            } else {
+                true // Keep in pending
+            }
+        });
+
+        // Mark expired services as offline
+        for fullname in expired_services {
+            if self.mark_service_offline(&fullname) {
+                // Service was successfully marked offline after debounce period
+            }
+        }
+
+        // Update pending removals count metric
+        *self
+            .metrics
+            .entry("pending_removals_active".to_string())
+            .or_insert(0) = self.pending_removals.len() as u64;
     }
 
     fn navigate_services_up(&mut self) {
@@ -1723,6 +1821,55 @@ fn current_timestamp_micros() -> u64 {
         .as_micros() as u64
 }
 
+async fn start_cleanup_task_for_state(state: Arc<RwLock<AppState>>) {
+    // Check if cleanup task is already running
+    {
+        let state_guard = state.read().await;
+        if state_guard.cleanup_task_handle.is_some() {
+            return; // Task already running
+        }
+    }
+
+    let state_clone = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
+
+        loop {
+            interval.tick().await;
+
+            let should_continue = {
+                let mut state_guard = state_clone.write().await;
+
+                // Process expired removals
+                state_guard.process_expired_removals();
+
+                // Update pending removals count metric
+                let pending_count = state_guard.pending_removals.len() as u64;
+                *state_guard
+                    .metrics
+                    .entry("pending_removals_active".to_string())
+                    .or_insert(0) = pending_count;
+
+                // Check if we have any pending removals left
+                !state_guard.pending_removals.is_empty()
+            };
+
+            if !should_continue {
+                // No more pending removals, terminate this task
+                let mut state_guard = state_clone.write().await;
+                state_guard.cleanup_task_handle = None;
+                break;
+            }
+        }
+    });
+
+    // Store the task handle
+    {
+        let mut state_guard = state.write().await;
+        state_guard.cleanup_task_handle = Some(handle);
+    }
+}
+
 fn start_browsing_service_type(
     mdns: &ServiceDaemon,
     service_type: &str,
@@ -1735,18 +1882,45 @@ fn start_browsing_service_type(
     let notification_sender_inner = notification_sender.clone();
 
     tokio::spawn(async move {
+        // Start cleanup task for this service type
+        start_cleanup_task_for_state(state_inner.clone()).await;
+
         while let Ok(service_event) = service_receiver.recv_async().await {
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
-                    if state.mark_service_offline(&fullname) {
-                        let _ = notification_sender_inner.send(Notification::ServiceChanged);
+                    let was_empty_before = state.pending_removals.is_empty();
+                    state.schedule_service_removal(&fullname);
+                    // Start cleanup task if this is the first pending removal
+                    if was_empty_before {
+                        start_cleanup_task_for_state(state_inner.clone()).await;
                     }
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
+                    let fullname = entry.fullname.clone();
                     let mut state = state_inner.write().await;
-                    state.add_or_update_service(entry);
+
+                    // Check if this was a pending removal (flapping service)
+                    let was_flapping = state.cancel_pending_removal(&fullname);
+
+                    if !was_flapping {
+                        // Normal service update/creation
+                        state.add_or_update_service(entry);
+                    } else {
+                        // Service was flapping, just ensure it's marked online
+                        if let Some(service) =
+                            state.services.iter_mut().find(|s| s.fullname == fullname)
+                        {
+                            if !service.online {
+                                service.go_online_at(current_timestamp_micros());
+                            }
+                        } else {
+                            // Service doesn't exist yet, add it
+                            state.add_or_update_service(entry);
+                        }
+                    }
+
                     state.invalidate_cache_and_validate();
                     let _ = notification_sender_inner.send(Notification::ServiceChanged);
                 }
@@ -7290,5 +7464,178 @@ mod tests {
         let user_types_state =
             setup_test_state_with_user_types(vec!["_http._tcp.local.", "_ssh._tcp.local."]);
         assert_service_type_count(&user_types_state, 0); // User types are added to user_service_types, not service_types
+    }
+
+    // Tests for service debouncing functionality
+    #[test]
+    fn test_schedule_service_removal() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "test-service._http._tcp.local.";
+        state.schedule_service_removal(fullname);
+
+        assert!(state.pending_removals.contains_key(fullname));
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
+    }
+
+    #[test]
+    fn test_cancel_pending_removal() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "test-service._http._tcp.local.";
+        state.schedule_service_removal(fullname);
+
+        // Cancel should remove from pending and increment metrics
+        let was_cancelled = state.cancel_pending_removal(fullname);
+        assert!(was_cancelled);
+        assert!(!state.pending_removals.contains_key(fullname));
+        assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
+        assert_eq!(state.metrics.get("flapping_prevented_ui_updates"), Some(&1));
+    }
+
+    #[test]
+    fn test_cancel_pending_removal_nonexistent() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "nonexistent-service._http._tcp.local.";
+        let was_cancelled = state.cancel_pending_removal(fullname);
+
+        assert!(!was_cancelled);
+        assert_eq!(state.metrics.get("flapping_services_detected"), None);
+        assert_eq!(state.metrics.get("flapping_prevented_ui_updates"), None);
+    }
+
+    #[test]
+    fn test_process_expired_removals() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add a service to be marked offline
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        let fullname = "test._http._tcp.local.";
+
+        // Schedule removal with old timestamp (expired)
+        let old_timestamp =
+            current_timestamp_micros().saturating_sub(DEBOUNCE_DURATION_MICROS + 1000);
+        state
+            .pending_removals
+            .insert(fullname.to_string(), old_timestamp);
+
+        // Process expired removals
+        state.process_expired_removals();
+
+        // Service should be marked offline
+        assert!(!state.services[0].online);
+        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1)); // Should increment after processing expired removal
+    }
+
+    #[test]
+    fn test_process_expired_removals_not_expired() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "test-service._http._tcp.local.";
+
+        // Schedule removal with current timestamp (not expired)
+        let current_timestamp = current_timestamp_micros();
+        state
+            .pending_removals
+            .insert(fullname.to_string(), current_timestamp);
+
+        // Process expired removals
+        state.process_expired_removals();
+
+        // Should still be in pending removals
+        assert!(state.pending_removals.contains_key(fullname));
+    }
+
+    #[test]
+    fn test_mark_service_offline_respects_pending() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add a service
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        let fullname = "test-service._http._tcp.local.";
+
+        // Schedule removal for the service
+        state.schedule_service_removal(fullname);
+
+        // Try to mark service offline - should not work due to pending
+        let marked_offline = state.mark_service_offline(fullname);
+        assert!(!marked_offline);
+
+        // Service should still be online
+        assert!(state.services[0].online);
+    }
+
+    #[test]
+    fn test_flapping_service_scenario() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add a service
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        let fullname = "test-service._http._tcp.local.";
+
+        // Simulate service removal
+        state.schedule_service_removal(fullname);
+        assert!(state.pending_removals.contains_key(fullname));
+
+        // Simulate service coming back quickly (flapping)
+        let was_flapping = state.cancel_pending_removal(fullname);
+        assert!(was_flapping);
+        assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
+
+        // Service should remain online
+        assert!(state.services[0].online);
+    }
+
+    #[test]
+    fn test_multiple_pending_removals() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Schedule multiple services for removal
+        state.schedule_service_removal("service1._http._tcp.local.");
+        state.schedule_service_removal("service2._http._tcp.local.");
+        state.schedule_service_removal("service3._http._tcp.local.");
+
+        assert_eq!(state.pending_removals.len(), 3);
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&3));
+
+        // Cancel one
+        state.cancel_pending_removal("service2._http._tcp.local.");
+        assert_eq!(state.pending_removals.len(), 2);
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2)); // Updated immediately
+
+        // Process to update metric
+        state.process_expired_removals();
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2));
+    }
+
+    #[test]
+    fn test_pending_removals_metric_tracking() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Initially no pending removals
+        assert_eq!(state.metrics.get("pending_removals_active"), None);
+
+        // Add pending removal
+        state.schedule_service_removal("test._http._tcp.local.");
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
+
+        // Add another
+        state.schedule_service_removal("test2._http._tcp.local.");
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2));
+
+        // Cancel one
+        state.cancel_pending_removal("test._http._tcp.local.");
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1)); // Updated immediately
+
+        // Process to update metric
+        state.process_expired_removals();
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
     }
 }
