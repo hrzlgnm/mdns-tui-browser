@@ -24,6 +24,9 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::sync::RwLock;
 
+// Type alias for HashMap that can store both String and &str keys
+type PendingRemovalsMap = HashMap<String, u64>;
+
 const STATUS_OK: Color = Color::Blue;
 const STATUS_ERROR: Color = Color::Yellow;
 
@@ -473,7 +476,7 @@ struct AppState {
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
-    pending_removals: HashMap<String, u64>,
+    pending_removals: PendingRemovalsMap,
     cleanup_task_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -1318,13 +1321,12 @@ impl AppState {
         }
     }
 
-    // Debouncing methods for handling flapping services
+// Debouncing methods for handling flapping services
     fn schedule_service_removal(&mut self, fullname: &str) {
         let current_time = current_timestamp_micros();
         self.pending_removals
             .insert(fullname.to_string(), current_time);
-        *self
-            .metrics
+        *self.metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
         // Note: cleanup task will be started by ServiceEvent handler since this is sync context
@@ -7570,22 +7572,22 @@ mod tests {
         assert!(state.services[0].online);
     }
 
-    #[test]
+#[test]
     fn test_flapping_service_scenario() {
         let mut state = AppState::new(HashSet::new());
 
-        // Add a service
+        // Add a service with correct name
         let service = create_test_service("test", "_http._tcp.local.", 8080);
         state.services.push(service);
 
-        let fullname = "test-service._http._tcp.local.";
+        let fullname = service.fullname.clone(); // Use actual service fullname
 
         // Simulate service removal
-        state.schedule_service_removal(fullname);
-        assert!(state.pending_removals.contains_key(fullname));
+        state.schedule_service_removal(&fullname);
+        assert!(state.pending_removals.contains_key(&fullname));
 
         // Simulate service coming back quickly (flapping)
-        let was_flapping = state.cancel_pending_removal(fullname);
+        let was_flapping = state.cancel_pending_removal(&fullname);
         assert!(was_flapping);
         assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
 
