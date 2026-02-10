@@ -111,17 +111,20 @@ Any other key          - Type search text (case-insensitive)
 .SH EXAMPLES
 .RS
 .IP \(bu
-Browse default services:
+Browse auto-discovered services:
 .br
 .B mdns-tui-browser
 .IP \(bu
-Browse with additional service types:
+Browse explicit service types:
 .br
 .B mdns-tui-browser \-\-service-types "_http._tcp.local.,_ssh._tcp.local."
 .IP \(bu
 Browse with shortened service types:
 .br
 .B mdns-tui-browser \-s "http,ssh"
+Browse with shortened service types, specified multiple times:
+.br
+.B mdns-tui-browser \-s http \-s ssh
 .RE
 
 .SH AUTHOR
