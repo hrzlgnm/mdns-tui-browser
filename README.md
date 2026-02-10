@@ -55,16 +55,14 @@ mdns-tui-browser -V
 mdns-tui-browser --help
 mdns-tui-browser -h
 
-# Browse with additional service types
+# Browse explicit service types, instead of auto-discovery
 mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
 mdns-tui-browser -s "_printer._tcp.local."
 
 # Browse with shortened service types (auto-completed)
-mdns-tui-browser -s "http,ssh"
 mdns-tui-browser -s "_http,_ssh"
-
-# Browse with multiple service types (comma-separated)
-mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp.local.,_airplay._tcp.local."
+mdns-tui-browser -s "http,ssh"
+mdns-tui-browser -s http -s ssh
 ```
 
 #### Service Types Argument (`--service-types/-s`)
@@ -72,6 +70,7 @@ mdns-tui-browser -s "_http._tcp.local.,_ssh._tcp.local.,_airplay._tcp.local."
 Service types to browse for (e.g., http, _http._tcp, printer). Auto-completes `(_)service`, `(_)sub`, `.(_)[tc|ud]p` and `.local.` suffix.
 
 **Usage:**
+- Can be specified multiple times
 - Accepts comma-separated list of mDNS service types
 - Auto-completes various service type formats automatically
 - Examples: `http`, `_http._tcp`, `printer`
