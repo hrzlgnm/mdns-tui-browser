@@ -7579,12 +7579,9 @@ mod tests {
 
         // Add a service with correct name
         let service = create_test_service("test", "_http._tcp.local.", 8080);
-        state.services.push(service);
-
         let fullname = service.fullname.clone(); // Use actual service fullname
-
-        // Simulate service removal
-        state.schedule_service_removal(&fullname);
+        state.services.push(service);
+        state.schedule_service_removal(&fullname.clone());
         assert!(state.pending_removals.contains_key(&fullname));
 
         // Simulate service coming back quickly (flapping)
