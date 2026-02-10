@@ -2840,13 +2840,17 @@ pub async fn run_tui(
 
     // Start global cleanup task to handle expired service removals
     let state_for_cleanup = Arc::clone(&state);
+    let notification_sender_for_cleanup = notification_sender.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
         loop {
             interval.tick().await;
 
-            {
+            let ui_should_update = {
                 let mut state = state_for_cleanup.write().await;
+
+                // Capture state before processing expired removals
+                let before_count = state.pending_removals.len();
 
                 // Process expired removals
                 state.process_expired_removals();
@@ -2857,7 +2861,15 @@ pub async fn run_tui(
                     .metrics
                     .entry("pending_removals_active".to_string())
                     .or_insert(0) = pending_count;
+
+                // Check if any services actually changed (removed or marked offline)
+                (before_count as u64) != pending_count
             };
+
+            // Notify UI if state changed
+            if ui_should_update {
+                let _ = notification_sender_for_cleanup.send(Notification::ServiceChanged);
+            }
 
             // This task runs indefinitely
         }
