@@ -1321,12 +1321,13 @@ impl AppState {
         }
     }
 
-// Debouncing methods for handling flapping services
+    // Debouncing methods for handling flapping services
     fn schedule_service_removal(&mut self, fullname: &str) {
         let current_time = current_timestamp_micros();
         self.pending_removals
             .insert(fullname.to_string(), current_time);
-        *self.metrics
+        *self
+            .metrics
             .entry("pending_removals_active".to_string())
             .or_insert(0) = self.pending_removals.len() as u64;
         // Note: cleanup task will be started by ServiceEvent handler since this is sync context
@@ -7572,7 +7573,7 @@ mod tests {
         assert!(state.services[0].online);
     }
 
-#[test]
+    #[test]
     fn test_flapping_service_scenario() {
         let mut state = AppState::new(HashSet::new());
 
