@@ -1887,11 +1887,10 @@ fn start_browsing_service_type(
 
         while let Ok(service_event) = service_receiver.recv_async().await {
             match service_event {
-                ServiceEvent::ServiceRemoved(_service_type, fullname) => {
-let mut state = state_inner.write().await;
+ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                    let mut state = state_inner.write().await;
                     state.schedule_service_removal(&fullname);
-                    // Always start cleanup task when scheduling a removal
-                    // This ensures cleanup runs even for subsequent removals
+                    // Start cleanup task when scheduling a removal
                     start_cleanup_task_for_state(state_inner.clone()).await;
                 }
                 }
@@ -1900,8 +1899,14 @@ let mut state = state_inner.write().await;
                     let fullname = entry.fullname.clone();
                     let mut state = state_inner.write().await;
 
-                    // Check if this was a pending removal (flapping service)
-                    let was_flapping = state.cancel_pending_removal(&fullname);
+                    // Always use the resolved service entry to ensure metadata is up-to-date
+                    // This handles both normal updates and flapping cases correctly
+                    state.add_or_update_service(entry);
+
+                    state.invalidate_cache_and_validate();
+                    let _ = notification_sender_inner.send(Notification::ServiceChanged);
+                }
+                }
 
                     if !was_flapping {
                         // Normal service update/creation
