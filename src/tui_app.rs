@@ -1282,6 +1282,7 @@ impl AppState {
     }
 
     fn add_or_update_service(&mut self, service_entry: ServiceEntry) -> bool {
+        self.cancel_pending_removal(&service_entry.fullname);
         if let Some(existing) = self
             .services
             .iter_mut()
@@ -1873,7 +1874,6 @@ fn start_browsing_service_type(
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
                     let mut state = state_inner.write().await;
-
                     // Always use the resolved service entry to ensure metadata is up-to-date
                     // This handles both normal updates and flapping cases correctly
                     state.add_or_update_service(entry);
