@@ -24,9 +24,9 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::sync::RwLock;
 
-const STATUS_OK: Color = Color::Blue;
-const STATUS_ERROR: Color = Color::Yellow;
-const FILTER_INPUT: Color = Color::Cyan;
+const STATUS_OK_COLOR: Color = Color::Blue;
+const STATUS_ERROR_COLOR: Color = Color::Yellow;
+const UI_CONTROLS_COLOR: Color = Color::Cyan;
 
 // Service debouncing constants
 const DEBOUNCE_DURATION_MICROS: u64 = 2_000_000; // 2 seconds
@@ -2119,7 +2119,7 @@ fn render_services_list(
         Span::raw("Services ["),
         Span::styled(
             format!("{}/{}", filtered_indices_len, services_clone.len()),
-            Style::default().fg(STATUS_OK),
+            Style::default().fg(STATUS_OK_COLOR),
         ),
         Span::raw("] ["),
         sort_field_highlighted,
@@ -2199,7 +2199,7 @@ fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layou
                 .borders(Borders::ALL)
                 .title("Quick Filter (Enter to apply, Esc to cancel)"),
         )
-        .style(Style::default().fg(FILTER_INPUT));
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
 
     f.render_widget(filter_input, filter_area);
 }
@@ -2213,7 +2213,7 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layo
                 .borders(Borders::ALL)
                 .title("Active Filter"),
         )
-        .style(Style::default().fg(FILTER_INPUT));
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
 
     f.render_widget(status, area);
 }
@@ -2240,7 +2240,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
         // Create a block with border
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
+            .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray));
 
         // Create the inner area for text (accounting for borders)
         let inner_area = block.inner(popup_area);
@@ -2250,7 +2250,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
 
         // Render the message text centered in the inner area
         let paragraph = Paragraph::new(msg.as_str())
-            .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
+            .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center);
 
         f.render_widget(paragraph, inner_area);
@@ -2504,7 +2504,7 @@ fn create_service_list_item_style(
     let foreground = if service.online {
         Color::White
     } else {
-        STATUS_ERROR
+        STATUS_ERROR_COLOR
     };
 
     let mut style = if index == selected_index {
@@ -2630,10 +2630,12 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     // Online status - use blue (color-blind friendly)
-    let online_style: Style = Style::default().fg(STATUS_OK).add_modifier(Modifier::BOLD);
+    let online_style: Style = Style::default()
+        .fg(STATUS_OK_COLOR)
+        .add_modifier(Modifier::BOLD);
     // Offline status - use orange (color-blind friendly)
     let offline_style: Style = Style::default()
-        .fg(STATUS_ERROR)
+        .fg(STATUS_ERROR_COLOR)
         .add_modifier(Modifier::BOLD);
 
     if service.online {
