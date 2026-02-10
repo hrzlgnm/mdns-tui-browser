@@ -474,7 +474,6 @@ struct AppState {
     user_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
     pending_removals: HashMap<String, u64>,
-    cleanup_task_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Clone for AppState {
@@ -503,7 +502,6 @@ impl Clone for AppState {
             user_service_types: self.user_service_types.clone(),
             status_message: self.status_message.clone(),
             pending_removals: self.pending_removals.clone(),
-            cleanup_task_handle: None, // Don't clone the task handle
         }
     }
 }
@@ -534,7 +532,6 @@ impl AppState {
             user_service_types,
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
             pending_removals: HashMap::new(),
-            cleanup_task_handle: None,
         };
         state.validate_selected_type();
         state
@@ -605,11 +602,17 @@ impl AppState {
     }
 
     fn get_filtered_services(&mut self) -> &[usize] {
+        // Check if we need to invalidate the cache before processing
         let cache_was_rebuilt = self.update_filtered_cache();
         if cache_was_rebuilt || !self.cached_sorted {
             self.sort_filtered_services();
             self.cached_sorted = true;
         }
+        self.cached_filtered_services.as_slice()
+    }
+
+    fn get_filtered_services_readonly(&self) -> &[usize] {
+        // Read-only version that doesn't modify cache - assumes cache is up to date
         self.cached_filtered_services.as_slice()
     }
 
@@ -909,6 +912,33 @@ impl AppState {
         self.mark_cache_dirty();
         self.cached_sorted = false;
         self.validate_selected_type();
+    }
+
+    // Prepare state for rendering - updates UI-related fields based on terminal size
+    fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
+        self.terminal_area = terminal_area;
+        self.validate_selected_type();
+
+        let layout = if self.filter_input_mode {
+            create_filter_input_layout(terminal_area)
+        } else {
+            create_main_layout(terminal_area)
+        };
+        let visible_counts = calculate_visible_counts(&layout);
+
+        // Update state with current visible counts
+        self.types_scroll.visible_items = visible_counts.types;
+        self.services_scroll.visible_items = visible_counts.services;
+
+        // Update details scroll visible items based on details area
+        self.details_scroll.visible_items = layout.details_area.height.saturating_sub(2) as usize;
+
+        // Ensure filtered cache is up to date for rendering
+        let cache_was_rebuilt = self.update_filtered_cache();
+        if cache_was_rebuilt || !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
+        }
     }
 
     // Key handling methods
@@ -1252,6 +1282,7 @@ impl AppState {
     }
 
     fn add_or_update_service(&mut self, service_entry: ServiceEntry) -> bool {
+        self.cancel_pending_removal(&service_entry.fullname);
         if let Some(existing) = self
             .services
             .iter_mut()
@@ -1821,55 +1852,6 @@ fn current_timestamp_micros() -> u64 {
         .as_micros() as u64
 }
 
-async fn start_cleanup_task_for_state(state: Arc<RwLock<AppState>>) {
-    // Check if cleanup task is already running
-    {
-        let state_guard = state.read().await;
-        if state_guard.cleanup_task_handle.is_some() {
-            return; // Task already running
-        }
-    }
-
-    let state_clone = Arc::clone(&state);
-    let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
-
-        loop {
-            interval.tick().await;
-
-            let should_continue = {
-                let mut state_guard = state_clone.write().await;
-
-                // Process expired removals
-                state_guard.process_expired_removals();
-
-                // Update pending removals count metric
-                let pending_count = state_guard.pending_removals.len() as u64;
-                *state_guard
-                    .metrics
-                    .entry("pending_removals_active".to_string())
-                    .or_insert(0) = pending_count;
-
-                // Check if we have any pending removals left
-                !state_guard.pending_removals.is_empty()
-            };
-
-            if !should_continue {
-                // No more pending removals, terminate this task
-                let mut state_guard = state_clone.write().await;
-                state_guard.cleanup_task_handle = None;
-                break;
-            }
-        }
-    });
-
-    // Store the task handle
-    {
-        let mut state_guard = state.write().await;
-        state_guard.cleanup_task_handle = Some(handle);
-    }
-}
-
 fn start_browsing_service_type(
     mdns: &ServiceDaemon,
     service_type: &str,
@@ -1882,44 +1864,19 @@ fn start_browsing_service_type(
     let notification_sender_inner = notification_sender.clone();
 
     tokio::spawn(async move {
-        // Start cleanup task for this service type
-        start_cleanup_task_for_state(state_inner.clone()).await;
-
         while let Ok(service_event) = service_receiver.recv_async().await {
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
-                    let was_empty_before = state.pending_removals.is_empty();
                     state.schedule_service_removal(&fullname);
-                    // Start cleanup task if this is the first pending removal
-                    if was_empty_before {
-                        start_cleanup_task_for_state(state_inner.clone()).await;
-                    }
+                    // No need to start cleanup task - it runs continuously
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
-                    let fullname = entry.fullname.clone();
                     let mut state = state_inner.write().await;
-
-                    // Check if this was a pending removal (flapping service)
-                    let was_flapping = state.cancel_pending_removal(&fullname);
-
-                    if !was_flapping {
-                        // Normal service update/creation
-                        state.add_or_update_service(entry);
-                    } else {
-                        // Service was flapping, just ensure it's marked online
-                        if let Some(service) =
-                            state.services.iter_mut().find(|s| s.fullname == fullname)
-                        {
-                            if !service.online {
-                                service.go_online_at(current_timestamp_micros());
-                            }
-                        } else {
-                            // Service doesn't exist yet, add it
-                            state.add_or_update_service(entry);
-                        }
-                    }
+                    // Always use the resolved service entry to ensure metadata is up-to-date
+                    // This handles both normal updates and flapping cases correctly
+                    state.add_or_update_service(entry);
 
                     state.invalidate_cache_and_validate();
                     let _ = notification_sender_inner.send(Notification::ServiceChanged);
@@ -1943,23 +1900,13 @@ fn handle_browse_failure(
     let _ = notification_sender.send(Notification::ServiceChanged);
 }
 
-fn ui(f: &mut Frame, app_state: &mut AppState) {
-    // Store current terminal area for popup calculations
-    app_state.terminal_area = f.area();
-
-    // Ensure state is consistent before rendering
-    app_state.validate_selected_type();
-
+fn ui(f: &mut Frame, app_state: &AppState) {
     let layout = if app_state.filter_input_mode {
         create_filter_input_layout(f.area())
     } else {
         create_main_layout(f.area())
     };
     let visible_counts = calculate_visible_counts(&layout);
-
-    // Update state with current visible counts
-    app_state.types_scroll.visible_items = visible_counts.types;
-    app_state.services_scroll.visible_items = visible_counts.services;
 
     if app_state.filter_input_mode {
         render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
@@ -2048,7 +1995,7 @@ fn create_filter_input_layout(area: ratatui::layout::Rect) -> MainLayout {
 
 fn render_service_types_list(
     f: &mut Frame,
-    app_state: &mut AppState,
+    app_state: &AppState,
     area: ratatui::layout::Rect,
     _visible_types: usize,
 ) {
@@ -2104,13 +2051,13 @@ fn render_service_types_list(
 
 fn render_services_list(
     f: &mut Frame,
-    app_state: &mut AppState,
+    app_state: &AppState,
     area: ratatui::layout::Rect,
     _visible_services: usize,
 ) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
-    let filtered_indices = app_state.get_filtered_services();
+    let filtered_indices = app_state.get_filtered_services_readonly();
     let filtered_indices_len = filtered_indices.len();
 
     let service_items: Vec<ListItem> = filtered_indices
@@ -2168,14 +2115,11 @@ fn render_services_list(
     f.render_stateful_widget(services_list, area, &mut services_list_state);
 }
 
-fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui::layout::Rect) {
+fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
 
-    // Update visible items for details scroll state
-    app_state.details_scroll.visible_items = area.height.saturating_sub(2) as usize; // Account for borders
-
-    let filtered_indices = app_state.get_filtered_services();
+    let filtered_indices = app_state.get_filtered_services_readonly();
 
     let selected_service = filtered_indices
         .get(selected_service_idx)
@@ -2894,6 +2838,43 @@ pub async fn run_tui(
         }
     });
 
+    // Start global cleanup task to handle expired service removals
+    let state_for_cleanup = Arc::clone(&state);
+    let notification_sender_for_cleanup = notification_sender.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
+        loop {
+            interval.tick().await;
+
+            let ui_should_update = {
+                let mut state = state_for_cleanup.write().await;
+
+                // Capture state before processing expired removals
+                let before_count = state.pending_removals.len();
+
+                // Process expired removals
+                state.process_expired_removals();
+
+                // Update pending removals count metric
+                let pending_count = state.pending_removals.len() as u64;
+                *state
+                    .metrics
+                    .entry("pending_removals_active".to_string())
+                    .or_insert(0) = pending_count;
+
+                // Check if any services actually changed (removed or marked offline)
+                (before_count as u64) != pending_count
+            };
+
+            // Notify UI if state changed
+            if ui_should_update {
+                let _ = notification_sender_for_cleanup.send(Notification::ServiceChanged);
+            }
+
+            // This task runs indefinitely
+        }
+    });
+
     if state.read().await.user_service_types.is_empty() {
         // Browse for all service types
         let receiver = mdns.browse("_services._dns-sd._udp.local.")?;
@@ -2945,68 +2926,80 @@ pub async fn run_tui(
     }
     // Initial render to show the UI immediately
     {
-        let mut state = state.write().await;
-        terminal.draw(|f| ui(f, &mut state))?;
+        let terminal_size = terminal
+            .size()
+            .unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
+        let terminal_area =
+            ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+        {
+            let mut state = state.write().await;
+            state.prepare_for_rendering(terminal_area);
+            terminal.draw(|f| ui(f, &state))?;
+        }
     }
 
     let result = loop {
         tokio::select! {
-            // Handle user input events
-            event_result = async {
-                match event::poll(Duration::from_millis(50)) {
-                    Ok(true) => {
-                        match event::read() {
-                            Ok(event) => Some(event),
+                    // Handle user input events
+                    event_result = async {
+                        match event::poll(Duration::from_millis(50)) {
+                            Ok(true) => {
+                                match event::read() {
+                                    Ok(event) => Some(event),
+                                    Err(e) => {
+                                        eprintln!("Error reading event: {}", e);
+                                        None
+                                    }
+                                }
+                            }
+                            Ok(false) => None,
                             Err(e) => {
-                                eprintln!("Error reading event: {}", e);
+                                eprintln!("Error polling for events: {}", e);
                                 None
                             }
                         }
-                    }
-                    Ok(false) => None,
-                    Err(e) => {
-                        eprintln!("Error polling for events: {}", e);
-                        None
-                    }
-                }
-            } => {
-                if let Some(event) = event_result {
-                    match event {
-                        Event::Key(key) => {
-                            #[cfg(target_os = "windows")]
-                            {
-                                // On Windows, ignore key release events to prevent duplicate handling
-                                if key.kind == crossterm::event::KeyEventKind::Release {
-                                    continue;
+                    } => {
+                        if let Some(event) = event_result {
+                            match event {
+                                Event::Key(key) => {
+                                    #[cfg(target_os = "windows")]
+                                    {
+                                        // On Windows, ignore key release events to prevent duplicate handling
+                                        if key.kind == crossterm::event::KeyEventKind::Release {
+                                            continue;
+                                        }
+                                    }
+
+                                    let mut state = state.write().await;
+                                    let should_continue = state.handle_key_event(key);
+                                    if should_continue {
+                                        let _ = notification_sender.send(Notification::UserInput);
+                                    } else {
+                                        break Ok(());
+                                    }
                                 }
+                                Event::Resize(_, _) => {
+                                    // Trigger a redraw on terminal resize
+                                    let _ = notification_sender.send(Notification::UserInput);
+                                }
+                                _ => {}
                             }
+                        }
+                    }
 
+        // Handle notifications for rendering
+                    _notification = notification_receiver.recv_async() => {
+                        // Draw UI only when there's a notification
+                        // Acquire write lock once for both preparation and rendering to prevent race conditions
+                        let terminal_size = terminal.size().unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
+                        let terminal_area = ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                        {
                             let mut state = state.write().await;
-                            let should_continue = state.handle_key_event(key);
-                            if should_continue {
-                                let _ = notification_sender.send(Notification::UserInput);
-                            } else {
-                                break Ok(());
-                            }
+                            state.prepare_for_rendering(terminal_area);
+                            terminal.draw(|f| ui(f, &state))?;
                         }
-                        Event::Resize(_, _) => {
-                            // Trigger a redraw on terminal resize
-                            let _ = notification_sender.send(Notification::UserInput);
-                        }
-                        _ => {}
                     }
                 }
-            }
-
-            // Handle notifications for rendering
-            _notification = notification_receiver.recv_async() => {
-                // Draw UI only when there's a notification
-                {
-                    let mut state = state.write().await;
-                    terminal.draw(|f| ui(f, &mut state))?;
-                }
-            }
-        }
     };
 
     // Restore terminal
