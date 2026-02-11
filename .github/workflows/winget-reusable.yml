@@ -1,0 +1,55 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: Publish Desktop Release to WinGet
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  release:
+    types: [released]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          fetch-depth: 1
+
+      - name: 🏷️ Get latest release info
+        id: release-info
+        uses: ./.github/actions/latest-release-info
+
+      - name: 🛠️ Determine download url🔗
+        shell: bash
+        env:
+          TAG_NAME: ${{ steps.release-info.outputs.tagName }}
+          VERSION: ${{ steps.release-info.outputs.version }}
+        run: |
+          URL=https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-Windows-x86_64.zip
+          echo "URL=$URL" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected latest tag name: $TAG_NAME"
+          echo "URL: $URL"
+          echo "Version: $VERSION"
+
+      - name: 🆙 sync our fork of winget-pkgs
+        uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
+        with:
+          args: "sync-fork --token=${{ secrets.WINGET_TOKEN }}"
+
+      - name: 🆙 winget package
+        uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
+        with:
+          args: "update hrzlgnm.mdns-tui-browser --version $VERSION --urls $URL --submit --token=${{ secrets.WINGET_TOKEN }}"
+
+  cleanup:
+    name: 🧹 branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🧹 Cleanup merged branches
+        uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
+        with:
+          args: "cleanup --only-merged --token=${{ secrets.WINGET_TOKEN }}"

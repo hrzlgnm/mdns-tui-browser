@@ -50,6 +50,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       lint: ${{ steps.filter.outputs.lint }}
       tests: ${{ steps.filter.outputs.tests }}
+      winget: ${{ steps.filter.outputs.winget }}
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -76,6 +77,9 @@ jobs:
             tests:
               - '.github/workflows/test-reusable.yml'
               - '.config/nextest.toml'
+            winget:
+              - '.github/workflows/winget-reusable.yml'
+              - '.github/actions/latest-release-info/action.yml'
       - name: Output branch name
         id: branch
         run: |
@@ -115,6 +119,13 @@ jobs:
     if: needs.changes.outputs.aur == 'true'
     uses: ./.github/workflows/aur-reusable.yml
 
+  winget:
+    name: winget
+    needs: changes
+    if: needs.changes.outputs.winget == 'true'
+    uses: ./.github/workflows/winget-reusable.yml
+    secrets: inherit
+
   all-required-green: # This job does nothing and is only used for the branch protection
     name: CI Status
     runs-on: ubuntu-latest
@@ -124,6 +135,7 @@ jobs:
       - lint
       - tests
       - typos
+      - winget
     if: always()
     steps:
       - name: Check whether the needed jobs succeeded or failed
@@ -134,4 +146,5 @@ jobs:
             lint,
             tests,
             build,
+            winget,
           jobs: ${{ toJSON(needs) }}
