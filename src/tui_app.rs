@@ -1869,7 +1869,9 @@ fn start_browsing_service_type(
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
                     if state.no_debounce {
-                        state.mark_service_offline(&fullname);
+                        if state.mark_service_offline(&fullname) {
+                            let _ = notification_sender_inner.send(Notification::ServiceChanged);
+                        }
                     } else {
                         state.schedule_service_removal(&fullname);
                     }
