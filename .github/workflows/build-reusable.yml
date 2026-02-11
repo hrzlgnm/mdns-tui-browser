@@ -132,6 +132,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           name: mDNS TUI Browser Release ${{ inputs.tagName }}
+          tag_name: ${{ inputs.tagName }}
           append_body: true
           make_latest: false
           generate_release_notes: false

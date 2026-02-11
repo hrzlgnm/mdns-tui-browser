@@ -4,6 +4,11 @@
 name: Create and publish source checksum
 on:
   workflow_call:
+    inputs:
+      tagName:
+        description: The tag name of the release to publish for
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       semver:
@@ -26,8 +31,13 @@ jobs:
         run: |
           if [ -n "${{ github.event.release.name }}" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ inputs.tagName }}" ]; then
+            echo "tag=${{ inputs.tagName }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ inputs.semver }}" ]; then
+            echo "tag=v${{ inputs.semver }}" >> $GITHUB_OUTPUT
           else
-            echo "tag=v${{ github.event.inputs.semver }}" >> $GITHUB_OUTPUT
+            echo "Error: No tag information available"
+            exit 1
           fi
 
   generate_checksums:

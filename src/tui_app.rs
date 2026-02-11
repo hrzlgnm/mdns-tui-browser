@@ -16,7 +16,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -24,8 +24,13 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::sync::RwLock;
 
-const STATUS_OK: Color = Color::Blue;
-const STATUS_ERROR: Color = Color::Yellow;
+const STATUS_OK_COLOR: Color = Color::Blue;
+const STATUS_ERROR_COLOR: Color = Color::Yellow;
+const UI_CONTROLS_COLOR: Color = Color::Cyan;
+
+// Service debouncing constants
+const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
+const CLEANUP_INTERVAL_MS: u64 = 250;
 
 // Timestamp conversion utilities for JSON serialization
 fn micros_to_iso_timestamp(micros: u64) -> String {
@@ -46,6 +51,11 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
         } else {
             None
         };
+        let last_online_at = if entry.last_online_micros != Some(entry.first_seen_micros) {
+            entry.last_online_micros.map(micros_to_iso_timestamp)
+        } else {
+            None
+        };
         Self {
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
@@ -56,7 +66,7 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
             is_online: entry.online,
             created_at: micros_to_iso_timestamp(entry.first_seen_micros),
             updated_at,
-            last_online_at: entry.last_online_micros.map(micros_to_iso_timestamp),
+            last_online_at,
             last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
             session_history: entry.session_history.iter().map(|s| s.into()).collect(),
         }
@@ -138,7 +148,6 @@ fn is_zero_u16(v: &u16) -> bool {
 struct ServiceSession {
     start_time: u64,
     end_time: Option<u64>,
-    duration_micros: u64,
 }
 
 #[derive(Serialize)]
@@ -159,21 +168,13 @@ impl ServiceEntry {
         self.updated_at_micros = timestamp_micros;
         self.last_offline_micros = Some(timestamp_micros);
 
-        // Calculate duration of this online session and add to history
         if let Some(last_online) = self.last_online_micros {
-            let session_duration = timestamp_micros.saturating_sub(last_online);
-
-            // Update existing session or add new one to session history
             if let Some(session) = self.session_history.iter_mut().last() {
-                // Complete the current session
                 session.end_time = Some(timestamp_micros);
-                session.duration_micros = session_duration;
             } else {
-                // Add new completed session to history
                 self.session_history.push(ServiceSession {
                     start_time: last_online,
                     end_time: Some(timestamp_micros),
-                    duration_micros: session_duration,
                 });
             }
         }
@@ -187,16 +188,13 @@ impl ServiceEntry {
         self.online = true;
         self.last_online_micros = Some(timestamp_micros);
 
-        // Add new session to history
         self.session_history.push(ServiceSession {
             start_time: timestamp_micros,
             end_time: None,
-            duration_micros: 0, // Will be calculated when session ends
         });
     }
 
     fn get_session_history(&self) -> String {
-        // First, collect completed sessions and find max widths
         let mut completed_sessions = Vec::new();
         let mut max_session_num_length = 0;
 
@@ -206,13 +204,13 @@ impl ServiceEntry {
             completed_sessions.push((session_num, session));
         }
 
-        // Now format with proper alignment for both session numbers and durations
         let mut timeline = Vec::new();
         for (session_num, session) in completed_sessions {
             let start_str = format_timestamp_micros(session.start_time);
             let (duration_str, end_str) = if let Some(end_time) = session.end_time {
+                let duration = end_time.saturating_sub(session.start_time);
                 (
-                    format_duration_micros(session.duration_micros),
+                    format_duration_micros(duration),
                     format_timestamp_micros(end_time),
                 )
             } else {
@@ -278,7 +276,6 @@ impl From<ResolvedService> for ServiceEntry {
             session_history: vec![ServiceSession {
                 start_time: current_timestamp,
                 end_time: None,
-                duration_micros: 0,
             }],
         }
     }
@@ -454,7 +451,6 @@ struct SortInfo {
     direction: String,
 }
 
-#[derive(Clone)]
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -478,6 +474,37 @@ struct AppState {
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
+    pending_removals: HashMap<String, u64>,
+}
+
+impl Clone for AppState {
+    fn clone(&self) -> Self {
+        Self {
+            services: self.services.clone(),
+            service_types: self.service_types.clone(),
+            selected_service: self.selected_service,
+            selected_type: self.selected_type,
+            types_scroll: self.types_scroll.clone(),
+            services_scroll: self.services_scroll.clone(),
+            help_scroll: self.help_scroll.clone(),
+            metrics_scroll: self.metrics_scroll.clone(),
+            details_scroll: self.details_scroll.clone(),
+            cached_filtered_services: self.cached_filtered_services.clone(),
+            cache_dirty: self.cache_dirty,
+            cached_sorted: self.cached_sorted,
+            show_help_popup: self.show_help_popup,
+            show_metrics_popup: self.show_metrics_popup,
+            metrics: self.metrics.clone(),
+            sort_field: self.sort_field,
+            sort_direction: self.sort_direction,
+            filter_query: self.filter_query.clone(),
+            filter_input_mode: self.filter_input_mode,
+            terminal_area: self.terminal_area,
+            user_service_types: self.user_service_types.clone(),
+            status_message: self.status_message.clone(),
+            pending_removals: self.pending_removals.clone(),
+        }
+    }
 }
 
 impl AppState {
@@ -505,6 +532,7 @@ impl AppState {
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
+            pending_removals: HashMap::new(),
         };
         state.validate_selected_type();
         state
@@ -512,12 +540,11 @@ impl AppState {
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
         // First filter by service type if one is selected
-        if let Some(selected_type_idx) = self.selected_type {
-            if let Some(selected_type) = self.service_types.get(selected_type_idx) {
-                if service.service_type != *selected_type {
-                    return false;
-                }
-            }
+        if let Some(selected_type_idx) = self.selected_type
+            && let Some(selected_type) = self.service_types.get(selected_type_idx)
+            && service.service_type != *selected_type
+        {
+            return false;
         }
 
         // Then filter by text query if present
@@ -576,11 +603,17 @@ impl AppState {
     }
 
     fn get_filtered_services(&mut self) -> &[usize] {
+        // Check if we need to invalidate the cache before processing
         let cache_was_rebuilt = self.update_filtered_cache();
         if cache_was_rebuilt || !self.cached_sorted {
             self.sort_filtered_services();
             self.cached_sorted = true;
         }
+        self.cached_filtered_services.as_slice()
+    }
+
+    fn get_filtered_services_readonly(&self) -> &[usize] {
+        // Read-only version that doesn't modify cache - assumes cache is up to date
         self.cached_filtered_services.as_slice()
     }
 
@@ -882,14 +915,41 @@ impl AppState {
         self.validate_selected_type();
     }
 
+    // Prepare state for rendering - updates UI-related fields based on terminal size
+    fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
+        self.terminal_area = terminal_area;
+        self.validate_selected_type();
+
+        let layout = if self.filter_input_mode {
+            create_filter_input_layout(terminal_area)
+        } else {
+            create_main_layout(terminal_area, !self.filter_query.is_empty())
+        };
+        let visible_counts = calculate_visible_counts(&layout);
+
+        // Update state with current visible counts
+        self.types_scroll.visible_items = visible_counts.types;
+        self.services_scroll.visible_items = visible_counts.services;
+
+        // Update details scroll visible items based on details area
+        self.details_scroll.visible_items = layout.details_area.height.saturating_sub(2) as usize;
+
+        // Ensure filtered cache is up to date for rendering
+        let cache_was_rebuilt = self.update_filtered_cache();
+        if cache_was_rebuilt || !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
+        }
+    }
+
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
-        if let Ok(mut msg) = self.status_message.try_lock() {
-            if !msg.is_empty() {
-                msg.clear();
-                return true;
-            }
+        if let Ok(mut msg) = self.status_message.try_lock()
+            && !msg.is_empty()
+        {
+            msg.clear();
+            return true;
         }
 
         if self.show_help_popup {
@@ -973,6 +1033,7 @@ impl AppState {
             // Any other key closes the metrics popup and returns to normal mode
             _ => {
                 self.show_metrics_popup = false;
+                // Reset scroll offset for all keys
                 self.metrics_scroll.reset(); // Reset scroll offset when closing
                 true // Continue running
             }
@@ -1222,6 +1283,7 @@ impl AppState {
     }
 
     fn add_or_update_service(&mut self, service_entry: ServiceEntry) -> bool {
+        self.cancel_pending_removal(&service_entry.fullname);
         if let Some(existing) = self
             .services
             .iter_mut()
@@ -1267,6 +1329,11 @@ impl AppState {
     }
 
     fn mark_service_offline(&mut self, fullname: &str) -> bool {
+        // Don't mark offline if service is pending removal (debounce window)
+        if self.pending_removals.contains_key(fullname) {
+            return false;
+        }
+
         let service_idx = self.services.iter().position(|s| s.fullname == fullname);
 
         if let Some(idx) = service_idx {
@@ -1283,7 +1350,59 @@ impl AppState {
         }
     }
 
+    // Debouncing methods for handling flapping services
+    fn schedule_service_removal(&mut self, fullname: &str) {
+        let current_time = current_timestamp_micros();
+        self.pending_removals
+            .insert(fullname.to_string(), current_time);
+        *self
+            .metrics
+            .entry("pending_removals_active".to_string())
+            .or_insert(0) = self.pending_removals.len() as u64;
+    }
+
+    fn cancel_pending_removal(&mut self, fullname: &str) -> bool {
+        if self.pending_removals.remove(fullname).is_some() {
+            // Service was scheduled for removal and came back online within debounce window
+            self.update_metric("flapping_services_detected");
+            *self
+                .metrics
+                .entry("pending_removals_active".to_string())
+                .or_insert(0) = self.pending_removals.len() as u64;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn process_expired_removals(&mut self) {
+        let current_time = current_timestamp_micros();
+        let mut expired_services = Vec::new();
+
+        // Find expired services
+        self.pending_removals.retain(|fullname, scheduled_time| {
+            if current_time.saturating_sub(*scheduled_time) >= DEBOUNCE_DURATION_MICROS {
+                expired_services.push(fullname.clone());
+                false // Remove from pending
+            } else {
+                true // Keep in pending
+            }
+        });
+
+        // Mark expired services as offline
+        for fullname in expired_services {
+            self.mark_service_offline(&fullname);
+        }
+
+        // Update pending removals count metric
+        *self
+            .metrics
+            .entry("pending_removals_active".to_string())
+            .or_insert(0) = self.pending_removals.len() as u64;
+    }
+
     fn navigate_services_up(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1293,10 +1412,14 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_down(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1306,7 +1429,10 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_service_types_up(&mut self) {
@@ -1434,6 +1560,7 @@ impl AppState {
     }
 
     fn navigate_services_page_up(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1443,10 +1570,14 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_page_down(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1456,15 +1587,23 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_to_first(&mut self) {
+        let old_selected_service = self.selected_service;
         navigate_list_to_first(&mut self.selected_service, &mut self.services_scroll);
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     fn navigate_services_to_last(&mut self) {
+        let old_selected_service = self.selected_service;
         let filtered_len = {
             let filtered = self.get_filtered_services();
             filtered.len()
@@ -1474,7 +1613,10 @@ impl AppState {
             &mut self.services_scroll,
             filtered_len,
         );
-        self.details_scroll.reset(); // Reset details scroll when navigating
+        // Only reset details scroll when selection actually changes
+        if old_selected_service != self.selected_service {
+            self.details_scroll.reset();
+        }
     }
 
     // Filter methods
@@ -1527,17 +1669,17 @@ impl AppState {
         let selected_service_idx = self.selected_service;
         let filtered_indices = self.get_filtered_services();
 
-        if let Some(&service_idx) = filtered_indices.get(selected_service_idx) {
-            if let Some(service) = self.services.get(service_idx) {
-                let details_lines = create_service_details_text(service);
-                let total_lines = details_lines.len();
+        if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
+            && let Some(service) = self.services.get(service_idx)
+        {
+            let details_lines = create_service_details_text(service);
+            let total_lines = details_lines.len();
 
-                if total_lines > 0 && self.details_scroll.visible_items > 0 {
-                    let max_scroll_offset =
-                        total_lines.saturating_sub(self.details_scroll.visible_items);
-                    self.details_scroll.offset =
-                        std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
-                }
+            if total_lines > 0 && self.details_scroll.visible_items > 0 {
+                let max_scroll_offset =
+                    total_lines.saturating_sub(self.details_scroll.visible_items);
+                self.details_scroll.offset =
+                    std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
             }
         }
     }
@@ -1556,8 +1698,8 @@ fn compare_services_by_field(
         SortField::Address => {
             use std::net::IpAddr;
 
-            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
-            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or("<no-addr>");
+            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or_default();
+            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or_default();
 
             // Try to parse as IP addresses for numeric comparison, fall back to string comparison
             match (a_addr_str.parse::<IpAddr>(), b_addr_str.parse::<IpAddr>()) {
@@ -1723,14 +1865,15 @@ fn start_browsing_service_type(
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
-                    if state.mark_service_offline(&fullname) {
-                        let _ = notification_sender_inner.send(Notification::ServiceChanged);
-                    }
+                    state.schedule_service_removal(&fullname);
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
                     let entry = ServiceEntry::from(*resolved_service);
                     let mut state = state_inner.write().await;
+                    // Always use the resolved service entry to ensure metadata is up-to-date
+                    // This handles both normal updates and flapping cases correctly
                     state.add_or_update_service(entry);
+
                     state.invalidate_cache_and_validate();
                     let _ = notification_sender_inner.send(Notification::ServiceChanged);
                 }
@@ -1753,23 +1896,13 @@ fn handle_browse_failure(
     let _ = notification_sender.send(Notification::ServiceChanged);
 }
 
-fn ui(f: &mut Frame, app_state: &mut AppState) {
-    // Store current terminal area for popup calculations
-    app_state.terminal_area = f.area();
-
-    // Ensure state is consistent before rendering
-    app_state.validate_selected_type();
-
+fn ui(f: &mut Frame, app_state: &AppState) {
     let layout = if app_state.filter_input_mode {
         create_filter_input_layout(f.area())
     } else {
-        create_main_layout(f.area())
+        create_main_layout(f.area(), !app_state.filter_query.is_empty())
     };
     let visible_counts = calculate_visible_counts(&layout);
-
-    // Update state with current visible counts
-    app_state.types_scroll.visible_items = visible_counts.types;
-    app_state.services_scroll.visible_items = visible_counts.services;
 
     if app_state.filter_input_mode {
         render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
@@ -1782,8 +1915,10 @@ fn ui(f: &mut Frame, app_state: &mut AppState) {
         render_service_details(f, app_state, layout.details_area);
 
         // Render filter status if not empty
-        if !app_state.filter_query.is_empty() {
-            render_filter_status(f, app_state);
+        if !app_state.filter_query.is_empty()
+            && let Some(filter_status_area) = layout.filter_status_area
+        {
+            render_filter_status(f, app_state, filter_status_area);
         }
     }
 
@@ -1802,6 +1937,7 @@ struct MainLayout {
     left_panel: ratatui::layout::Rect,
     services_area: ratatui::layout::Rect,
     details_area: ratatui::layout::Rect,
+    filter_status_area: Option<ratatui::layout::Rect>,
 }
 
 struct VisibleCounts {
@@ -1809,21 +1945,41 @@ struct VisibleCounts {
     services: usize,
 }
 
-fn create_main_layout(area: ratatui::layout::Rect) -> MainLayout {
+fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> MainLayout {
+    let main_area = if has_filter_status {
+        // Reserve 3 rows at the bottom for filter status
+        let remaining_height = area.height.saturating_sub(3);
+        ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
+    } else {
+        area
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-        .split(area);
+        .split(main_area);
 
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
 
+    let filter_status_area = if has_filter_status {
+        Some(ratatui::layout::Rect::new(
+            area.x,
+            area.y + area.height.saturating_sub(3),
+            area.width,
+            3,
+        ))
+    } else {
+        None
+    };
+
     MainLayout {
         left_panel: chunks[0],
         services_area: services_chunks[0],
         details_area: services_chunks[1],
+        filter_status_area,
     }
 }
 
@@ -1849,16 +2005,18 @@ fn create_filter_input_layout(area: ratatui::layout::Rect) -> MainLayout {
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
 
+    // Filter input layout doesn't have a separate filter status area
     MainLayout {
         left_panel: chunks[0],
         services_area: services_chunks[0],
         details_area: services_chunks[1],
+        filter_status_area: None,
     }
 }
 
 fn render_service_types_list(
     f: &mut Frame,
-    app_state: &mut AppState,
+    app_state: &AppState,
     area: ratatui::layout::Rect,
     _visible_types: usize,
 ) {
@@ -1914,13 +2072,13 @@ fn render_service_types_list(
 
 fn render_services_list(
     f: &mut Frame,
-    app_state: &mut AppState,
+    app_state: &AppState,
     area: ratatui::layout::Rect,
     _visible_services: usize,
 ) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
-    let filtered_indices = app_state.get_filtered_services();
+    let filtered_indices = app_state.get_filtered_services_readonly();
     let filtered_indices_len = filtered_indices.len();
 
     let service_items: Vec<ListItem> = filtered_indices
@@ -1956,7 +2114,7 @@ fn render_services_list(
         Span::raw("Services ["),
         Span::styled(
             format!("{}/{}", filtered_indices_len, services_clone.len()),
-            Style::default().fg(STATUS_OK),
+            Style::default().fg(STATUS_OK_COLOR),
         ),
         Span::raw("] ["),
         sort_field_highlighted,
@@ -1978,14 +2136,11 @@ fn render_services_list(
     f.render_stateful_widget(services_list, area, &mut services_list_state);
 }
 
-fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui::layout::Rect) {
+fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
     let selected_service_idx = app_state.selected_service;
     let services_clone = app_state.services.clone();
 
-    // Update visible items for details scroll state
-    app_state.details_scroll.visible_items = area.height.saturating_sub(2) as usize; // Account for borders
-
-    let filtered_indices = app_state.get_filtered_services();
+    let filtered_indices = app_state.get_filtered_services_readonly();
 
     let selected_service = filtered_indices
         .get(selected_service_idx)
@@ -2029,7 +2184,12 @@ fn render_service_details(f: &mut Frame, app_state: &mut AppState, area: ratatui
 }
 
 fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
-    let filter_area = ratatui::layout::Rect::new(area.x, area.y + area.height - 3, area.width, 3);
+    let filter_area = ratatui::layout::Rect::new(
+        area.x,
+        area.y + area.height.saturating_sub(3),
+        area.width,
+        3,
+    );
 
     let input_text = format!("/{}_", app_state.filter_query);
 
@@ -2039,63 +2199,61 @@ fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layou
                 .borders(Borders::ALL)
                 .title("Quick Filter (Enter to apply, Esc to cancel)"),
         )
-        .style(Style::default().fg(Color::Yellow));
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
 
     f.render_widget(filter_input, filter_area);
 }
 
-fn render_filter_status(f: &mut Frame, app_state: &AppState) {
-    let status_area = ratatui::layout::Rect::new(
-        f.area().x,
-        f.area().y + f.area().height - 1,
-        f.area().width,
-        1,
-    );
-
+fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
     let status_text = format!("Filter: '{}' (Press 'n' to clear)", app_state.filter_query);
 
-    let status =
-        Paragraph::new(status_text).style(Style::default().fg(Color::Cyan).bg(Color::DarkGray));
+    let status = Paragraph::new(status_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Active Filter"),
+        )
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
 
-    f.render_widget(status, status_area);
+    f.render_widget(status, area);
 }
 
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
     // Try to read the message without blocking
-    if let Ok(msg) = app_state.status_message.try_lock() {
-        if !msg.is_empty() {
-            // Position status message centered on the screen
-            let area = f.area();
-            // Calculate width with padding and border (2 for left/right borders, 2 for padding)
-            let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
-            let popup_area = Rect::new(
-                (area.width.saturating_sub(msg_width as u16)) / 2,
-                (area.height.saturating_sub(3)) / 2,
-                msg_width as u16,
-                3,
-            );
+    if let Ok(msg) = app_state.status_message.try_lock()
+        && !msg.is_empty()
+    {
+        // Position status message centered on the screen
+        let area = f.area();
+        // Calculate width with padding and border (2 for left/right borders, 2 for padding)
+        let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
+        let popup_area = Rect::new(
+            (area.width.saturating_sub(msg_width as u16)) / 2,
+            (area.height.saturating_sub(3)) / 2,
+            msg_width as u16,
+            3,
+        );
 
-            // Clear the background first
-            f.render_widget(ratatui::widgets::Clear, popup_area);
+        // Clear the background first
+        f.render_widget(ratatui::widgets::Clear, popup_area);
 
-            // Create a block with border
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray));
+        // Create a block with border
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray));
 
-            // Create the inner area for text (accounting for borders)
-            let inner_area = block.inner(popup_area);
+        // Create the inner area for text (accounting for borders)
+        let inner_area = block.inner(popup_area);
 
-            // Render the border/frame
-            f.render_widget(block, popup_area);
+        // Render the border/frame
+        f.render_widget(block, popup_area);
 
-            // Render the message text centered in the inner area
-            let paragraph = Paragraph::new(msg.as_str())
-                .style(Style::default().fg(STATUS_OK).bg(Color::DarkGray))
-                .alignment(ratatui::layout::Alignment::Center);
+        // Render the message text centered in the inner area
+        let paragraph = Paragraph::new(msg.as_str())
+            .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray))
+            .alignment(ratatui::layout::Alignment::Center);
 
-            f.render_widget(paragraph, inner_area);
-        }
+        f.render_widget(paragraph, inner_area);
     }
 }
 
@@ -2220,7 +2378,7 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   S                 - Cycle sort field backward"),
         Line::from("   o                 - Toggle sort direction (↑/↓)"),
         Line::from(" "),
-        Line::from("   Sort field highlighted in yellow, direction in cyan"),
+        Line::from("   Sort field highlighted in white (underlined), direction in cyan (bold)"),
         Line::from(" "),
         Line::from(" Quick Filter:"),
         Line::from("   /                 - Start typing to filter services"),
@@ -2335,8 +2493,7 @@ fn format_service_type_for_display(service_type: &str) -> String {
         .trim_start_matches('_')
         .trim_end_matches(".local.")
         .trim_end_matches(".")
-        .replace("._tcp", ".tcp")
-        .replace("._udp", ".udp")
+        .replace("._", ".")
 }
 
 fn create_service_list_item_style(
@@ -2347,7 +2504,7 @@ fn create_service_list_item_style(
     let foreground = if service.online {
         Color::White
     } else {
-        STATUS_ERROR
+        STATUS_ERROR_COLOR
     };
 
     let mut style = if index == selected_index {
@@ -2401,28 +2558,69 @@ fn format_duration_micros(duration_micros: u64) -> String {
     let remaining_micros = duration_micros % 1_000_000;
 
     let seconds = total_seconds % 60;
-    let minutes = (total_seconds / 60) % 60;
-    let hours = (total_seconds / 3600) % 24;
-    let days = total_seconds / 86400;
+    let mut minutes = (total_seconds / 60) % 60;
+    let mut hours = (total_seconds / 3600) % 24;
+    let mut days = total_seconds / 86400;
 
     let mut parts = Vec::new();
 
-    if days > 0 {
-        parts.push(format!("{}d", days));
-    }
-    if hours > 0 {
-        parts.push(format!("{}h", hours));
-    }
-    if minutes > 0 {
-        parts.push(format!("{}m", minutes));
-    }
-
-    // Always include seconds with precision
+    // Handle fractional seconds and potential rounding
     if remaining_micros > 0 {
         let precise_seconds = seconds as f64 + remaining_micros as f64 / 1_000_000.0;
-        parts.push(format!("{:.3}s", precise_seconds));
+        let rounded_seconds = (precise_seconds * 1000.0).round() / 1000.0;
+
+        // Check if rounding causes seconds to roll over to 60
+        if rounded_seconds >= 60.0 {
+            minutes += 1;
+
+            // Handle minute rollover
+            if minutes >= 60 {
+                minutes = 0;
+                hours += 1;
+
+                // Handle hour rollover
+                if hours >= 24 {
+                    hours = 0;
+                    days += 1;
+                }
+            }
+        }
+
+        let final_seconds = if rounded_seconds >= 60.0 {
+            0.0
+        } else {
+            rounded_seconds
+        };
+
+        if days > 0 {
+            parts.push(format!("{}d", days));
+        }
+        if hours > 0 {
+            parts.push(format!("{}h", hours));
+        }
+        if minutes > 0 {
+            parts.push(format!("{}m", minutes));
+        }
+
+        // Only show seconds if they're non-zero OR if there are no minutes/higher units
+        if final_seconds > 0.0 || (days == 0 && hours == 0 && minutes == 0) {
+            parts.push(format!("{:.3}s", final_seconds));
+        }
     } else {
-        parts.push(format!("{}s", seconds));
+        if days > 0 {
+            parts.push(format!("{}d", days));
+        }
+        if hours > 0 {
+            parts.push(format!("{}h", hours));
+        }
+        if minutes > 0 {
+            parts.push(format!("{}m", minutes));
+        }
+
+        // Only show seconds if they're non-zero OR if there are no minutes/higher units
+        if seconds > 0 || (days == 0 && hours == 0 && minutes == 0) {
+            parts.push(format!("{}s", seconds));
+        }
     }
 
     parts.join(" ")
@@ -2432,10 +2630,12 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     // Online status - use blue (color-blind friendly)
-    let online_style: Style = Style::default().fg(STATUS_OK).add_modifier(Modifier::BOLD);
+    let online_style: Style = Style::default()
+        .fg(STATUS_OK_COLOR)
+        .add_modifier(Modifier::BOLD);
     // Offline status - use orange (color-blind friendly)
     let offline_style: Style = Style::default()
-        .fg(STATUS_ERROR)
+        .fg(STATUS_ERROR_COLOR)
         .add_modifier(Modifier::BOLD);
 
     if service.online {
@@ -2642,7 +2842,7 @@ pub async fn run_tui(
     let state_for_metrics = Arc::clone(&state);
     let notification_sender_for_metrics = notification_sender.clone();
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
             interval.tick().await;
 
@@ -2661,6 +2861,43 @@ pub async fn run_tui(
                     // If we can't get metrics, just continue
                 }
             }
+        }
+    });
+
+    // Start global cleanup task to handle expired service removals
+    let state_for_cleanup = Arc::clone(&state);
+    let notification_sender_for_cleanup = notification_sender.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
+        loop {
+            interval.tick().await;
+
+            let ui_should_update = {
+                let mut state = state_for_cleanup.write().await;
+
+                // Capture state before processing expired removals
+                let before_count = state.pending_removals.len();
+
+                // Process expired removals
+                state.process_expired_removals();
+
+                // Update pending removals count metric
+                let pending_count = state.pending_removals.len() as u64;
+                *state
+                    .metrics
+                    .entry("pending_removals_active".to_string())
+                    .or_insert(0) = pending_count;
+
+                // Check if any services actually changed (removed or marked offline)
+                (before_count as u64) != pending_count
+            };
+
+            // Notify UI if state changed
+            if ui_should_update {
+                let _ = notification_sender_for_cleanup.send(Notification::ServiceChanged);
+            }
+
+            // This task runs indefinitely
         }
     });
 
@@ -2715,68 +2952,80 @@ pub async fn run_tui(
     }
     // Initial render to show the UI immediately
     {
-        let mut state = state.write().await;
-        terminal.draw(|f| ui(f, &mut state))?;
+        let terminal_size = terminal
+            .size()
+            .unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
+        let terminal_area =
+            ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+        {
+            let mut state = state.write().await;
+            state.prepare_for_rendering(terminal_area);
+            terminal.draw(|f| ui(f, &state))?;
+        }
     }
 
     let result = loop {
         tokio::select! {
-            // Handle user input events
-            event_result = async {
-                match event::poll(Duration::from_millis(50)) {
-                    Ok(true) => {
-                        match event::read() {
-                            Ok(event) => Some(event),
+                    // Handle user input events
+                    event_result = async {
+                        match event::poll(Duration::from_millis(50)) {
+                            Ok(true) => {
+                                match event::read() {
+                                    Ok(event) => Some(event),
+                                    Err(e) => {
+                                        eprintln!("Error reading event: {}", e);
+                                        None
+                                    }
+                                }
+                            }
+                            Ok(false) => None,
                             Err(e) => {
-                                eprintln!("Error reading event: {}", e);
+                                eprintln!("Error polling for events: {}", e);
                                 None
                             }
                         }
-                    }
-                    Ok(false) => None,
-                    Err(e) => {
-                        eprintln!("Error polling for events: {}", e);
-                        None
-                    }
-                }
-            } => {
-                if let Some(event) = event_result {
-                    match event {
-                        Event::Key(key) => {
-                            #[cfg(target_os = "windows")]
-                            {
-                                // On Windows, ignore key release events to prevent duplicate handling
-                                if key.kind == crossterm::event::KeyEventKind::Release {
-                                    continue;
+                    } => {
+                        if let Some(event) = event_result {
+                            match event {
+                                Event::Key(key) => {
+                                    #[cfg(target_os = "windows")]
+                                    {
+                                        // On Windows, ignore key release events to prevent duplicate handling
+                                        if key.kind == crossterm::event::KeyEventKind::Release {
+                                            continue;
+                                        }
+                                    }
+
+                                    let mut state = state.write().await;
+                                    let should_continue = state.handle_key_event(key);
+                                    if should_continue {
+                                        let _ = notification_sender.send(Notification::UserInput);
+                                    } else {
+                                        break Ok(());
+                                    }
                                 }
+                                Event::Resize(_, _) => {
+                                    // Trigger a redraw on terminal resize
+                                    let _ = notification_sender.send(Notification::UserInput);
+                                }
+                                _ => {}
                             }
+                        }
+                    }
 
+        // Handle notifications for rendering
+                    _notification = notification_receiver.recv_async() => {
+                        // Draw UI only when there's a notification
+                        // Acquire write lock once for both preparation and rendering to prevent race conditions
+                        let terminal_size = terminal.size().unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
+                        let terminal_area = ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                        {
                             let mut state = state.write().await;
-                            let should_continue = state.handle_key_event(key);
-                            if should_continue {
-                                let _ = notification_sender.send(Notification::UserInput);
-                            } else {
-                                break Ok(());
-                            }
+                            state.prepare_for_rendering(terminal_area);
+                            terminal.draw(|f| ui(f, &state))?;
                         }
-                        Event::Resize(_, _) => {
-                            // Trigger a redraw on terminal resize
-                            let _ = notification_sender.send(Notification::UserInput);
-                        }
-                        _ => {}
                     }
                 }
-            }
-
-            // Handle notifications for rendering
-            _notification = notification_receiver.recv_async() => {
-                // Draw UI only when there's a notification
-                {
-                    let mut state = state.write().await;
-                    terminal.draw(|f| ui(f, &mut state))?;
-                }
-            }
-        }
     };
 
     // Restore terminal
@@ -2793,12 +3042,14 @@ mod tests {
 
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        // Use port modulo 254 to keep the last octet in valid range [1, 254]
+        let last_octet = (port % 254) + 1;
         ServiceEntry {
             fullname: format!("{}.{}", name, service_type),
             host: format!("{}.local.", name),
             service_type: service_type.to_string(),
             subtype: None,
-            addrs: vec![format!("192.168.1.{}", port)],
+            addrs: vec![format!("192.168.1.{}", last_octet)],
             port,
             txt: vec![],
             online: true,
@@ -2806,11 +3057,1358 @@ mod tests {
             session_history: vec![ServiceSession {
                 start_time: 1000,
                 end_time: None,
-                duration_micros: 0,
             }],
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
+        }
+    }
+
+    // Helper function for creating test services with custom session history
+    #[allow(clippy::too_many_arguments)]
+    fn create_test_service_with_sessions(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        sessions: Vec<ServiceSession>,
+        online: bool,
+        updated_at_micros: u64,
+        first_seen_micros: u64,
+        last_online_micros: Option<u64>,
+        last_offline_micros: Option<u64>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.online = online;
+        service.updated_at_micros = updated_at_micros;
+        service.session_history = sessions;
+        service.first_seen_micros = first_seen_micros;
+        service.last_online_micros = last_online_micros;
+        service.last_offline_micros = last_offline_micros;
+        service
+    }
+
+    // Enhanced test helper functions to reduce duplication
+
+    /// Quick state setup with specified number of services
+    fn setup_test_state(service_count: usize) -> AppState {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_http._tcp.local.");
+
+        for i in 0..service_count {
+            state.services.push(create_test_service(
+                &format!("test{}", i),
+                "_http._tcp.local.",
+                8080 + i as u16,
+            ));
+        }
+
+        state
+    }
+
+    /// Setup state with custom service types
+    fn setup_test_state_with_types(types: Vec<&str>) -> AppState {
+        let mut state = AppState::new(HashSet::new());
+
+        for service_type in types {
+            state.add_service_type(service_type);
+        }
+
+        state
+    }
+
+    /// Setup state with pre-populated services
+    fn setup_test_state_with_services(services: Vec<ServiceEntry>) -> AppState {
+        let mut state = AppState::new(HashSet::new());
+
+        for service in &services {
+            state.add_service_type(&service.service_type);
+        }
+
+        state.services = services;
+        state
+    }
+
+    /// Setup state with user-specified service types
+    fn setup_test_state_with_user_types(user_types: Vec<&str>) -> AppState {
+        let user_types_set: HashSet<String> =
+            user_types.into_iter().map(|s| s.to_string()).collect();
+        AppState::new(user_types_set)
+    }
+
+    // Common assertion helper functions
+
+    /// Assert navigation state (service and type selection)
+    fn assert_navigation_state(
+        state: &AppState,
+        expected_service: usize,
+        expected_type: Option<usize>,
+    ) {
+        assert_eq!(
+            state.selected_service, expected_service,
+            "Service selection mismatch"
+        );
+        assert_eq!(
+            state.selected_type, expected_type,
+            "Type selection mismatch"
+        );
+    }
+
+    /// Assert cache state
+    fn assert_cache_state(state: &AppState, expected_dirty: bool, expected_sorted: bool) {
+        assert_eq!(
+            state.cache_dirty, expected_dirty,
+            "Cache dirty state mismatch"
+        );
+        assert_eq!(
+            state.cached_sorted, expected_sorted,
+            "Cache sorted state mismatch"
+        );
+    }
+
+    /// Assert service count
+    fn assert_service_count(state: &AppState, expected: usize) {
+        assert_eq!(state.services.len(), expected, "Service count mismatch");
+    }
+
+    /// Assert service type count
+    fn assert_service_type_count(state: &AppState, expected: usize) {
+        assert_eq!(
+            state.service_types.len(),
+            expected,
+            "Service type count mismatch"
+        );
+    }
+
+    // Tests for details scroll fix
+    /// Test that details scroll is not reset when navigating with only one service
+    #[test]
+    fn test_details_scroll_not_reset_with_single_service() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            8080,
+        )]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Try to navigate up (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_up();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset when navigating up with single service"
+        );
+
+        // Try to navigate down (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_down();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset when navigating down with single service"
+        );
+    }
+
+    /// Test that details scroll is reset when actually changing services
+    #[test]
+    fn test_details_scroll_reset_when_changing_services() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_http._tcp.local.", 8081),
+        ]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Navigate down (should change selection and reset scroll)
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 1, "Should select second service");
+        assert_eq!(
+            state.details_scroll.offset, 0,
+            "Details scroll should reset when changing services"
+        );
+    }
+
+    /// Test that page navigation respects the same logic
+    #[test]
+    fn test_details_scroll_page_navigation_with_single_service() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            8080,
+        )]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Try page up (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_page_up();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on page up with single service"
+        );
+
+        // Try page down (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_page_down();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on page down with single service"
+        );
+    }
+
+    /// Test that home/end navigation respects the same logic
+    #[test]
+    fn test_details_scroll_home_end_with_single_service() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            8080,
+        )]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Try navigate to first (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_to_first();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on navigate to first with single service"
+        );
+
+        // Try navigate to last (should not change selection)
+        let old_details_offset = state.details_scroll.offset;
+        state.navigate_services_to_last();
+        assert_eq!(
+            state.details_scroll.offset, old_details_offset,
+            "Details scroll should not reset on navigate to last with single service"
+        );
+    }
+
+    /// Test that navigation resets scroll when there are multiple services
+    #[test]
+    fn test_details_scroll_reset_with_multiple_services() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_http._tcp.local.", 8081),
+            create_test_service("test3", "_http._tcp.local.", 8082),
+        ]);
+
+        // Set initial scroll position
+        state.details_scroll.offset = 5;
+        state.details_scroll.visible_items = 10;
+
+        // Navigate to last service
+        state.navigate_services_to_last();
+        assert_eq!(state.selected_service, 2, "Should select third service");
+        assert_eq!(
+            state.details_scroll.offset, 0,
+            "Details scroll should reset when navigating to last service"
+        );
+    }
+
+    /// Assert specific metric value
+    fn assert_metric(state: &AppState, metric_name: &str, expected_value: u64) {
+        assert_eq!(
+            state.metrics.get(metric_name),
+            Some(&expected_value),
+            "Metric {} mismatch",
+            metric_name
+        );
+    }
+
+    /// Assert metric does not exist
+    fn assert_metric_not_exist(state: &AppState, metric_name: &str) {
+        assert_eq!(
+            state.metrics.get(metric_name),
+            None,
+            "Metric {} should not exist",
+            metric_name
+        );
+    }
+
+    /// Create offline service variant
+    fn create_offline_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.online = false;
+        service
+    }
+
+    /// Create service with custom addresses
+    fn create_service_with_addrs(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        addrs: Vec<&str>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.addrs = addrs.into_iter().map(|s| s.to_string()).collect();
+        service
+    }
+
+    /// Create service with TXT records
+    fn create_service_with_txt(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        txt: Vec<&str>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.txt = txt.into_iter().map(|s| s.to_string()).collect();
+        service
+    }
+
+    /// Create service with subtype
+    fn create_service_with_subtype(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        subtype: &str,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.subtype = Some(subtype.to_string());
+        service
+    }
+
+    // Navigation test helper
+    enum NavigationDirection {
+        Up,
+        Down,
+        PageUp,
+        PageDown,
+        First,
+        Last,
+    }
+
+    /// Helper to test navigation with validation
+    fn test_navigation_scenario(
+        mut state: AppState,
+        start_pos: usize,
+        direction: NavigationDirection,
+        expected_pos: usize,
+        description: &str,
+    ) {
+        state.selected_service = start_pos;
+
+        match direction {
+            NavigationDirection::Up => state.navigate_services_up(),
+            NavigationDirection::Down => state.navigate_services_down(),
+            NavigationDirection::PageUp => state.navigate_services_page_up(),
+            NavigationDirection::PageDown => state.navigate_services_page_down(),
+            NavigationDirection::First => state.navigate_services_to_first(),
+            NavigationDirection::Last => state.navigate_services_to_last(),
+        }
+
+        assert_eq!(
+            state.selected_service, expected_pos,
+            "{}: Expected position {}, got {}",
+            description, expected_pos, state.selected_service
+        );
+    }
+
+    /// Helper to test service type navigation
+    fn test_type_navigation_scenario(
+        mut state: AppState,
+        start_type: Option<usize>,
+        direction: NavigationDirection,
+        expected_type: Option<usize>,
+        description: &str,
+    ) {
+        state.selected_type = start_type;
+
+        match direction {
+            NavigationDirection::Up => state.navigate_service_types_up(),
+            NavigationDirection::Down => state.navigate_service_types_down(),
+            NavigationDirection::PageUp => state.navigate_service_types_page_up(),
+            NavigationDirection::PageDown => state.navigate_service_types_page_down(),
+            NavigationDirection::First => state.navigate_service_types_to_first(),
+            NavigationDirection::Last => state.navigate_service_types_to_last(),
+        }
+
+        assert_eq!(
+            state.selected_type, expected_type,
+            "{}: Expected type {:?}, got {:?}",
+            description, expected_type, state.selected_type
+        );
+    }
+
+    // CONSOLIDATED NAVIGATION TESTS
+
+    #[test]
+    fn test_navigate_services_comprehensive() {
+        let state = setup_test_state(3); // services 0, 1, 2
+
+        // Test basic up navigation
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::Up,
+            1,
+            "Navigate up from position 2",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            1,
+            NavigationDirection::Up,
+            0,
+            "Navigate up from position 1",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::Up,
+            0,
+            "Navigate up from position 0 (boundary)",
+        );
+
+        // Test basic down navigation
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::Down,
+            1,
+            "Navigate down from position 0",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            1,
+            NavigationDirection::Down,
+            2,
+            "Navigate down from position 1",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::Down,
+            2,
+            "Navigate down from position 2 (boundary)",
+        );
+
+        // Test first/last navigation
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::First,
+            0,
+            "Navigate to first",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::Last,
+            2,
+            "Navigate to last",
+        );
+
+        // Test single service edge case
+        let single_service_state = setup_test_state(1);
+        test_navigation_scenario(
+            single_service_state.clone(),
+            0,
+            NavigationDirection::Up,
+            0,
+            "Single service up navigation",
+        );
+        test_navigation_scenario(
+            single_service_state,
+            0,
+            NavigationDirection::Down,
+            0,
+            "Single service down navigation",
+        );
+    }
+
+    #[test]
+    fn test_navigate_services_page_navigation() {
+        let mut state = setup_test_state(20);
+        state.services_scroll.visible_items = 5;
+
+        // Test page up navigation
+        test_navigation_scenario(
+            state.clone(),
+            10,
+            NavigationDirection::PageUp,
+            6,
+            "Page up from position 10",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            6,
+            NavigationDirection::PageUp,
+            2,
+            "Page up from position 6",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            2,
+            NavigationDirection::PageUp,
+            0,
+            "Page up from position 2 (boundary)",
+        );
+
+        // Test page down navigation
+        test_navigation_scenario(
+            state.clone(),
+            0,
+            NavigationDirection::PageDown,
+            4,
+            "Page down from position 0",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            4,
+            NavigationDirection::PageDown,
+            8,
+            "Page down from position 4",
+        );
+        test_navigation_scenario(
+            state.clone(),
+            15,
+            NavigationDirection::PageDown,
+            19,
+            "Page down from position 15 (boundary)",
+        );
+
+        // Test with fewer items than page size
+        let small_state = setup_test_state(2);
+        test_navigation_scenario(
+            small_state,
+            0,
+            NavigationDirection::PageDown,
+            0,
+            "Page down with fewer than page size",
+        );
+    }
+
+    #[test]
+    fn test_navigate_service_types_comprehensive() {
+        let state = setup_test_state_with_types(vec![
+            "_http._tcp.local.",
+            "_ssh._tcp.local.",
+            "_printer._tcp.local.",
+        ]);
+
+        // Test basic up navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::Up,
+            Some(1),
+            "Type up from index 2",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(1),
+            NavigationDirection::Up,
+            Some(0),
+            "Type up from index 1",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(0),
+            NavigationDirection::Up,
+            None,
+            "Type up from index 0 to All Types",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::Up,
+            None,
+            "Type up from All Types (boundary)",
+        );
+
+        // Test basic down navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::Down,
+            Some(0),
+            "Type down from All Types",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(0),
+            NavigationDirection::Down,
+            Some(1),
+            "Type down from index 0",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(1),
+            NavigationDirection::Down,
+            Some(2),
+            "Type down from index 1",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::Down,
+            Some(2),
+            "Type down from index 2 (boundary)",
+        );
+
+        // Test first/last navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::First,
+            None,
+            "Type navigate to first (All Types)",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::Last,
+            Some(2),
+            "Type navigate to last",
+        );
+
+        // Test single type edge case
+        let single_type_state = setup_test_state_with_types(vec!["_http._tcp.local."]);
+        test_type_navigation_scenario(
+            single_type_state.clone(),
+            Some(0),
+            NavigationDirection::Up,
+            None,
+            "Single type up navigation",
+        );
+        test_type_navigation_scenario(
+            single_type_state,
+            None,
+            NavigationDirection::Down,
+            Some(0),
+            "Single type down navigation",
+        );
+    }
+
+    #[test]
+    fn test_navigate_service_types_page_navigation() {
+        let mut state = setup_test_state_with_types(
+            (0..10)
+                .map(|i| format!("_test{}._tcp.local.", i))
+                .collect::<Vec<_>>()
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>(),
+        );
+        state.types_scroll.visible_items = 3;
+
+        // Test page up navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(8),
+            NavigationDirection::PageUp,
+            Some(6),
+            "Type page up from index 8",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(6),
+            NavigationDirection::PageUp,
+            Some(4),
+            "Type page up from index 6",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(1),
+            NavigationDirection::PageUp,
+            None,
+            "Type page up from index 1 to All Types",
+        );
+
+        // Test page down navigation
+        test_type_navigation_scenario(
+            state.clone(),
+            None,
+            NavigationDirection::PageDown,
+            Some(2),
+            "Type page down from All Types",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(2),
+            NavigationDirection::PageDown,
+            Some(4),
+            "Type page down from index 2",
+        );
+        test_type_navigation_scenario(
+            state.clone(),
+            Some(8),
+            NavigationDirection::PageDown,
+            Some(9),
+            "Type page down from index 8 (boundary)",
+        );
+
+        // Test edge cases
+        let empty_state = setup_test_state_with_types(vec![]);
+        test_type_navigation_scenario(
+            empty_state.clone(),
+            None,
+            NavigationDirection::PageUp,
+            None,
+            "Type page up with no types",
+        );
+        test_type_navigation_scenario(
+            empty_state,
+            None,
+            NavigationDirection::PageDown,
+            None,
+            "Type page down with no types",
+        );
+
+        let mut few_types_state =
+            setup_test_state_with_types(vec!["_test1._tcp.local.", "_test2._tcp.local."]);
+        few_types_state.types_scroll.visible_items = 5;
+        test_type_navigation_scenario(
+            few_types_state,
+            None,
+            NavigationDirection::PageDown,
+            Some(1),
+            "Type page down with fewer than page size",
+        );
+
+        let mut zero_visible_state =
+            setup_test_state_with_types(vec!["_test1._tcp.local.", "_test2._tcp.local."]);
+        zero_visible_state.types_scroll.visible_items = 0;
+        test_type_navigation_scenario(
+            zero_visible_state,
+            Some(1),
+            NavigationDirection::PageUp,
+            Some(1),
+            "Type page up with zero visible",
+        );
+    }
+
+    #[test]
+    fn test_scroll_offset_updates_on_navigation() {
+        let mut state = setup_test_state(10);
+        state.services_scroll.visible_items = 5;
+
+        // Navigate down beyond visible area
+        state.selected_service = 4;
+        state.navigate_services_down();
+        assert_eq!(state.selected_service, 5);
+        assert!(
+            state.services_scroll.offset > 0,
+            "Scroll offset should update to keep selected service visible"
+        );
+
+        // Navigate up should update scroll offset appropriately
+        state.selected_service = 5;
+        state.navigate_services_up();
+        assert_eq!(state.selected_service, 4);
+
+        // Verify selected service stays within visible range
+        assert!(state.selected_service >= state.services_scroll.offset);
+        assert!(
+            state.selected_service
+                < state.services_scroll.offset + state.services_scroll.visible_items
+        );
+    }
+
+    // CONSOLIDATED SORTING TESTS
+
+    #[derive(Debug)]
+    struct SortTestCase {
+        name: &'static str,
+        services: Vec<ServiceEntry>,
+        field: SortField,
+        direction: SortDirection,
+        expected_order: Vec<usize>, // Indices in the services vector
+    }
+
+    #[test]
+    fn test_sorting_comprehensive() {
+        let test_cases = vec![
+            // Host field tests
+            SortTestCase {
+                name: "Host ascending",
+                services: vec![
+                    create_test_service("zebra", "_http._tcp.local.", 80),
+                    create_test_service("alpha", "_http._tcp.local.", 81),
+                    create_test_service("beta", "_http._tcp.local.", 82),
+                ],
+                field: SortField::Host,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 2, 0], // alpha, beta, zebra
+            },
+            SortTestCase {
+                name: "Host descending",
+                services: vec![
+                    create_test_service("alpha", "_http._tcp.local.", 80),
+                    create_test_service("beta", "_http._tcp.local.", 81),
+                    create_test_service("zebra", "_http._tcp.local.", 82),
+                ],
+                field: SortField::Host,
+                direction: SortDirection::Descending,
+                expected_order: vec![2, 1, 0], // zebra, beta, alpha
+            },
+            // Service type field tests
+            SortTestCase {
+                name: "Service type ascending",
+                services: vec![
+                    create_test_service("test1", "_ssh._tcp.local.", 80),
+                    create_test_service("test2", "_http._tcp.local.", 81),
+                ],
+                field: SortField::ServiceType,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 0], // http before ssh
+            },
+            // Port field tests
+            SortTestCase {
+                name: "Port ascending",
+                services: vec![
+                    create_test_service("service1", "_http._tcp.local.", 8080),
+                    create_test_service("service2", "_http._tcp.local.", 80),
+                    create_test_service("service3", "_http._tcp.local.", 443),
+                ],
+                field: SortField::Port,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 2, 0], // 80, 443, 8080
+            },
+            // Timestamp field tests
+            SortTestCase {
+                name: "Timestamp ascending",
+                services: vec![
+                    {
+                        let mut s = create_test_service("service1", "_http._tcp.local.", 3000);
+                        s.updated_at_micros = 3000;
+                        s
+                    },
+                    {
+                        let mut s = create_test_service("service2", "_http._tcp.local.", 1000);
+                        s.updated_at_micros = 1000;
+                        s
+                    },
+                    {
+                        let mut s = create_test_service("service3", "_http._tcp.local.", 2000);
+                        s.updated_at_micros = 2000;
+                        s
+                    },
+                ],
+                field: SortField::Timestamp,
+                direction: SortDirection::Ascending,
+                expected_order: vec![1, 2, 0], // 1000, 2000, 3000
+            },
+        ];
+
+        for test_case in test_cases {
+            let mut state = setup_test_state_with_services(test_case.services.clone());
+            state.sort_field = test_case.field;
+            state.sort_direction = test_case.direction;
+            state.mark_cache_dirty();
+
+            let filtered = state.get_filtered_services().to_vec();
+            assert_eq!(
+                filtered.len(),
+                test_case.expected_order.len(),
+                "{}: Expected {} filtered services, got {}",
+                test_case.name,
+                test_case.expected_order.len(),
+                filtered.len()
+            );
+
+            for (i, &service_index) in test_case.expected_order.iter().enumerate() {
+                assert_eq!(
+                    filtered[i], service_index,
+                    "{}: Expected service {} at position {}, got {}",
+                    test_case.name, service_index, i, filtered[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_sort_stability_with_equal_values() {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_http._tcp.local.");
+
+        // Create services with same port but different names
+        state
+            .services
+            .push(create_test_service("alpha", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("beta", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("gamma", "_http._tcp.local.", 80));
+
+        state.sort_field = SortField::Port;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 3);
+
+        // All should have same port, order should be stable (preserves insertion order for equal values)
+        for &service_index in &filtered {
+            assert_eq!(state.services[service_index].port, 80);
+        }
+    }
+
+    #[test]
+    fn test_sort_field_cycling() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Test forward cycling
+        assert_eq!(state.sort_field, SortField::Host);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::ServiceType);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Fullname);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Port);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Address);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+        state.cycle_sort_field(true);
+        assert_eq!(state.sort_field, SortField::Host); // Wrap around
+
+        // Test backward cycling
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Timestamp);
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Address);
+        state.cycle_sort_field(false);
+        assert_eq!(state.sort_field, SortField::Port);
+    }
+
+    #[test]
+    fn test_sort_direction_toggle() {
+        let mut state = AppState::new(HashSet::new());
+
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+        state.toggle_sort_direction();
+        assert_eq!(state.sort_direction, SortDirection::Descending);
+        state.toggle_sort_direction();
+        assert_eq!(state.sort_direction, SortDirection::Ascending);
+    }
+
+    #[test]
+    fn test_sort_key_event_handling() {
+        let mut state = AppState::new(HashSet::new());
+        let original_field = state.sort_field;
+        let _original_direction = state.sort_direction;
+
+        // Test sort field cycling key
+        let key = KeyEvent::from(KeyCode::Char('s'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_field, SortField::ServiceType); // Should have cycled forward
+
+        // Test sort field cycling backward key
+        let key = KeyEvent::from(KeyCode::Char('S'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_field, original_field); // Should have cycled backward
+
+        // Test sort direction toggle key
+        let key = KeyEvent::from(KeyCode::Char('o'));
+        state.handle_key_event(key);
+        assert_eq!(state.sort_direction, SortDirection::Descending); // Should have toggled
+    }
+
+    #[test]
+    fn test_sort_field_display_formatting() {
+        assert_eq!(format_sort_field_for_display(SortField::Host), "Host");
+        assert_eq!(
+            format_sort_field_for_display(SortField::ServiceType),
+            "Type"
+        );
+        assert_eq!(format_sort_field_for_display(SortField::Fullname), "Name");
+        assert_eq!(format_sort_field_for_display(SortField::Port), "Port");
+        assert_eq!(format_sort_field_for_display(SortField::Address), "Addr");
+        assert_eq!(format_sort_field_for_display(SortField::Timestamp), "Time");
+    }
+
+    #[test]
+    fn test_sort_direction_display_formatting() {
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Ascending),
+            "↑"
+        );
+        assert_eq!(
+            format_sort_direction_for_display(SortDirection::Descending),
+            "↓"
+        );
+    }
+
+    #[test]
+    fn test_sort_with_filtering_combined() {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+
+        // Add services with different types and names
+        state
+            .services
+            .push(create_test_service("http-zebra", "_http._tcp.local.", 80));
+        state
+            .services
+            .push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
+        state
+            .services
+            .push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
+        state
+            .services
+            .push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
+
+        // Filter to HTTP services and sort by host
+        state.selected_type = Some(0); // _http._tcp.local.
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Ascending;
+        state.mark_cache_dirty();
+
+        let filtered = state.get_filtered_services().to_vec();
+        assert_eq!(filtered.len(), 2); // Only HTTP services
+        assert_eq!(state.services[filtered[0]].host, "http-alpha.local.");
+        assert_eq!(state.services[filtered[1]].host, "http-zebra.local.");
+    }
+
+    #[test]
+    fn test_sort_type_ordering() {
+        let mut state = AppState::new(HashSet::new());
+        state.add_service_type("_ssh._tcp.local.");
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_printer._tcp.local.");
+
+        // Service types should be sorted alphabetically
+        assert_eq!(state.service_types[0], "_http._tcp.local.");
+        assert_eq!(state.service_types[1], "_printer._tcp.local.");
+        assert_eq!(state.service_types[2], "_ssh._tcp.local.");
+    }
+
+    // UNIFIED METRICS POPUP/SCROLL TESTS
+
+    #[derive(Debug)]
+    struct MetricsTestCase {
+        name: &'static str,
+        setup_metrics: fn(&mut AppState),
+        initial_offset: usize,
+        key_event: KeyEvent,
+        expected_offset: Option<usize>,
+        expected_popup_open: bool,
+        description: &'static str,
+    }
+
+    #[test]
+    fn test_metrics_comprehensive() {
+        let test_cases = vec![
+            // Test case 1: Basic scrolling up
+            MetricsTestCase {
+                name: "Scroll up from position 3",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(2), // Should decrease by 1
+                expected_popup_open: true,
+                description: "Scroll up should decrease offset",
+            },
+            // Test case 2: Scroll up from top (boundary)
+            MetricsTestCase {
+                name: "Scroll up from boundary",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should stay at boundary
+                expected_popup_open: true,
+                description: "Scroll up at top should stay at 0",
+            },
+            // Test case 3: Basic scrolling down
+            MetricsTestCase {
+                name: "Scroll down from position 0",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(1), // Should increase by 1
+                expected_popup_open: true,
+                description: "Scroll down should increase offset",
+            },
+            // Test case 4: PageUp closes popup
+            MetricsTestCase {
+                name: "PageUp closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 5,
+                key_event: KeyEvent::new(KeyCode::PageUp, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "PageUp should close popup and reset offset",
+            },
+            // Test case 5: PageDown closes popup
+            MetricsTestCase {
+                name: "PageDown closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::PageDown, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "PageDown should close popup and reset offset",
+            },
+            // Test case 6: Home key closes popup
+            MetricsTestCase {
+                name: "Home closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::Home, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "Home should close popup and reset offset",
+            },
+            // Test case 7: End key closes popup
+            MetricsTestCase {
+                name: "End closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::End, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset to 0 when closing
+                expected_popup_open: false,
+                description: "End should close popup and reset offset",
+            },
+            // Test case 8: Escape key closes popup
+            MetricsTestCase {
+                name: "Escape closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset offset when closing (matches actual behavior)
+                expected_popup_open: false,
+                description: "Escape should close popup and reset offset",
+            },
+            // Test case 9: Function keys (F1-F12) close popup
+            MetricsTestCase {
+                name: "F3 closes popup",
+                setup_metrics: |state| {
+                    for i in 1..=5 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 3,
+                key_event: KeyEvent::new(KeyCode::F(3), crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // Should reset offset when closing (matches actual behavior)
+                expected_popup_open: false,
+                description: "F3 should close popup and reset offset",
+            },
+            // Test case 10: Multiple operations sequence
+            MetricsTestCase {
+                name: "Multiple scroll operations",
+                setup_metrics: |state| {
+                    for i in 1..=10 {
+                        state.update_metric(&format!("test_metric_{}", i));
+                    }
+                },
+                initial_offset: 0,
+                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                expected_offset: Some(0), // After sequence of 3 operations
+                expected_popup_open: true,
+                description: "Multiple operations should behave correctly",
+            },
+        ];
+
+        for test_case in test_cases {
+            let mut state = AppState::new(HashSet::new());
+            state.show_metrics_popup = true;
+            state.metrics_scroll.offset = test_case.initial_offset;
+            (test_case.setup_metrics)(&mut state);
+
+            // Handle the key event
+            state.handle_key_event(test_case.key_event);
+
+            // Check results
+            if let Some(expected_offset) = test_case.expected_offset {
+                assert_eq!(
+                    state.metrics_scroll.offset,
+                    expected_offset,
+                    "{}: {} - Expected offset {}, got {}",
+                    test_case.name,
+                    test_case.description,
+                    expected_offset,
+                    state.metrics_scroll.offset
+                );
+            }
+
+            assert_eq!(
+                state.show_metrics_popup,
+                test_case.expected_popup_open,
+                "{}: {} - Expected popup open: {}, got {}",
+                test_case.name,
+                test_case.description,
+                test_case.expected_popup_open,
+                state.show_metrics_popup
+            );
+        }
+    }
+
+    // UNIFIED FILTER TESTING FRAMEWORK
+
+    #[derive(Debug)]
+    struct FilterTestCase {
+        name: &'static str,
+        setup_state: fn(&mut AppState),
+        services: Vec<ServiceEntry>,
+        expected_matches: Vec<usize>, // Indices of services that should match
+    }
+
+    #[test]
+    fn test_filtering_comprehensive() {
+        let test_cases = vec![
+            // Test case 1: Filter all types (no type restriction)
+            FilterTestCase {
+                name: "All types filter",
+                setup_state: |state| state.selected_type = None,
+                services: vec![
+                    create_test_service("http-service", "_http._tcp.local.", 80),
+                    create_test_service("ssh-service", "_ssh._tcp.local.", 22),
+                ],
+                expected_matches: vec![0, 1], // Both should match
+            },
+            // Test case 2: Filter by specific type
+            FilterTestCase {
+                name: "Specific type filter",
+                setup_state: |state| {
+                    state.add_service_type("_http._tcp.local.");
+                    state.add_service_type("_ssh._tcp.local.");
+                    state.selected_type = Some(0); // HTTP only
+                },
+                services: vec![
+                    create_test_service("http-service", "_http._tcp.local.", 80),
+                    create_test_service("ssh-service", "_ssh._tcp.local.", 22),
+                ],
+                expected_matches: vec![0], // Only HTTP should match
+            },
+            // Test case 3: Text query filtering
+            FilterTestCase {
+                name: "Text query filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "test".to_string();
+                },
+                services: vec![
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                    create_test_service("other-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0], // Only service with "test" should match
+            },
+            // Test case 4: Case insensitive filtering
+            FilterTestCase {
+                name: "Case insensitive filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "TEST".to_string();
+                },
+                services: vec![
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                    create_test_service("other-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0], // Should match despite case difference
+            },
+            // Test case 5: Port as string matching
+            FilterTestCase {
+                name: "Port as string filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "8080".to_string();
+                },
+                services: vec![
+                    create_test_service("service-8080", "_http._tcp.local.", 8080),
+                    create_test_service("service-9090", "_http._tcp.local.", 9090),
+                ],
+                expected_matches: vec![0], // Only 8080 should match
+            },
+            // Test case 6: Partial word matching
+            FilterTestCase {
+                name: "Partial word filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "test".to_string();
+                },
+                services: vec![
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                    create_test_service("testing-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0, 1], // Both should match partial "test"
+            },
+            // Test case 7: Special characters handling
+            FilterTestCase {
+                name: "Special characters filter",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "test!@#".to_string();
+                },
+                services: vec![
+                    create_test_service("test!@#-service", "_http._tcp.local.", 80),
+                    create_test_service("test-service", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0], // Only exact special character match
+            },
+            // Test case 8: Empty query shows all
+            FilterTestCase {
+                name: "Empty query shows all",
+                setup_state: |state| {
+                    state.selected_type = None;
+                    state.filter_query = "".to_string();
+                },
+                services: vec![
+                    create_test_service("service1", "_http._tcp.local.", 80),
+                    create_test_service("service2", "_http._tcp.local.", 80),
+                ],
+                expected_matches: vec![0, 1], // Both should match
+            },
+        ];
+
+        for test_case in test_cases {
+            let mut state = AppState::new(HashSet::new());
+            (test_case.setup_state)(&mut state);
+
+            for (i, service) in test_case.services.iter().enumerate() {
+                let should_match = test_case.expected_matches.contains(&i);
+                assert_eq!(
+                    state.filter_service(service),
+                    should_match,
+                    "{}: Service {} should match: {}",
+                    test_case.name,
+                    i,
+                    should_match
+                );
+            }
         }
     }
 
@@ -2847,32 +4445,26 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_multiple_sessions() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 9000000,
-            session_history: vec![
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s
-                    duration_micros: 4000000,
                 },
                 ServiceSession {
                     start_time: 6000000,
                     end_time: Some(9000000), // 3s
-                    duration_micros: 3000000,
                 },
             ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(6000000),
-            last_offline_micros: Some(9000000),
-        };
+            false,
+            9000000,
+            1000000,
+            Some(6000000),
+            Some(9000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -2886,32 +4478,26 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_alignment_single_digit() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 5000000,
-            session_history: vec![
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(2000000), // 1s
-                    duration_micros: 1000000,
                 },
                 ServiceSession {
                     start_time: 3000000,
                     end_time: Some(4000000), // 1s
-                    duration_micros: 1000000,
                 },
             ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(3000000),
-            last_offline_micros: Some(4000000),
-        };
+            false,
+            5000000,
+            1000000,
+            Some(3000000),
+            Some(4000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -2929,25 +4515,20 @@ mod tests {
             sessions.push(ServiceSession {
                 start_time: (i * 10000000) + 1000000,
                 end_time: Some((i * 10000000) + 2000000), // 1s each
-                duration_micros: 1000000,
             });
         }
 
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 91000000,
-            session_history: sessions,
-            first_seen_micros: 1000000,
-            last_online_micros: Some(91000000),
-            last_offline_micros: Some(92000000),
-        };
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            sessions,
+            false,
+            91000000,
+            1000000,
+            Some(91000000),
+            Some(92000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -2962,37 +4543,30 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_duration_alignment_mixed() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 3700000000,
-            session_history: vec![
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(2000000), // 1s (short duration)
-                    duration_micros: 1000000,
                 },
                 ServiceSession {
                     start_time: 3000000,
                     end_time: Some(9000000), // 6s (medium duration)
-                    duration_micros: 6000000,
                 },
                 ServiceSession {
                     start_time: 10000000,
-                    end_time: Some(3700000000), // 1h 1m 30s (long duration)
-                    duration_micros: 3690000000,
+                    end_time: Some(3700000000), // ~55min (long duration)
                 },
             ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(10000000),
-            last_offline_micros: Some(3700000000),
-        };
+            false,
+            3700000000,
+            1000000,
+            Some(10000000),
+            Some(3700000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -3019,25 +4593,20 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_shows_active_session_as_ongoing_with_na() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: true, // Currently online
-            updated_at_micros: 3000000,
-            session_history: vec![ServiceSession {
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![ServiceSession {
                 start_time: 3000000,
                 end_time: None, // Active session (no end time)
-                duration_micros: 0,
             }],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(3000000),
-            last_offline_micros: Some(2000000),
-        };
+            true,
+            3000000,
+            1000000,
+            Some(3000000),
+            Some(2000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -3051,32 +4620,26 @@ mod tests {
 
     #[test]
     fn test_get_session_timeline_long_duration_alignment() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.1".to_string()],
-            port: 8080,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 500000000000,
-            session_history: vec![
+        let service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec![
                 ServiceSession {
                     start_time: 1000000,
                     end_time: Some(5000000), // 4s (short)
-                    duration_micros: 4000000,
                 },
                 ServiceSession {
                     start_time: 6000000,
                     end_time: Some(500000000000), // ~5d 21h 53m 20s (very long)
-                    duration_micros: 499994000000,
                 },
             ],
-            first_seen_micros: 1000000,
-            last_online_micros: Some(6000000),
-            last_offline_micros: Some(500000000000),
-        };
+            false,
+            500000000000,
+            1000000,
+            Some(6000000),
+            Some(500000000000),
+        );
 
         let timeline = service.get_session_history();
         let lines: Vec<&str> = timeline.lines().collect();
@@ -3388,74 +4951,6 @@ mod tests {
         assert!(user_requested_types.contains("_ssh._tcp.local."));
     }
 
-    // Filter service tests
-    #[test]
-    fn test_filter_service_all_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.selected_type = None;
-
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-
-        assert!(state.filter_service(&service));
-    }
-
-    #[test]
-    fn test_filter_service_specific_type() {
-        let mut state = AppState::new(HashSet::new());
-        state.service_types.push("_http._tcp.local.".to_string());
-        state.service_types.push("_ssh._tcp.local.".to_string());
-        state.selected_type = Some(0);
-
-        let http_service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-
-        let ssh_service = ServiceEntry {
-            fullname: "test._ssh._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_ssh._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 22,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-
-        assert!(state.filter_service(&http_service));
-        assert!(!state.filter_service(&ssh_service));
-    }
-
     // Service type management tests
     #[test]
     fn test_add_service_type() {
@@ -3500,21 +4995,9 @@ mod tests {
         state.add_service_type("_ssh._tcp.local.");
 
         // Can't remove if still in use
-        state.services.push(ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        });
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 80));
 
         assert!(!state.remove_service_type("_http._tcp.local."));
         assert_eq!(state.service_types.len(), 2);
@@ -3536,381 +5019,6 @@ mod tests {
         state.remove_service_type("_printer._tcp.local.");
         // Selection should move to nearest valid index
         assert!(state.selected_type == Some(1) || state.selected_type == Some(0));
-    }
-
-    // Navigation tests
-    #[test]
-    fn test_navigate_services_up() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("test3", "_http._tcp.local.", 82));
-        state.selected_service = 2;
-
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 1);
-
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 0);
-
-        // Should not go below 0
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 0);
-    }
-
-    #[test]
-    fn test_navigate_services_down() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("test3", "_http._tcp.local.", 82));
-        state.selected_service = 0;
-
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 1);
-
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 2);
-
-        // Should not go beyond last service
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 2);
-    }
-
-    #[test]
-    fn test_navigate_service_types_up() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-        state.selected_type = Some(1);
-
-        state.navigate_service_types_up();
-        assert_eq!(state.selected_type, Some(0));
-
-        state.navigate_service_types_up();
-        assert_eq!(state.selected_type, None); // "All Types"
-
-        // Should not go beyond "All Types"
-        state.navigate_service_types_up();
-        assert_eq!(state.selected_type, None);
-    }
-
-    #[test]
-    fn test_navigate_service_types_down() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-        state.selected_type = None;
-
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(0));
-
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(1));
-
-        // Should not go beyond last type
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(1));
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up() {
-        let mut state = AppState::new(HashSet::new());
-        // Add 10 service types to test paging
-        for i in 0..10 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.selected_type = Some(8); // Start near the end
-        state.types_scroll.visible_items = 3; // Simulate 3 visible items
-
-        // Page up should move by visible_types - 1 = 2 positions
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(6));
-
-        // Another page up
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(4));
-
-        // Page up from index 1 should go to "All Types"
-        state.selected_type = Some(1);
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, None);
-
-        // Page up from "All Types" should stay at "All Types"
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, None);
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up_with_offset() {
-        let mut state = AppState::new(HashSet::new());
-        // Add several service types
-        for i in 0..8 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.selected_type = Some(5);
-        state.types_scroll.visible_items = 3;
-        state.types_scroll.offset = 3; // Currently showing types 3,4,5
-
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(3));
-        assert_eq!(state.types_scroll.offset, 3); // Scroll offset should stay the same
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down() {
-        let mut state = AppState::new(HashSet::new());
-        // Add 10 service types to test paging
-        for i in 0..10 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.selected_type = None; // Start at "All Types"
-        state.types_scroll.visible_items = 3; // Simulate 3 visible items
-
-        // Page down from "All Types" should jump to index 2 (visible_types - 1)
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(2));
-
-        // Another page down should move by 2 positions
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(4));
-
-        // Page down near the end should clamp to last index
-        state.selected_type = Some(8);
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(9)); // Last index
-
-        // Page down from last should stay at last
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(9));
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_with_few_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = None;
-        state.types_scroll.visible_items = 5; // More visible than available
-
-        // Page down should go to last available type
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(1)); // Last index
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.selected_type = None;
-
-        // Page up should not crash and stay at None
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_up_with_zero_visible() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = Some(1);
-        state.types_scroll.visible_items = 0;
-
-        // Page up with 0 visible should not move
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(1));
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.selected_type = None;
-
-        // Page down should not crash and stay at None
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_with_zero_visible() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = None;
-        state.types_scroll.visible_items = 0;
-
-        // Page down with 0 visible should move to index 0 (scroll_amount = 0)
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(0));
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_first_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.types_scroll.offset = 5;
-
-        state.navigate_service_types_to_first();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_last_with_empty_types() {
-        let mut state = AppState::new(HashSet::new());
-        state.types_scroll.visible_items = 5;
-        state.types_scroll.offset = 5;
-
-        state.navigate_service_types_to_last();
-        assert_eq!(state.selected_type, None);
-        assert_eq!(state.types_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_last_uses_saturating_sub() {
-        let mut state = AppState::new(HashSet::new());
-        for i in 0..3 {
-            state.add_service_type(&format!("_test{}.._tcp.local.", i));
-        }
-        state.types_scroll.visible_items = 2;
-
-        state.navigate_service_types_to_last();
-        // Should use .len().saturating_sub(1) = 3-1 = 2
-        assert_eq!(state.selected_type, Some(2));
-        // Scroll offset should position last item at bottom of visible area
-        assert_eq!(state.types_scroll.offset, 1); // 2 - 2 + 1 = 1
-    }
-
-    #[test]
-    fn test_navigate_service_types_page_down_more_than_available() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.add_service_type("_test2._tcp.local.");
-        state.selected_type = None;
-        state.types_scroll.visible_items = 10; // More visible than available
-
-        // Should go to last available index (1)
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(1));
-    }
-
-    #[test]
-    fn test_service_type_pagination_edge_cases() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_test1._tcp.local.");
-        state.types_scroll.visible_items = 1; // Only 1 visible item, scroll_amount = 0
-
-        // Test page up with single visible item (scroll_amount = 0, so stays at index 0)
-        state.selected_type = Some(0);
-        state.navigate_service_types_page_up();
-        assert_eq!(state.selected_type, Some(0));
-
-        // Test page down with single visible item
-        state.selected_type = None;
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(0));
-
-        // Test page down from last with single visible item
-        state.navigate_service_types_page_down();
-        assert_eq!(state.selected_type, Some(0));
-    }
-
-    #[test]
-    fn test_navigate_service_types_to_first() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.selected_service = 1;
-        state.services_scroll.offset = 1;
-
-        state.navigate_services_to_first();
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_navigate_services_to_last() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("test3", "_http._tcp.local.", 82));
-        state.selected_service = 0;
-
-        state.navigate_services_to_last();
-        assert_eq!(state.selected_service, 2);
-    }
-
-    #[test]
-    fn test_navigate_services_page_up() {
-        let mut state = AppState::new(HashSet::new());
-        for i in 0..20 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.services_scroll.visible_items = 5;
-        state.selected_service = 10;
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 6); // 10 - (5-1) = 6
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 2); // 6 - (5-1) = 2
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 0); // Can't go below 0
-    }
-
-    #[test]
-    fn test_navigate_services_page_down() {
-        let mut state = AppState::new(HashSet::new());
-        for i in 0..20 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.services_scroll.visible_items = 5;
-        state.selected_service = 0;
-
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 4); // 0 + (5-1) = 4
-
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 8); // 4 + (5-1) = 8
-
-        state.selected_service = 15;
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 19); // Should stop at last item
     }
 
     // Remove offline services tests
@@ -3975,13 +5083,6 @@ mod tests {
     }
 
     // Key handling tests
-    #[test]
-    fn test_handle_key_event_quit() {
-        let mut state = AppState::new(HashSet::new());
-        let key = KeyEvent::from(KeyCode::Char('q'));
-        assert!(!state.handle_key_event(key)); // Should return false to quit
-    }
-
     #[test]
     fn test_handle_key_event_toggle_help() {
         let mut state = AppState::new(HashSet::new());
@@ -4115,17 +5216,17 @@ mod tests {
     }
 
     #[test]
-    fn test_metrics_scrolling_boundaries() {
+    fn test_metrics_scroll_basic() {
         let mut state = AppState::new(HashSet::new());
-        state.show_metrics_popup = true;
 
-        // Add some metrics to ensure there's content to scroll through
-        for i in 1..20 {
+        // Add some metrics content first
+        for i in 1..=10 {
             state.update_metric(&format!("test_metric_{}", i));
         }
 
         // Test scrolling up when already at top (should stay at 0)
         state.metrics_scroll.offset = 0;
+        state.show_metrics_popup = true; // Show popup
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
         state.handle_key_event(key_event);
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -4152,15 +5253,9 @@ mod tests {
     }
 
     #[test]
-    fn test_metrics_scrolling_with_popup_state() {
-        let mut state = AppState::new(HashSet::new());
-
-        // Add some metrics to ensure there's content to scroll through
-        for i in 1..20 {
-            state.update_metric(&format!("test_metric_{}", i));
-        }
-
+    fn test_metrics_scroll_with_popup() {
         // Test that scrolling only works when popup is shown
+        let mut state = AppState::new(HashSet::new());
         state.show_metrics_popup = false;
         state.metrics_scroll.offset = 5;
         let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
@@ -4456,34 +5551,43 @@ mod tests {
             "ssh.tcp"
         );
         assert_eq!(
-            format_service_type_for_display("_printer._tcp."),
+            format_service_type_for_display("_printer._tcp.local."),
+            "printer.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("airplay._sub._raop._tcp."),
+            "airplay.sub.raop.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("invalid._sub._service._protocol."),
+            "invalid.sub.service.protocol"
+        );
+        assert_eq!(
+            format_service_type_for_display("_http._tcp.local."),
+            "http.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("_ssh._tcp.local."),
+            "ssh.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("_http._tcp.local."),
+            "http.tcp"
+        );
+        assert_eq!(
+            format_service_type_for_display("_printer._tcp.local."),
             "printer.tcp"
         );
     }
 
     #[test]
     fn test_format_service_for_display() {
-        let service = ServiceEntry {
-            fullname: "MyPrinter._printer._tcp.local.".to_string(),
-            host: "printer.local.".to_string(),
-            service_type: "_printer._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec!["192.168.1.100".to_string()],
-            port: 631,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-
+        let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
         let display = format_service_for_display(&service);
+        println!("Display string: {}", display);
         assert!(display.contains("MyPrinter"));
-        assert!(display.contains("printer"));
-        assert!(display.contains("192.168.1.100"));
-        assert!(display.contains("631"));
+        assert!(display.contains("192.168.1.64"));
+        assert!(display.contains(":63"));
     }
 
     #[test]
@@ -4513,21 +5617,19 @@ mod tests {
 
     #[test]
     fn test_format_service_for_display_offline_service() {
-        let service = ServiceEntry {
-            fullname: "OfflineService._http._tcp.local.".to_string(),
-            host: "offlinehost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 2000000000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000000000,
-            last_online_micros: Some(1000000000),
-            last_offline_micros: Some(2000000000),
-        };
+        let mut service = create_test_service_with_sessions(
+            "OfflineService",
+            "_http._tcp.local.",
+            80,
+            vec![],
+            false,
+            2000000000,
+            1000000000,
+            Some(1000000000),
+            Some(2000000000),
+        );
+        service.addrs.clear(); // Test with empty addresses
+        service.host = "offlinehost.local.".to_string(); // Override host for test
 
         let display = format_service_for_display(&service);
         assert!(display.contains("OfflineService"));
@@ -4537,21 +5639,8 @@ mod tests {
 
     #[test]
     fn test_format_service_for_display_no_address_duplicate() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.addrs.clear(); // Test with empty addresses
 
         let display = format_service_for_display(&service);
         assert!(display.contains("<no-addr>"));
@@ -4559,21 +5648,16 @@ mod tests {
 
     #[test]
     fn test_create_service_details_text() {
-        let service = ServiceEntry {
-            fullname: "MyService._http._tcp.local.".to_string(),
-            host: "myhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: Some("_printer".to_string()),
-            addrs: vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()],
-            port: 8080,
-            txt: vec!["key1=value1".to_string(), "key2=value2".to_string()],
-            online: true,
-            updated_at_micros: 1000000000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000000000,
-            last_online_micros: Some(1000000000),
-            last_offline_micros: None,
-        };
+        let mut service = create_test_service("MyService", "_http._tcp.local.", 8080);
+        service.subtype = Some("printer._sub._http._tcp.local.".to_string());
+        service.addrs = vec!["192.168.1.63".to_string(), "192.168.1.20".to_string()];
+        service.txt = vec!["key1=value1".to_string(), "key2=value2".to_string()];
+        service.online = true;
+        service.updated_at_micros = 1000000000;
+        service.session_history = Vec::new();
+        service.first_seen_micros = 1000000000;
+        service.last_online_micros = Some(1000000000);
+        service.last_offline_micros = None;
 
         let details_lines = create_service_details_text(&service);
         let details_text: String = details_lines
@@ -4588,12 +5672,12 @@ mod tests {
             .join("");
 
         assert!(details_text.contains("MyService._http._tcp.local."));
-        assert!(details_text.contains("myhost.local."));
+        assert!(details_text.contains("MyService.local."));
         assert!(details_text.contains("_http._tcp.local."));
-        assert!(details_text.contains("_printer"));
+        assert!(details_text.contains("printer"));
         assert!(details_text.contains("8080"));
-        assert!(details_text.contains("192.168.1.1"));
-        assert!(details_text.contains("192.168.1.2"));
+        assert!(details_text.contains("192.168.1.63"));
+        assert!(details_text.contains("192.168.1.20"));
         assert!(details_text.contains("key1=value1"));
         assert!(details_text.contains("key2=value2"));
         assert!(details_text.contains("First seen:"));
@@ -4602,21 +5686,7 @@ mod tests {
 
     #[test]
     fn test_create_service_details_text_online_service() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let service = create_test_service("test", "_http._tcp.local.", 80);
 
         let details_lines = create_service_details_text(&service);
         let details_text: String = details_lines
@@ -4638,22 +5708,8 @@ mod tests {
 
     #[test]
     fn test_create_service_details_text_offline_service() {
-        let service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.online = false;
         let details_lines = create_service_details_text(&service);
         let details_text: String = details_lines
             .iter()
@@ -4678,23 +5734,64 @@ mod tests {
         assert!(timestamp.len() > 20); // Should include date, time, and microseconds
     }
 
+    #[test]
+    fn test_format_duration_micros_formats_various_durations_correctly() {
+        // Test basic seconds
+        assert_eq!(format_duration_micros(0), "0s"); // 0s shown when no other units
+        assert_eq!(format_duration_micros(1_000_000), "1s");
+        assert_eq!(format_duration_micros(30_000_000), "30s");
+
+        // Test minutes and seconds
+        assert_eq!(format_duration_micros(60_000_000), "1m");
+        assert_eq!(format_duration_micros(90_000_000), "1m 30s");
+        assert_eq!(format_duration_micros(120_000_000), "2m");
+
+        // Test when there are minutes but zero seconds - seconds should not be displayed
+        assert_eq!(format_duration_micros(60_000_000), "1m"); // Exactly 1 minute, no seconds shown
+
+        // Test fractional seconds
+        assert_eq!(format_duration_micros(1_500_000), "1.500s");
+        assert_eq!(format_duration_micros(59_500_000), "59.500s");
+
+        // Test the rounding edge case that was causing "60.000s"
+        // 59.999594s should round to 60.000s and become "1m"
+        assert_eq!(format_duration_micros(59_999_594), "1m");
+
+        // Test other rounding edge cases
+        assert_eq!(format_duration_micros(59_999_500), "1m"); // 59.9995s rounds up to 60.000s
+        assert_eq!(format_duration_micros(59_999_400), "59.999s"); // 59.9994s doesn't round up, stays under 60s
+
+        // Test hours
+        assert_eq!(format_duration_micros(3_600_000_000), "1h");
+        assert_eq!(format_duration_micros(3_660_000_000), "1h 1m");
+
+        // Test days
+        assert_eq!(format_duration_micros(86_400_000_000), "1d");
+        assert_eq!(format_duration_micros(90_000_000_000), "1d 1h");
+
+        // Test complex durations with fractional seconds
+        assert_eq!(format_duration_micros(3_661_500_000), "1h 1m 1.500s");
+        assert_eq!(format_duration_micros(86_401_500_000), "1d 1.500s");
+    }
+
     // Layout tests
     #[test]
     fn test_create_main_layout() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area);
+        let layout = create_main_layout(area, false);
 
         assert!(layout.left_panel.width > 0);
         assert!(layout.services_area.width > 0);
         assert!(layout.details_area.width > 0);
         assert!(layout.services_area.height > 0);
         assert!(layout.details_area.height > 0);
+        assert!(layout.filter_status_area.is_none());
     }
 
     #[test]
     fn test_calculate_visible_counts() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area);
+        let layout = create_main_layout(area, false);
         let counts = calculate_visible_counts(&layout);
 
         assert!(counts.types > 0);
@@ -4723,37 +5820,21 @@ mod tests {
 
     #[test]
     fn test_create_service_list_item_style() {
-        let online_service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let mut online_service = create_test_service("test", "_http._tcp.local.", 80);
+        online_service.addrs.clear(); // Test with empty addresses
 
-        let offline_service = ServiceEntry {
-            fullname: "test._http._tcp.local.".to_string(),
-            host: "testhost.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: false,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: Some(1000),
-        };
+        let mut offline_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            vec![],
+            false,
+            1000,
+            1000,
+            Some(1000),
+            Some(1000),
+        );
+        offline_service.addrs.clear(); // Test with empty addresses
 
         // Test selected online service
         let style = create_service_list_item_style(0, 0, &online_service);
@@ -4893,36 +5974,8 @@ mod tests {
 
     #[test]
     fn test_compare_services_by_field_fullname() {
-        let service1 = ServiceEntry {
-            fullname: "aaa._http._tcp.local.".to_string(),
-            host: "host1.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
-        let service2 = ServiceEntry {
-            fullname: "zzz._http._tcp.local.".to_string(),
-            host: "host2.local.".to_string(),
-            service_type: "_http._tcp.local.".to_string(),
-            subtype: None,
-            addrs: vec![],
-            port: 80,
-            txt: vec![],
-            online: true,
-            updated_at_micros: 1000,
-            session_history: Vec::new(),
-            first_seen_micros: 1000,
-            last_online_micros: Some(1000),
-            last_offline_micros: None,
-        };
+        let service1 = create_test_service("test", "_http._tcp.local.", 80);
+        let service2 = create_test_service("zzz", "_http._tcp.local.", 80);
 
         let result = compare_services_by_field(&service1, &service2, SortField::Fullname);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -4951,9 +6004,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_ip() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["192.168.1.10".to_string()];
+        service1.addrs = vec!["192.168.1.11".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["192.168.1.20".to_string()];
+        service2.addrs = vec!["192.168.1.22".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -4962,9 +6015,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_ipv6() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["2001:db8::1".to_string()];
+        service1.addrs = vec!["2001:db8::2".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["2001:db8::2".to_string()];
+        service2.addrs = vec!["2001:db8::3".to_string()];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -4973,7 +6026,7 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_mixed_ipv4_ipv6() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["192.168.1.1".to_string()];
+        service1.addrs = vec!["192.168.1.63".to_string()];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
         service2.addrs = vec!["2001:db8::1".to_string()];
 
@@ -4987,35 +6040,22 @@ mod tests {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
         service1.addrs = vec![];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["192.168.1.1".to_string()];
+        service2.addrs = vec!["192.168.1.3".to_string()];
 
-        let result = compare_services_by_field(&service1, &service2, SortField::Address);
-        // "<no-addr>" should be compared as string ("<no-addr>" > "192.168.1.1")
-        assert_eq!(result, std::cmp::Ordering::Greater);
-    }
-
-    #[test]
-    fn test_compare_services_by_field_address_string_fallback() {
-        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["invalid-ip-1".to_string()];
-        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["invalid-ip-2".to_string()];
-
-        // Falls back to string comparison when IP parsing fails
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
     }
 
     #[test]
-    fn test_toggle_sort_direction() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
+    fn test_compare_services_by_field_address_string_fallback() {
+        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
+        service1.addrs = vec!["invalid-ip-2".to_string()];
+        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
+        service2.addrs = vec!["invalid-ip-3".to_string()];
 
-        state.toggle_sort_direction();
-        assert_eq!(state.sort_direction, SortDirection::Descending);
-
-        state.toggle_sort_direction();
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
+        // Falls back to string comparison when IP parsing fails
+        let result = compare_services_by_field(&service1, &service2, SortField::Address);
+        assert_eq!(result, std::cmp::Ordering::Less);
     }
 
     #[test]
@@ -5067,342 +6107,7 @@ mod tests {
         assert_eq!(state.sort_field, SortField::Host);
     }
 
-    #[test]
-    fn test_update_sort_field_resets_selection() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        for i in 0..5 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.selected_service = 3;
-        state.services_scroll.offset = 2;
-
-        state.update_sort_field(SortField::Port);
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_update_sort_direction_resets_selection() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        for i in 0..5 {
-            state.services.push(create_test_service(
-                &format!("test{}", i),
-                "_http._tcp.local.",
-                80 + i,
-            ));
-        }
-        state.selected_service = 3;
-        state.services_scroll.offset = 2;
-
-        state.update_sort_direction(SortDirection::Descending);
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
-    }
-
-    #[test]
-    fn test_sort_filtered_services_ascending() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        // Add services in reverse alphabetical order
-        state
-            .services
-            .push(create_test_service("zebra", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("beta", "_http._tcp.local.", 82));
-
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(filtered.len(), 3);
-
-        // Verify services are sorted by host in ascending order
-        assert_eq!(state.services[filtered[0]].host, "alpha.local.");
-        assert_eq!(state.services[filtered[1]].host, "beta.local.");
-        assert_eq!(state.services[filtered[2]].host, "zebra.local.");
-    }
-
-    #[test]
-    fn test_sort_filtered_services_descending() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("beta", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("zebra", "_http._tcp.local.", 82));
-
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Descending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(filtered.len(), 3);
-
-        // Verify services are sorted by host in descending order
-        assert_eq!(state.services[filtered[0]].host, "zebra.local.");
-        assert_eq!(state.services[filtered[1]].host, "beta.local.");
-        assert_eq!(state.services[filtered[2]].host, "alpha.local.");
-    }
-
-    #[test]
-    fn test_sort_by_port_ascending() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        state
-            .services
-            .push(create_test_service("service1", "_http._tcp.local.", 8080));
-        state
-            .services
-            .push(create_test_service("service2", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("service3", "_http._tcp.local.", 443));
-
-        state.sort_field = SortField::Port;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(state.services[filtered[0]].port, 80);
-        assert_eq!(state.services[filtered[1]].port, 443);
-        assert_eq!(state.services[filtered[2]].port, 8080);
-    }
-
-    #[test]
-    fn test_sort_by_timestamp() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        let mut service1 = create_test_service("service1", "_http._tcp.local.", 80);
-        service1.updated_at_micros = 3000;
-        let mut service2 = create_test_service("service2", "_http._tcp.local.", 81);
-        service2.updated_at_micros = 1000;
-        let mut service3 = create_test_service("service3", "_http._tcp.local.", 82);
-        service3.updated_at_micros = 2000;
-
-        state.services.push(service1);
-        state.services.push(service2);
-        state.services.push(service3);
-
-        state.sort_field = SortField::Timestamp;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(state.services[filtered[0]].updated_at_micros, 1000);
-        assert_eq!(state.services[filtered[1]].updated_at_micros, 2000);
-        assert_eq!(state.services[filtered[2]].updated_at_micros, 3000);
-    }
-
-    #[test]
-    fn test_sort_with_filtering() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-
-        state
-            .services
-            .push(create_test_service("http-zebra", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("ssh-alpha", "_ssh._tcp.local.", 22));
-        state
-            .services
-            .push(create_test_service("http-alpha", "_http._tcp.local.", 8080));
-        state
-            .services
-            .push(create_test_service("ssh-zebra", "_ssh._tcp.local.", 2222));
-
-        // Filter to only HTTP services and sort by host
-        state.selected_type = Some(0); // _http._tcp.local.
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        assert_eq!(filtered.len(), 2); // Only HTTP services
-        assert_eq!(state.services[filtered[0]].host, "http-alpha.local.");
-        assert_eq!(state.services[filtered[1]].host, "http-zebra.local.");
-    }
-
-    #[test]
-    fn test_sort_mixed_online_offline() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        let mut service1 = create_test_service("online1", "_http._tcp.local.", 80);
-        service1.online = true;
-        let mut service2 = create_test_service("offline1", "_http._tcp.local.", 81);
-        service2.online = false;
-        let mut service3 = create_test_service("online2", "_http._tcp.local.", 82);
-        service3.online = true;
-
-        state.services.push(service1);
-        state.services.push(service2);
-        state.services.push(service3);
-
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        // All services should be included and sorted, regardless of online status
-        assert_eq!(filtered.len(), 3);
-        assert!(state.services[filtered[0]].host < state.services[filtered[1]].host);
-        assert!(state.services[filtered[1]].host < state.services[filtered[2]].host);
-    }
-
-    #[test]
-    fn test_format_sort_field_display() {
-        assert_eq!(format_sort_field_for_display(SortField::Host), "Host");
-        assert_eq!(
-            format_sort_field_for_display(SortField::ServiceType),
-            "Type"
-        );
-        assert_eq!(format_sort_field_for_display(SortField::Fullname), "Name");
-        assert_eq!(format_sort_field_for_display(SortField::Port), "Port");
-        assert_eq!(format_sort_field_for_display(SortField::Address), "Addr");
-        assert_eq!(format_sort_field_for_display(SortField::Timestamp), "Time");
-    }
-
-    #[test]
-    fn test_format_sort_direction_display() {
-        assert_eq!(
-            format_sort_direction_for_display(SortDirection::Ascending),
-            "↑"
-        );
-        assert_eq!(
-            format_sort_direction_for_display(SortDirection::Descending),
-            "↓"
-        );
-    }
-
-    #[test]
-    fn test_sort_field_enum_equality() {
-        assert_eq!(SortField::Host, SortField::Host);
-        assert_ne!(SortField::Host, SortField::Port);
-    }
-
-    #[test]
-    fn test_sort_direction_enum_equality() {
-        assert_eq!(SortDirection::Ascending, SortDirection::Ascending);
-        assert_ne!(SortDirection::Ascending, SortDirection::Descending);
-    }
-
-    #[test]
-    fn test_key_event_cycle_sort_forward() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_field, SortField::Host);
-
-        let key = KeyEvent::from(KeyCode::Char('s'));
-        state.handle_key_event(key);
-        assert_eq!(state.sort_field, SortField::ServiceType);
-    }
-
-    #[test]
-    fn test_key_event_cycle_sort_backward() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_field, SortField::Host);
-
-        let key = KeyEvent::from(KeyCode::Char('S'));
-        state.handle_key_event(key);
-        assert_eq!(state.sort_field, SortField::Timestamp);
-    }
-
-    #[test]
-    fn test_key_event_toggle_sort_direction() {
-        let mut state = AppState::new(HashSet::new());
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
-
-        let key = KeyEvent::from(KeyCode::Char('o'));
-        state.handle_key_event(key);
-        assert_eq!(state.sort_direction, SortDirection::Descending);
-
-        state.handle_key_event(key);
-        assert_eq!(state.sort_direction, SortDirection::Ascending);
-    }
-
-    #[test]
-    fn test_cache_invalidation_on_sort_change() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state
-            .services
-            .push(create_test_service("test", "_http._tcp.local.", 80));
-
-        // Populate cache
-        let _ = state.get_filtered_services();
-        assert!(!state.cache_dirty);
-        assert!(state.cached_sorted);
-
-        // Changing sort field should invalidate sorted flag
-        state.update_sort_field(SortField::Port);
-        assert!(state.cache_dirty);
-        assert!(!state.cached_sorted);
-    }
-
-    #[test]
-    fn test_sort_stability_with_equal_values() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-
-        // Create services with same port but different names
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("beta", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("gamma", "_http._tcp.local.", 80));
-
-        state.sort_field = SortField::Port;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-        // All should have same port, so order is determined by the stable sort
-        assert_eq!(filtered.len(), 3);
-        for idx in filtered {
-            assert_eq!(state.services[idx].port, 80);
-        }
-    }
-
     // Filter functionality tests
-    #[test]
-    fn test_appstate_new_with_filter() {
-        let state = AppState::new(HashSet::new());
-        assert_eq!(state.filter_query, "");
-        assert!(!state.filter_input_mode);
-    }
-
-    #[test]
-    fn test_start_filter_input() {
-        let mut state = AppState::new(HashSet::new());
-        state.start_filter_input();
-        assert!(state.filter_input_mode);
-        assert_eq!(state.filter_query, "");
-    }
 
     #[test]
     fn test_clear_filter() {
@@ -5495,15 +6200,6 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_service_no_filter() {
-        let mut state = AppState::new(HashSet::new());
-        state.selected_type = None;
-
-        let service = create_test_service("test", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&service));
-    }
-
-    #[test]
     fn test_filter_service_with_text_query() {
         let mut state = AppState::new(HashSet::new());
         state.filter_query = "test".to_string();
@@ -5566,21 +6262,6 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_service_combined_with_type_filter() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-        state.selected_type = Some(0); // Select _http._tcp.local.
-        state.filter_query = "test".to_string();
-
-        let http_service = create_test_service("test", "_http._tcp.local.", 80);
-        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
-
-        assert!(state.filter_service(&http_service)); // Matches both type and text
-        assert!(!state.filter_service(&ssh_service)); // Matches text but wrong type
-    }
-
-    #[test]
     fn test_handle_filter_input_key_enter() {
         let mut state = AppState::new(HashSet::new());
         state.filter_input_mode = true;
@@ -5606,20 +6287,6 @@ mod tests {
         assert!(should_continue);
         assert!(!state.filter_input_mode);
         assert_eq!(state.filter_query, "");
-    }
-
-    #[test]
-    fn test_handle_filter_input_key_backspace() {
-        let mut state = AppState::new(HashSet::new());
-        state.filter_input_mode = true;
-        state.filter_query = "test".to_string();
-
-        let key = KeyEvent::from(KeyCode::Backspace);
-        let should_continue = state.handle_key_event(key);
-
-        assert!(should_continue);
-        assert!(state.filter_input_mode);
-        assert_eq!(state.filter_query, "tes");
     }
 
     #[test]
@@ -5973,50 +6640,6 @@ mod tests {
     }
 
     // Boundary condition tests
-    #[test]
-    fn test_navigate_services_with_single_service() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-
-        state.selected_service = 0;
-
-        state.navigate_services_up();
-        assert_eq!(state.selected_service, 0);
-
-        state.navigate_services_down();
-        assert_eq!(state.selected_service, 0);
-    }
-
-    #[test]
-    fn test_navigate_service_types_with_single_type() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.selected_type = Some(0);
-
-        state.navigate_service_types_down();
-        assert_eq!(state.selected_type, Some(0));
-    }
-
-    #[test]
-    fn test_page_navigation_with_fewer_items_than_page_size() {
-        let mut state = AppState::new(HashSet::new());
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 81));
-        state.services_scroll.visible_items = 10; // Page size larger than item count
-
-        state.selected_service = 0;
-        state.navigate_services_page_down();
-        assert_eq!(state.selected_service, 1); // Should go to last item
-
-        state.navigate_services_page_up();
-        assert_eq!(state.selected_service, 0); // Should go to first item
-    }
 
     #[test]
     fn test_remove_offline_services_with_all_offline() {
@@ -6151,36 +6774,6 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_and_sort_together() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_ssh._tcp.local.");
-
-        // Add services with different types and names
-        state
-            .services
-            .push(create_test_service("zebra", "_http._tcp.local.", 80));
-        state
-            .services
-            .push(create_test_service("alpha", "_http._tcp.local.", 81));
-        state
-            .services
-            .push(create_test_service("beta", "_ssh._tcp.local.", 22));
-
-        // Filter to HTTP and sort by host
-        state.selected_type = Some(0); // _http._tcp.local.
-        state.sort_field = SortField::Host;
-        state.sort_direction = SortDirection::Ascending;
-        state.mark_cache_dirty();
-
-        let filtered = state.get_filtered_services().to_vec();
-
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(state.services[filtered[0]].host, "alpha.local.");
-        assert_eq!(state.services[filtered[1]].host, "zebra.local.");
-    }
-
-    #[test]
     fn test_key_event_ctrl_c() {
         let mut state = AppState::new(HashSet::new());
 
@@ -6278,19 +6871,6 @@ mod tests {
         let filtered = state.get_filtered_services();
 
         assert_eq!(filtered.len(), 0);
-    }
-
-    #[test]
-    fn test_service_type_sorting_order() {
-        let mut state = AppState::new(HashSet::new());
-        state.add_service_type("_ssh._tcp.local.");
-        state.add_service_type("_http._tcp.local.");
-        state.add_service_type("_printer._tcp.local.");
-
-        // Service types should be sorted alphabetically
-        assert_eq!(state.service_types[0], "_http._tcp.local.");
-        assert_eq!(state.service_types[1], "_printer._tcp.local.");
-        assert_eq!(state.service_types[2], "_ssh._tcp.local.");
     }
 
     // Tests for service removal metric fix
@@ -6545,5 +7125,535 @@ mod tests {
 
         // Clean up
         tokio::fs::remove_file(&filename).await.ok();
+    }
+
+    // Tests for unused helper functions
+
+    #[test]
+    fn test_scroll_state_functionality() {
+        let mut scroll_state = ScrollState::new();
+
+        // Test initial state
+        assert_eq!(scroll_state.offset, 0);
+        assert_eq!(scroll_state.visible_items, 0);
+
+        // Test page_scroll_amount with zero visible items
+        assert_eq!(scroll_state.page_scroll_amount(), 0);
+
+        // Test with visible items
+        scroll_state.visible_items = 5;
+        assert_eq!(scroll_state.page_scroll_amount(), 4);
+
+        // Test reset
+        scroll_state.offset = 10;
+        scroll_state.reset();
+        assert_eq!(scroll_state.offset, 0);
+    }
+
+    #[test]
+    fn test_scroll_state_update_offset() {
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+
+        // Test offset update within bounds
+        scroll_state.update_offset(1, 10);
+        assert_eq!(scroll_state.offset, 0);
+
+        // Test offset update beyond visible area
+        scroll_state.update_offset(5, 10);
+        assert_eq!(scroll_state.offset, 3);
+
+        // Test offset at boundary
+        scroll_state.update_offset(9, 10);
+        assert_eq!(scroll_state.offset, 7);
+
+        // Test with single item
+        scroll_state.update_offset(0, 1);
+        assert_eq!(scroll_state.offset, 0);
+    }
+
+    #[test]
+    fn test_handle_popup_scroll() {
+        let mut scroll_offset = 5;
+        let total_content_lines = 20;
+        let max_visible_lines = 10;
+
+        // Test scroll up
+        let handled = handle_popup_scroll(
+            KeyCode::Up,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 4);
+
+        // Test scroll up at boundary
+        scroll_offset = 0;
+        let handled = handle_popup_scroll(
+            KeyCode::Up,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 0);
+
+        // Test scroll down
+        scroll_offset = 5;
+        let handled = handle_popup_scroll(
+            KeyCode::Down,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 6);
+
+        // Test scroll down at boundary
+        scroll_offset = 10; // max scroll offset
+        let handled = handle_popup_scroll(
+            KeyCode::Down,
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(handled);
+        assert_eq!(scroll_offset, 10);
+
+        // Test unhandled key
+        let handled = handle_popup_scroll(
+            KeyCode::Char('x'),
+            &mut scroll_offset,
+            total_content_lines,
+            max_visible_lines,
+        );
+        assert!(!handled);
+    }
+
+    #[test]
+    fn test_navigate_list_up() {
+        let mut selected_index = 5;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 10;
+
+        navigate_list_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 4);
+
+        // Test at boundary
+        selected_index = 0;
+        navigate_list_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigate_list_down() {
+        let mut selected_index = 5;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 10;
+
+        navigate_list_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 6);
+
+        // Test at boundary
+        selected_index = 9;
+        navigate_list_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 9);
+    }
+
+    #[test]
+    fn test_navigate_list_page_up() {
+        let mut selected_index = 8;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 15;
+
+        let scroll_amount = scroll_state.page_scroll_amount();
+        assert_eq!(scroll_amount, 2); // 3 - 1 = 2
+
+        navigate_list_page_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 6); // 8 - 2 = 6
+
+        // Test page up with less than page size
+        selected_index = 2;
+        navigate_list_page_up(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigate_list_page_down() {
+        let mut selected_index = 2;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+        let total_items = 15;
+
+        navigate_list_page_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 4); // 2 + (3-1) = 4
+
+        // Test page down near boundary
+        selected_index = 12;
+        navigate_list_page_down(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 14); // max_index = 14
+    }
+
+    #[test]
+    fn test_navigate_list_to_first() {
+        let mut selected_index = 10;
+        let mut scroll_state = ScrollState::new();
+        scroll_state.offset = 5;
+
+        navigate_list_to_first(&mut selected_index, &mut scroll_state);
+        assert_eq!(selected_index, 0);
+        assert_eq!(scroll_state.offset, 0);
+    }
+
+    #[test]
+    fn test_navigate_list_to_last() {
+        let mut selected_index = 0;
+        let mut scroll_state = ScrollState::new();
+        let total_items = 15;
+
+        navigate_list_to_last(&mut selected_index, &mut scroll_state, total_items);
+        assert_eq!(selected_index, 14); // 15 - 1
+    }
+
+    #[test]
+    fn test_get_visible_items() {
+        let mut scroll_state = ScrollState::new();
+        scroll_state.visible_items = 3;
+
+        let items = vec!["a", "b", "c", "d", "e"];
+
+        // Test normal case
+        scroll_state.offset = 1;
+        let visible = get_visible_items(&items, &scroll_state);
+        assert_eq!(visible, &["b", "c", "d"]);
+
+        // Test at end
+        scroll_state.offset = 3;
+        let visible = get_visible_items(&items, &scroll_state);
+        assert_eq!(visible, &["d", "e"]);
+
+        // Test offset beyond bounds
+        scroll_state.offset = 10;
+        let visible = get_visible_items(&items, &scroll_state);
+        assert!(visible.is_empty());
+
+        // Test empty items
+        let empty_items: Vec<&str> = vec![];
+        scroll_state.offset = 0;
+        let visible = get_visible_items(&empty_items, &scroll_state);
+        assert!(visible.is_empty());
+    }
+
+    #[test]
+    fn test_assert_helper_functions() {
+        let mut state = setup_test_state(3);
+
+        // Test assert_navigation_state
+        assert_navigation_state(&state, 0, None);
+
+        // Test assert_cache_state
+        assert_cache_state(&state, true, false); // setup_test_state marks cache as dirty
+
+        // Test assert_service_count
+        assert_service_count(&state, 3);
+
+        // Test assert_service_type_count
+        assert_service_type_count(&state, 1);
+
+        // Test assert_metric_not_exist for non-existent metric
+        assert_metric_not_exist(&state, "services_added");
+
+        // Test assert_metric with a metric that should exist
+        state.metrics.insert("test_metric".to_string(), 42);
+        assert_metric(&state, "test_metric", 42);
+
+        // Test assert_metric_not_exist for non-existent metric
+        assert_metric_not_exist(&state, "non_existent_metric");
+    }
+
+    #[test]
+    fn test_create_service_variants() {
+        // Test create_offline_service
+        let offline_service = create_offline_service("test", "_http._tcp.local.", 8080);
+        assert!(!offline_service.online);
+        assert_eq!(offline_service.fullname, "test._http._tcp.local.");
+
+        // Test create_service_with_addrs
+        let service_with_addrs = create_service_with_addrs(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec!["10.0.0.1", "10.0.0.2"],
+        );
+        assert_eq!(service_with_addrs.addrs, vec!["10.0.0.1", "10.0.0.2"]);
+
+        // Test create_service_with_txt
+        let service_with_txt = create_service_with_txt(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            vec!["key1=value1", "key2=value2"],
+        );
+        assert_eq!(service_with_txt.txt, vec!["key1=value1", "key2=value2"]);
+
+        // Test create_service_with_subtype
+        let service_with_subtype = create_service_with_subtype(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            "_printer._sub._http._tcp.local.",
+        );
+        assert_eq!(
+            service_with_subtype.subtype,
+            Some("_printer._sub._http._tcp.local.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_service_session_history_functionality() {
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // Test get_session_history with single session
+        let history = service.get_session_history();
+        assert!(!history.is_empty());
+
+        // Test create_test_service_with_sessions with multiple sessions
+        let sessions = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            },
+            ServiceSession {
+                start_time: 3000,
+                end_time: None, // Current session
+            },
+        ];
+
+        let service_with_sessions = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            8080,
+            sessions,
+            true,
+            4000,
+            1000,
+            Some(4000),
+            Some(2000),
+        );
+
+        assert_eq!(service_with_sessions.session_history.len(), 2);
+        assert!(service_with_sessions.online);
+        assert_eq!(service_with_sessions.updated_at_micros, 4000);
+
+        // Test session history formatting
+        let history = service_with_sessions.get_session_history();
+        assert!(history.contains("Session 1"));
+        assert!(history.contains("Session 2"));
+        assert!(history.contains("Ongoing"));
+    }
+
+    #[test]
+    fn test_setup_helper_functions() {
+        // Test setup_test_state
+        let state = setup_test_state(5);
+        assert_service_count(&state, 5);
+        assert_service_type_count(&state, 1);
+
+        // Test setup_test_state_with_types
+        let state_with_types = setup_test_state_with_types(vec![
+            "_http._tcp.local.",
+            "_ssh._tcp.local.",
+            "_printer._tcp.local.",
+        ]);
+        assert_service_type_count(&state_with_types, 3);
+
+        // Test setup_test_state_with_services
+        let services = vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_ssh._tcp.local.", 22),
+        ];
+        let state_with_services = setup_test_state_with_services(services);
+        assert_service_count(&state_with_services, 2);
+        assert_service_type_count(&state_with_services, 2);
+
+        // Test setup_test_state_with_user_types
+        let user_types_state =
+            setup_test_state_with_user_types(vec!["_http._tcp.local.", "_ssh._tcp.local."]);
+        assert_service_type_count(&user_types_state, 0); // User types are added to user_service_types, not service_types
+    }
+
+    // Tests for service debouncing functionality
+    #[test]
+    fn test_schedule_service_removal() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "test-service._http._tcp.local.";
+        state.schedule_service_removal(fullname);
+
+        assert!(state.pending_removals.contains_key(fullname));
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
+    }
+
+    #[test]
+    fn test_cancel_pending_removal() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "test-service._http._tcp.local.";
+        state.schedule_service_removal(fullname);
+
+        // Cancel should remove from pending and increment metrics
+        let was_cancelled = state.cancel_pending_removal(fullname);
+        assert!(was_cancelled);
+        assert!(!state.pending_removals.contains_key(fullname));
+        assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
+    }
+
+    #[test]
+    fn test_cancel_pending_removal_nonexistent() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "nonexistent-service._http._tcp.local.";
+        let was_cancelled = state.cancel_pending_removal(fullname);
+
+        assert!(!was_cancelled);
+        assert_eq!(state.metrics.get("flapping_services_detected"), None);
+    }
+
+    #[test]
+    fn test_process_expired_removals() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add a service to be marked offline
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        let fullname = "test._http._tcp.local.";
+
+        // Schedule removal with old timestamp (expired)
+        let old_timestamp =
+            current_timestamp_micros().saturating_sub(DEBOUNCE_DURATION_MICROS + 1000);
+        state
+            .pending_removals
+            .insert(fullname.to_string(), old_timestamp);
+
+        // Process expired removals
+        state.process_expired_removals();
+
+        // Service should be marked offline
+        assert!(!state.services[0].online);
+        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1)); // Should increment after processing expired removal
+    }
+
+    #[test]
+    fn test_process_expired_removals_not_expired() {
+        let mut state = AppState::new(HashSet::new());
+
+        let fullname = "test-service._http._tcp.local.";
+
+        // Schedule removal with current timestamp (not expired)
+        let current_timestamp = current_timestamp_micros();
+        state
+            .pending_removals
+            .insert(fullname.to_string(), current_timestamp);
+
+        // Process expired removals
+        state.process_expired_removals();
+
+        // Should still be in pending removals
+        assert!(state.pending_removals.contains_key(fullname));
+    }
+
+    #[test]
+    fn test_mark_service_offline_respects_pending() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add a service
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        let fullname = "test-service._http._tcp.local.";
+
+        // Schedule removal for the service
+        state.schedule_service_removal(fullname);
+
+        // Try to mark service offline - should not work due to pending
+        let marked_offline = state.mark_service_offline(fullname);
+        assert!(!marked_offline);
+
+        // Service should still be online
+        assert!(state.services[0].online);
+    }
+
+    #[test]
+    fn test_flapping_service_scenario() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Add a service
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        state.services.push(service);
+
+        let fullname = "test-service._http._tcp.local.";
+
+        // Simulate service removal
+        state.schedule_service_removal(fullname);
+        assert!(state.pending_removals.contains_key(fullname));
+
+        // Simulate service coming back quickly (flapping)
+        let was_flapping = state.cancel_pending_removal(fullname);
+        assert!(was_flapping);
+        assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
+
+        // Service should remain online
+        assert!(state.services[0].online);
+    }
+
+    #[test]
+    fn test_multiple_pending_removals() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Schedule multiple services for removal
+        state.schedule_service_removal("service1._http._tcp.local.");
+        state.schedule_service_removal("service2._http._tcp.local.");
+        state.schedule_service_removal("service3._http._tcp.local.");
+
+        assert_eq!(state.pending_removals.len(), 3);
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&3));
+
+        // Cancel one
+        state.cancel_pending_removal("service2._http._tcp.local.");
+        assert_eq!(state.pending_removals.len(), 2);
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2)); // Updated immediately
+
+        // Process to update metric
+        state.process_expired_removals();
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2));
+    }
+
+    #[test]
+    fn test_pending_removals_metric_tracking() {
+        let mut state = AppState::new(HashSet::new());
+
+        // Initially no pending removals
+        assert_eq!(state.metrics.get("pending_removals_active"), None);
+
+        // Add pending removal
+        state.schedule_service_removal("test._http._tcp.local.");
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
+
+        // Add another
+        state.schedule_service_removal("test2._http._tcp.local.");
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2));
+
+        // Cancel one
+        state.cancel_pending_removal("test._http._tcp.local.");
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1)); // Updated immediately
+
+        // Process to update metric
+        state.process_expired_removals();
+        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
     }
 }

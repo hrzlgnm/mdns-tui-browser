@@ -157,6 +157,7 @@ src/
 9. After committing, push to the repository and create a pull request if applicable
 10. After the pull request is created, add a comment `@coderabbitai review`
 11. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
+12. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 
@@ -167,6 +168,7 @@ The manpage (`mdns-tui-browser.1`) must be kept in sync with `README.md`. When u
 2. **Controls**: Update both README.md Controls section and manpage CONTROLS section  
 3. **Service Types**: Update both README.md Service Types section and manpage SERVICE TYPES section
 4. **Examples**: Update both README.md Examples section and manpage EXAMPLES section
+5. **Date**: REQUIRED - Update the manpage date to current date in YYYY-MM-DD format in the .TH header
 
 The manpage should contain only essential usage information without excessive detail, focusing on what users need to know to use the program effectively.
 
