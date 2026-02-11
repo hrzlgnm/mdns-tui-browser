@@ -47,7 +47,7 @@ This will install the latest version from the AUR and handle updates automatical
 
 ### Install using winget on Windows
 
-You can install `mdns-tui-browser` from the Winget Packages using `winget`:
+You can install `mdns-tui-browser` from Winget Packages using `winget`:
 
 ```console
 # Install using winget
