@@ -96,7 +96,7 @@ jobs:
       - name: 🔐 Update Cargo.lock
         if: ${{ !inputs.dry-run }}
         run: |
-          cargo check --locked
+          cargo update -p mdns-tui-browser --workspace -q
 
       - name: ⏳ Temporary disable ruleset enforcement
         if: ${{ !inputs.dry-run }}
