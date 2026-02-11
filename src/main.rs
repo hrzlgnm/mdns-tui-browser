@@ -21,6 +21,13 @@ struct Cli {
         long_help = "Service types to browse for (e.g., http, _http._tcp, printer)\nAuto-completes (_)service, (_)sub, .(_)[tc|ud]p and .local. suffix"
     )]
     service_types: Option<Vec<String>>,
+
+    /// Disable debouncing of flapping services
+    #[arg(
+        long,
+        help = "Disable automatic debouncing of flapping services for debugging"
+    )]
+    no_debounce: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,5 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(tui_app::run_tui(user_requested_service_types))
+    rt.block_on(tui_app::run_tui(
+        user_requested_service_types,
+        cli.no_debounce,
+    ))
 }

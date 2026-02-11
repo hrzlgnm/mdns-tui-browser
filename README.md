@@ -67,6 +67,9 @@ mdns-tui-browser -V
 mdns-tui-browser --help
 mdns-tui-browser -h
 
+# Disable debouncing of flapping services
+mdns-tui-browser --no-debounce
+
 # Browse explicit service types, instead of auto-discovery
 mdns-tui-browser --service-types "_http._tcp.local.,_ssh._tcp.local."
 mdns-tui-browser -s "_printer._tcp.local."
@@ -75,6 +78,9 @@ mdns-tui-browser -s "_printer._tcp.local."
 mdns-tui-browser -s "_http,_ssh"
 mdns-tui-browser -s "http,ssh"
 mdns-tui-browser -s http -s ssh
+
+# Browse without debouncing (for debugging flapping services)
+mdns-tui-browser --no-debounce
 ```
 
 #### Service Types Argument (`--service-types/-s`)

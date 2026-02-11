@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-02-10" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-02-11" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -21,6 +21,9 @@ Display version information and exit.
 .B \-s, \-\-service-types \fISERVICE_TYPES\fR
 Service types to browse for (e.g., http, _http._tcp, printer)
 Auto-completes (_)service, (_)sub, .(_)[tc|ud]p and .local. suffix
+.TP
+.B \-\-no-debounce
+Disable automatic debouncing of flapping services for debugging
 
 .SH SERVICE TYPES
 The \fB\-\-service-types\fR argument supports various formats:
@@ -126,6 +129,10 @@ Browse with shortened service types:
 Browse with shortened service types, specified multiple times:
 .br
 .B mdns-tui-browser \-s http \-s ssh
+.IP \(bu
+Browse without debouncing (for debugging flapping services):
+.br
+.B mdns-tui-browser \-\-no-debounce
 .RE
 
 .SH AUTHOR
