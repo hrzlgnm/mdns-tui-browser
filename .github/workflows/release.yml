@@ -93,11 +93,6 @@ jobs:
           git config --global user.name "hrzlgnm"
           git config --global user.email "hrzlgnm@users.noreply.github.com"
 
-      - name: 🔐 Update Cargo.lock
-        if: ${{ !inputs.dry-run }}
-        run: |
-          cargo check --locked
-
       - name: ⏳ Temporary disable ruleset enforcement
         if: ${{ !inputs.dry-run }}
         run: |
