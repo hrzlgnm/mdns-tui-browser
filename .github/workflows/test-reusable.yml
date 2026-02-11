@@ -16,13 +16,16 @@ jobs:
           - os: "ubuntu-latest"
             symbol: 🐧
             platform: Linux
+            container_image: null
           - os: "macos-latest"
             symbol: 🍏
+            container_image: null
           - os: "windows-latest"
             symbol: 🪟
+            container_image: null
     runs-on: ${{matrix.os}}
     name: ${{matrix.symbol}}✅
-    container: ${{ contains(matrix.os, 'ubuntu') && matrix.container_image || null }}
+    container: ${{ contains(matrix.os, 'ubuntu') && matrix.container_image || '' }}
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6

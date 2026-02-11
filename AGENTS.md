@@ -54,6 +54,9 @@ cargo clippy --tests -- -D warnings
 # Check for typos
 cargo install typos-cli
 typos
+
+# Check GitHub Actions workflows and reusable actions
+actionlint
 ```
 
 ## Code Style Guidelines
@@ -151,13 +154,14 @@ src/
 3. Run `cargo fmt` to format code
 4. Run `cargo clippy --tests -- -D warnings` to check for issues
 5. Run `cargo nextest run --profile ci` to run tests
-6. Test the application manually with `cargo run`
-7. If README.md was updated, update the manpage (`mdns-tui-browser.1`)
-8. Commit only when all checks pass
-9. After committing, push to the repository and create a pull request if applicable
-10. After the pull request is created, add a comment `@coderabbitai review`
-11. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
-12. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+6. Run `actionlint` to check GitHub Actions workflows if modified
+7. Test the application manually with `cargo run`
+8. If README.md was updated, update the manpage (`mdns-tui-browser.1`)
+9. Commit only when all checks pass
+10. After committing, push to the repository and create a pull request if applicable
+11. After the pull request is created, add a comment `@coderabbitai review`
+12. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
+13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 
@@ -179,6 +183,7 @@ The manpage should contain only essential usage information without excessive de
 - Formatting and clippy must pass before merging
 - Release builds use `cargo auditable` for security
 - Typos checked with `typos-cli` configuration in `typos.toml`
+- GitHub Actions workflows validated with `actionlint`
 
 ## Common Pitfalls to Avoid
 
