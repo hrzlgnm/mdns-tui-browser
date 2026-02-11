@@ -37,17 +37,13 @@ jobs:
 
       - name: 🆙 sync our fork of winget-pkgs
         uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
-        env:
-          KOMAC_TOKEN: ${{ secrets.WINGET_TOKEN }}
         with:
-          args: "sync-fork"
+          args: "sync-fork --token=${{ secrets.WINGET_TOKEN }}"
 
       - name: 🆙 winget package
         uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
-        env:
-          KOMAC_TOKEN: ${{ secrets.WINGET_TOKEN }}
         with:
-          args: "update hrzlgnm.mdns-tui-browser --version $VERSION --urls $URL --submit"
+          args: "update hrzlgnm.mdns-tui-browser --version $VERSION --urls $URL --submit --token=${{ secrets.WINGET_TOKEN }}"
 
   cleanup:
     name: 🧹 branches
@@ -55,7 +51,5 @@ jobs:
     steps:
       - name: 🧹 Cleanup merged branches
         uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
-        env:
-          KOMAC_TOKEN: ${{ secrets.WINGET_TOKEN }}
         with:
-          args: "cleanup --only-merged"
+          args: "cleanup --only-merged --token=${{ secrets.WINGET_TOKEN }}"
