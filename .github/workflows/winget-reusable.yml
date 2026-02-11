@@ -24,9 +24,12 @@ jobs:
 
       - name: 🛠️ Determine download url🔗
         shell: bash
+      - name: 🛠️ Determine download url🔗
+        shell: bash
+        env:
+          TAG_NAME: ${{ steps.release-info.outputs.tagName }}
+          VERSION: ${{ steps.release-info.outputs.version }}
         run: |
-          TAG_NAME=${{ steps.release-info.outputs.tagName }}
-          VERSION=${{ steps.release-info.outputs.version }}
           URL=https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-Windows-x86_64.zip
           echo "URL=$URL" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
