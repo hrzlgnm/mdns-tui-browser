@@ -28,6 +28,11 @@ const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 
+// Flapping service colors (color-blind friendly)
+const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
+const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
+const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
+
 // Service debouncing constants
 const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
 const CLEANUP_INTERVAL_MS: u64 = 250;
@@ -64,6 +69,7 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
             port: entry.port,
             txt_records: entry.txt.clone(),
             is_online: entry.online,
+            is_flapping: entry.is_flapping,
             created_at: micros_to_iso_timestamp(entry.first_seen_micros),
             updated_at,
             last_online_at,
@@ -115,6 +121,7 @@ struct ServiceEntry {
     last_online_micros: Option<u64>,
     last_offline_micros: Option<u64>,
     session_history: Vec<ServiceSession>,
+    is_flapping: bool,
 }
 
 #[derive(Serialize)]
@@ -130,6 +137,7 @@ struct SerializableServiceEntry {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     txt_records: Vec<String>,
     is_online: bool,
+    is_flapping: bool,
     created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     updated_at: Option<String>,
@@ -178,6 +186,9 @@ impl ServiceEntry {
                 });
             }
         }
+
+        // Update flapping status when service goes offline
+        self.update_flapping_status();
     }
 
     fn go_online_at(&mut self, timestamp_micros: u64) {
@@ -192,6 +203,9 @@ impl ServiceEntry {
             start_time: timestamp_micros,
             end_time: None,
         });
+
+        // Update flapping status when service comes online
+        self.update_flapping_status();
     }
 
     fn get_session_history(&self) -> String {
@@ -228,6 +242,48 @@ impl ServiceEntry {
             ));
         }
         timeline.join("\n")
+    }
+
+    fn is_flapping_service(&self) -> bool {
+        // Consider a service flapping if it has multiple short sessions
+        const FLAPPING_SESSION_THRESHOLD: usize = 3; // Need at least 3 sessions
+        const MIN_COMPLETED_SESSIONS: usize = 3; // Minimum completed sessions to consider
+        const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000; // 10 seconds
+
+        if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
+            return false;
+        }
+
+        // Count how many sessions were shorter than the threshold
+        let mut short_sessions = 0;
+        for session in &self.session_history {
+            if let Some(end_time) = session.end_time {
+                let duration = end_time.saturating_sub(session.start_time);
+                if duration < SHORT_SESSION_DURATION_MICROS {
+                    short_sessions += 1;
+                }
+            }
+            // Don't count ongoing sessions as short
+        }
+
+        // Count completed sessions (only those with end_time)
+        let completed_sessions = self
+            .session_history
+            .iter()
+            .filter(|s| s.end_time.is_some())
+            .count();
+
+        // Require minimum completed sessions and at least half being short
+        if completed_sessions < MIN_COMPLETED_SESSIONS {
+            return false;
+        }
+
+        // Use multiplication to avoid integer division truncation
+        short_sessions * 2 >= completed_sessions
+    }
+
+    fn update_flapping_status(&mut self) {
+        self.is_flapping = self.is_flapping_service();
     }
 }
 
@@ -277,6 +333,7 @@ impl From<ResolvedService> for ServiceEntry {
                 start_time: current_timestamp,
                 end_time: None,
             }],
+            is_flapping: false,
         }
     }
 }
@@ -1367,13 +1424,23 @@ impl AppState {
                 existing.port = service_entry.port;
                 existing.txt = service_entry.txt;
 
+                // Update flapping status when service state changes
+                existing.update_flapping_status();
+
                 self.update_metric("services_updated");
             }
             true
         } else {
             // Ensure service type exists for filtering purposes
             self.add_service_type(&service_entry.service_type);
+            let fullname = service_entry.fullname.clone();
             self.services.push(service_entry);
+
+            // Update flapping status for new services
+            if let Some(new_service) = self.services.iter_mut().find(|s| s.fullname == fullname) {
+                new_service.update_flapping_status();
+            }
+
             self.update_metric("services_discovered");
             false
         }
@@ -1394,6 +1461,7 @@ impl AppState {
                 self.update_metric("services_marked_offline");
             }
             self.services[idx].go_offline_at(current_timestamp_micros());
+            self.services[idx].update_flapping_status();
             self.invalidate_cache_and_validate();
             true
         } else {
@@ -2578,8 +2646,20 @@ fn create_service_list_item_style(
         Style::default().fg(foreground)
     };
 
-    if !service.online {
-        style = style.add_modifier(Modifier::ITALIC);
+    // Add subtle styling for flapping services using color-blind friendly approach
+    if service.is_flapping {
+        // Use visual indicators that work for all users:
+        // - Slightly darker background (darker than normal dark gray)
+        // - Underline modifier for additional visual distinction
+        if index == selected_index {
+            style = style
+                .bg(FLAPPING_COLOR_SELECTED)
+                .add_modifier(Modifier::UNDERLINED);
+        } else {
+            style = style
+                .bg(FLAPPING_COLOR_NORMAL)
+                .add_modifier(Modifier::UNDERLINED);
+        }
     }
 
     style
@@ -2703,11 +2783,24 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
         .fg(STATUS_ERROR_COLOR)
         .add_modifier(Modifier::BOLD);
 
+    // Status with flapping info
+    let flapping_style: Style = Style::default()
+        .fg(FLAPPING_FOREGROUND_COLOR)
+        .add_modifier(Modifier::BOLD);
+
     if service.online {
-        lines.push(Line::from(vec![
-            Span::styled("Status:", Style::default()),
-            Span::styled(" Online", online_style),
-        ]));
+        if service.is_flapping {
+            lines.push(Line::from(vec![
+                Span::styled("Status:", Style::default()),
+                Span::styled(" Online, ", online_style),
+                Span::styled("Flapping", flapping_style),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Status:", Style::default()),
+                Span::styled(" Online", online_style),
+            ]));
+        }
 
         lines.push(Line::from(vec![
             Span::styled("First seen:        ", Style::default()),
@@ -2735,10 +2828,18 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
             ]));
         }
     } else {
-        lines.push(Line::from(vec![
-            Span::styled("Status:", Style::default()),
-            Span::styled(" Offline", offline_style),
-        ]));
+        if service.is_flapping {
+            lines.push(Line::from(vec![
+                Span::styled("Status:", Style::default()),
+                Span::styled(" Offline, ", offline_style),
+                Span::styled("Flapping", flapping_style),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Status:", Style::default()),
+                Span::styled(" Offline", offline_style),
+            ]));
+        }
 
         let offline_timestamp = service
             .last_offline_micros
@@ -3132,6 +3233,7 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
+            is_flapping: false,
         }
     }
 
@@ -5677,6 +5779,7 @@ mod tests {
             first_seen_micros: 1000,
             last_online_micros: Some(1000),
             last_offline_micros: None,
+            is_flapping: false,
         };
 
         let display = format_service_for_display(&service);
@@ -5920,7 +6023,6 @@ mod tests {
         // Test offline service
         let style = create_service_list_item_style(0, 0, &offline_service);
         assert_eq!(style.fg, Some(Color::Yellow));
-        assert!(style.add_modifier.contains(Modifier::ITALIC));
     }
 
     // Edge case tests
@@ -7841,5 +7943,218 @@ mod tests {
 
         assert!(!state.no_debounce);
         assert!(state.pending_removals.contains_key(fullname));
+    }
+
+    // Tests for flapping service detection and styling
+    #[test]
+    fn test_flapping_service_not_enough_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // Only 2 sessions - not enough to be considered flapping
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            }, // 1 second
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(4000),
+            }, // 1 second
+        ];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_short_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // 3 short sessions - should be considered flapping
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            }, // 1 second
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(4000),
+            }, // 1 second
+            ServiceSession {
+                start_time: 5000,
+                end_time: Some(6000),
+            }, // 1 second
+        ];
+
+        service.update_flapping_status();
+        assert!(service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_mixed_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // 3 sessions, 2 short and 1 long - should be flapping (2/3 >= 1/2)
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            }, // 1 second (short)
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(15000000),
+            }, // 12 seconds (not short)
+            ServiceSession {
+                start_time: 16000000,
+                end_time: Some(17000000),
+            }, // 1 second (short)
+        ];
+
+        service.update_flapping_status();
+        assert!(service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_long_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // 3 long sessions - should not be considered flapping
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(12000000),
+            }, // 12 seconds
+            ServiceSession {
+                start_time: 13000000,
+                end_time: Some(25000000),
+            }, // 12 seconds
+            ServiceSession {
+                start_time: 26000000,
+                end_time: Some(38000000),
+            }, // 12 seconds
+        ];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_ongoing_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // 4 sessions where one is ongoing - ongoing should not count as short
+        // With 3 completed short sessions, should be flapping
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            }, // 1 second (short)
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(4000),
+            }, // 1 second (short)
+            ServiceSession {
+                start_time: 6000,
+                end_time: Some(7000),
+            }, // 1 second (short)
+            ServiceSession {
+                start_time: 5000,
+                end_time: None,
+            }, // ongoing
+        ];
+
+        service.update_flapping_status();
+        assert!(service.is_flapping); // 3 short out of 3 completed sessions
+    }
+
+    #[test]
+    fn test_flapping_service_no_completed_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // Only ongoing sessions - should not be flapping
+        service.session_history = vec![ServiceSession {
+            start_time: 1000,
+            end_time: None,
+        }];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_service_styling_flapping_selected() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.is_flapping = true;
+        service.online = true;
+
+        let style = create_service_list_item_style(2, 2, &service);
+
+        // Should have darker background with underline when selected and flapping
+        assert_eq!(style.bg, Some(FLAPPING_COLOR_SELECTED));
+        assert_eq!(style.fg, Some(Color::White));
+        assert!(style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn test_service_styling_flapping_not_selected() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.is_flapping = true;
+        service.online = true;
+
+        let style = create_service_list_item_style(2, 1, &service);
+
+        // Should have darker background with underline when not selected and flapping
+        assert_eq!(style.bg, Some(FLAPPING_COLOR_NORMAL));
+        assert_eq!(style.fg, Some(Color::White));
+        assert!(style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn test_service_styling_flapping_offline() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.is_flapping = true;
+        service.online = false;
+
+        let style = create_service_list_item_style(2, 2, &service);
+
+        // Should have darker background with underline and error color foreground when offline and flapping
+        assert_eq!(style.bg, Some(FLAPPING_COLOR_SELECTED));
+        assert_eq!(style.fg, Some(STATUS_ERROR_COLOR));
+        assert!(style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn test_service_styling_not_flapping() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.is_flapping = false;
+        service.online = true;
+
+        let style = create_service_list_item_style(2, 1, &service);
+
+        // Should not have darker background or underline when not flapping
+        assert_ne!(style.bg, Some(FLAPPING_COLOR_NORMAL));
+        assert_ne!(style.bg, Some(FLAPPING_COLOR_SELECTED));
+        assert_eq!(style.fg, Some(Color::White));
+        assert!(!style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn test_service_styling_flapping_edge_case_selection() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.is_flapping = true;
+
+        // Test selected case
+        let selected_style = create_service_list_item_style(1, 1, &service);
+        assert_eq!(selected_style.bg, Some(FLAPPING_COLOR_SELECTED));
+        assert!(selected_style.add_modifier.contains(Modifier::UNDERLINED));
+
+        // Test not selected case
+        let not_selected_style = create_service_list_item_style(1, 0, &service);
+        assert_eq!(not_selected_style.bg, Some(FLAPPING_COLOR_NORMAL));
+        assert!(
+            not_selected_style
+                .add_modifier
+                .contains(Modifier::UNDERLINED)
+        );
     }
 }
