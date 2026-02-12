@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-02-11" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-02-12" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -101,15 +101,68 @@ Ctrl+J                 - Dump current state to JSON file
 .br
 q or Ctrl+c            - Quit the application
 
-Quick filter mode (activated with /):
-.br
-Enter                  - Apply filter
-.br
-Esc                    - Cancel filter input
-.br
-Backspace              - Delete last character
-.br
-Any other key          - Type search text (case-insensitive)
+.SH QUICK FILTER
+The quickfilter feature allows searching across all service fields using text patterns and special keywords.
+.PP
+To activate quickfilter mode, press \fB/\fR. Then type your search query and press \fBEnter\fR to apply or \fBEsc\fR to cancel.
+.PP
+The quickfilter searches across these service fields:
+.RS
+.IP \(bu
+Service fullname and name
+.IP \(bu
+Host address
+.IP \(bu
+Service type and subtype
+.IP \(bu
+IP addresses
+.IP \(bu
+Port number
+.IP \(bu
+TXT record contents
+.RE
+.PP
+The quickfilter supports special keywords for filtering by service status:
+.RS
+.IP \(bu
+\fBonline\fR - Shows online services AND services containing "online" in any field (fullname, host, service type, TXT records, etc.)
+.IP \(bu
+\fBoffline\fR - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
+.IP \(bu
+Case-insensitive: \fBONLINE\fR, \fBOnline\fR, \fBoffline\fR, \fBOFFLINE\fR all work
+.IP \(bu
+Hybrid mode: Keywords match both by status AND text content
+.IP \(bu
+Combined queries: \fBonline http\fR shows online services with "http" in text fields
+.RE
+.PP
+Examples:
+.RS
+.IP \(bu
+\fBonline\fR - Show online services + services with "online" in text
+.IP \(bu
+\fBoffline\fR - Show offline services + services with "offline" in text  
+.IP \(bu
+\fBonline http\fR - Show online HTTP services
+.IP \(bu
+\fBoffline printer\fR - Show offline printer services
+.IP \(bu
+\fBONLINE\fR - Case-insensitive works
+.IP \(bu
+\fBonline offline\fR - Shows all services (both keywords present)
+.RE
+.PP
+Quick filter mode controls:
+.RS
+.IP \(bu
+\fBEnter\fR - Apply filter
+.IP \(bu
+\fBEsc\fR - Cancel filter input
+.IP \(bu
+\fBBackspace\fR - Delete last character
+.IP \(bu
+Any other key - Type search text (case-insensitive)
+.RE
 
 .SH EXAMPLES
 .RS

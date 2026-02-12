@@ -204,6 +204,26 @@ When in filter mode (activated with <kbd>/</kbd>):
 - <kbd>Backspace</kbd> - Delete last character
 - Any other key - Type search text (case-insensitive)
 
+#### Special Keywords
+The quickfilter supports special keywords for filtering by service status:
+
+- **`online`** - Shows online services AND services containing "online" in any field (fullname, host, service type, TXT records, etc.)
+- **`offline`** - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
+- **Case-insensitive**: `ONLINE`, `Online`, `offline`, `OFFLINE` all work
+- **Hybrid mode**: Keywords match both by status AND text content
+- **Combined queries**: `online http` shows online services with "http" in text fields
+
+**Examples:**
+```bash
+# Press '/' then type:
+online              # Show online services + services with "online" in text
+offline             # Show offline services + services with "offline" in text
+online http         # Show online HTTP services
+offline printer     # Show offline printer services
+ONLINE              # Case-insensitive works
+online offline      # Shows all services (both keywords present)
+```
+
 ## Architecture
 
 The application is built with:

@@ -554,6 +554,10 @@ impl AppState {
         if !self.filter_query.is_empty() {
             let query = self.filter_query.to_lowercase();
 
+            // Check for special keywords: online and offline
+            let has_online_keyword = query.contains("online");
+            let has_offline_keyword = query.contains("offline");
+
             // Search in all service fields case-insensitively
             let search_text = [
                 service.fullname.clone(),
@@ -566,7 +570,51 @@ impl AppState {
             ]
             .join(" ")
             .to_lowercase();
-            search_text.contains(&query)
+
+            if has_online_keyword || has_offline_keyword {
+                // Special handling for online/offline keywords (hybrid mode)
+                let status_matches = (has_online_keyword && service.online)
+                    || (has_offline_keyword && !service.online);
+
+                // Check if the full query appears in text fields
+                let text_matches = search_text.contains(&query);
+
+                // For hybrid mode: match if status matches OR text contains the keywords
+                // But for combined queries, we need to be more precise
+                if has_online_keyword && has_offline_keyword {
+                    // Both keywords present - strip both keywords and check remaining terms
+                    let query_cleaned = query.replace("online", "").replace("offline", "");
+                    let query_without_keyword = query_cleaned.trim();
+
+                    if query_without_keyword.is_empty() {
+                        // Only keywords - treat as match-all (status or text)
+                        status_matches || text_matches
+                    } else {
+                        // Has additional terms - enforce remaining terms
+                        (status_matches
+                            && search_text.contains(&query_without_keyword.to_lowercase()))
+                            || text_matches
+                    }
+                } else if query == "online" || query == "offline" {
+                    // Pure keyword - hybrid mode: match by status OR text containing keyword
+                    status_matches || text_matches
+                } else {
+                    // Mixed query (keyword + other terms) - match if (status matches AND text contains other terms) OR text contains full query
+                    let query_cleaned = query.replace("online", "").replace("offline", "");
+                    let query_without_keyword = query_cleaned.trim();
+
+                    if query_without_keyword.is_empty() {
+                        status_matches || text_matches
+                    } else {
+                        (status_matches
+                            && search_text.contains(&query_without_keyword.to_lowercase()))
+                            || text_matches
+                    }
+                }
+            } else {
+                // Standard text search for non-keyword queries
+                search_text.contains(&query)
+            }
         } else {
             true // Show all services if query is empty
         }
@@ -2395,6 +2443,14 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Esc               - Cancel filter input"),
         Line::from("   Backspace         - Delete last character"),
         Line::from("   n (normal mode)   - Clear current filter"),
+        Line::from(" "),
+        Line::from("   Special keywords:"),
+        Line::from("   'online'          - Show online services + services with 'online' in text"),
+        Line::from(
+            "   'offline'         - Show offline services + services with 'offline' in text",
+        ),
+        Line::from("   Case-insensitive: ONLINE, Online, offline, OFFLINE all work"),
+        Line::from("   Combined: 'online http' shows online HTTP services"),
         Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
     ]
@@ -6274,6 +6330,75 @@ mod tests {
         state.filter_query = "printer".to_string();
         service.subtype = Some("_printer".to_string());
         assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_filter_service_online_keyword_only() {
+        let mut state = AppState::new(HashSet::new(), false);
+        state.filter_query = "online".to_string();
+
+        let online_service = create_test_service("test", "_http._tcp.local.", 80);
+        let mut offline_service = create_test_service("test", "_http._tcp.local.", 80);
+        offline_service.go_offline_at(1000);
+
+        assert!(state.filter_service(&online_service));
+        assert!(!state.filter_service(&offline_service));
+    }
+
+    #[test]
+    fn test_filter_service_offline_keyword_only() {
+        let mut state = AppState::new(HashSet::new(), false);
+        state.filter_query = "offline".to_string();
+
+        let online_service = create_test_service("test", "_http._tcp.local.", 80);
+        let mut offline_service = create_test_service("test", "_http._tcp.local.", 80);
+        offline_service.go_offline_at(1000);
+
+        assert!(!state.filter_service(&online_service));
+        assert!(state.filter_service(&offline_service));
+    }
+
+    #[test]
+    fn test_filter_service_both_keywords_with_additional_terms() {
+        let mut state = AppState::new(HashSet::new(), false);
+        state.filter_query = "online offline printer".to_string();
+
+        // Online HTTP service with "printer" in name should match
+        let online_http_printer = create_test_service("printer-service", "_http._tcp.local.", 80);
+        assert!(state.filter_service(&online_http_printer));
+
+        // Online SSH service without "printer" should NOT match (status doesn't matter, but missing additional term)
+        let online_ssh_service = create_test_service("ssh-service", "_ssh._tcp.local.", 22);
+        assert!(!state.filter_service(&online_ssh_service));
+
+        // Offline HTTP service with "printer" in name should match (text contains full query)
+        let mut offline_http_printer =
+            create_test_service("printer-service", "_http._tcp.local.", 80);
+        offline_http_printer.go_offline_at(1000);
+        assert!(state.filter_service(&offline_http_printer));
+
+        // Service with "online offline printer" in TXT record should match (text contains full query)
+        let mut service_with_txt = create_test_service("test", "_http._tcp.local.", 80);
+        service_with_txt.txt = vec!["online offline printer mode".to_string()];
+        assert!(state.filter_service(&service_with_txt));
+    }
+
+    #[test]
+    fn test_filter_service_non_keyword_queries_unchanged() {
+        let mut state = AppState::new(HashSet::new(), false);
+
+        // Test that regular queries still work as before
+        state.filter_query = "http".to_string();
+        let http_service = create_test_service("test", "_http._tcp.local.", 80);
+        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
+
+        assert!(state.filter_service(&http_service));
+        assert!(!state.filter_service(&ssh_service));
+
+        // Test queries that don't contain keywords
+        state.filter_query = "printer".to_string();
+        let printer_service = create_test_service("test", "_printer._http._tcp.local.", 80);
+        assert!(state.filter_service(&printer_service));
     }
 
     #[test]
