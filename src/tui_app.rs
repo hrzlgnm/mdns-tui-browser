@@ -2444,6 +2444,14 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Backspace         - Delete last character"),
         Line::from("   n (normal mode)   - Clear current filter"),
         Line::from(" "),
+        Line::from("   Special keywords:"),
+        Line::from("   'online'          - Show online services + services with 'online' in text"),
+        Line::from(
+            "   'offline'         - Show offline services + services with 'offline' in text",
+        ),
+        Line::from("   Case-insensitive: ONLINE, Online, offline, OFFLINE all work"),
+        Line::from("   Combined: 'online http' shows online HTTP services"),
+        Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
     ]
 }
