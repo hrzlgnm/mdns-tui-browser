@@ -3,6 +3,17 @@ name = "mdns-tui-browser"
 version = "1.19.0"
 edition = "2024"
 rust-version = "1.88"
+description = "A TUI browser for mDNS service discovery"
+
+[package.metadata.deb]
+maintainer = "hrzlgnm"
+copyright = "Copyright 2026 hrzlgnm"
+license-file = "LICENSE"
+depends = "libgcc-s1 (>= 4.2)"
+assets = [
+    ["mdns-tui-browser.1", "usr/share/man/man1/mdns-tui-browser.1", "644"],
+    ["target/release/mdns-tui-browser", "usr/bin/", "755"],
+]
 
 [profile.release]
 codegen-units = 1
