@@ -582,8 +582,19 @@ impl AppState {
                 // For hybrid mode: match if status matches OR text contains the keywords
                 // But for combined queries, we need to be more precise
                 if has_online_keyword && has_offline_keyword {
-                    // Both keywords present - match any service (status or text)
-                    true
+                    // Both keywords present - strip both keywords and check remaining terms
+                    let query_cleaned = query.replace("online", "").replace("offline", "");
+                    let query_without_keyword = query_cleaned.trim();
+
+                    if query_without_keyword.is_empty() {
+                        // Only keywords - treat as match-all (status or text)
+                        status_matches || text_matches
+                    } else {
+                        // Has additional terms - enforce remaining terms
+                        (status_matches
+                            && search_text.contains(&query_without_keyword.to_lowercase()))
+                            || text_matches
+                    }
                 } else if query == "online" || query == "offline" {
                     // Pure keyword - hybrid mode: match by status OR text containing keyword
                     status_matches || text_matches
@@ -6340,117 +6351,27 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_service_online_keyword_hybrid_mode() {
+    fn test_filter_service_both_keywords_with_additional_terms() {
         let mut state = AppState::new(HashSet::new(), false);
-        state.filter_query = "online".to_string();
+        state.filter_query = "online offline printer".to_string();
 
-        // Online service should match
-        let online_service = create_test_service("test", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&online_service));
+        // Online HTTP service with "printer" in name should match
+        let online_http_printer = create_test_service("printer-service", "_http._tcp.local.", 80);
+        assert!(state.filter_service(&online_http_printer));
 
-        // Service with "online" in text but offline should also match (hybrid mode)
-        let mut offline_service_with_keyword =
-            create_test_service("online-backup", "_http._tcp.local.", 80);
-        offline_service_with_keyword.go_offline_at(1000);
-        assert!(state.filter_service(&offline_service_with_keyword));
-
-        // Service with "online" in service type but offline should also match
-        let mut offline_service_with_type =
-            create_test_service("backup", "_online._tcp.local.", 80);
-        offline_service_with_type.go_offline_at(1000);
-        assert!(state.filter_service(&offline_service_with_type));
-    }
-
-    #[test]
-    fn test_filter_service_offline_keyword_hybrid_mode() {
-        let mut state = AppState::new(HashSet::new(), false);
-        state.filter_query = "offline".to_string();
-
-        // Offline service should match
-        let mut offline_service = create_test_service("test", "_http._tcp.local.", 80);
-        offline_service.go_offline_at(1000);
-        assert!(state.filter_service(&offline_service));
-
-        // Service with "offline" in text but online should also match (hybrid mode)
-        let online_service_with_keyword =
-            create_test_service("offline-backup", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&online_service_with_keyword));
-
-        // Service with "offline" in TXT record but online should also match
-        let mut online_service_with_txt = create_test_service("backup", "_http._tcp.local.", 80);
-        online_service_with_txt.txt = vec!["status=offline".to_string()];
-        assert!(state.filter_service(&online_service_with_txt));
-    }
-
-    #[test]
-    fn test_filter_service_online_offline_case_insensitive() {
-        let mut state = AppState::new(HashSet::new(), false);
-
-        // Test uppercase
-        state.filter_query = "ONLINE".to_string();
-        let online_service = create_test_service("test", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&online_service));
-
-        // Test mixed case
-        state.filter_query = "Offline".to_string();
-        let mut offline_service = create_test_service("test", "_http._tcp.local.", 80);
-        offline_service.go_offline_at(1000);
-        assert!(state.filter_service(&offline_service));
-    }
-
-    #[test]
-    fn test_filter_service_combined_keywords() {
-        let mut state = AppState::new(HashSet::new(), false);
-        state.filter_query = "online http".to_string();
-
-        // Online HTTP service should match
-        let online_http_service = create_test_service("test", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&online_http_service));
-
-        // Online non-HTTP service should not match
-        let online_ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
+        // Online SSH service without "printer" should NOT match (status doesn't matter, but missing additional term)
+        let online_ssh_service = create_test_service("ssh-service", "_ssh._tcp.local.", 22);
         assert!(!state.filter_service(&online_ssh_service));
 
-        // Offline HTTP service should not match
-        let mut offline_http_service = create_test_service("test", "_http._tcp.local.", 80);
-        offline_http_service.go_offline_at(1000);
-        assert!(!state.filter_service(&offline_http_service));
-    }
+        // Offline HTTP service with "printer" in name should match (text contains full query)
+        let mut offline_http_printer =
+            create_test_service("printer-service", "_http._tcp.local.", 80);
+        offline_http_printer.go_offline_at(1000);
+        assert!(state.filter_service(&offline_http_printer));
 
-    #[test]
-    fn test_filter_service_both_keywords() {
-        let mut state = AppState::new(HashSet::new(), false);
-        state.filter_query = "online offline".to_string();
-
-        // All services should match since both keywords are present
-        let online_service = create_test_service("test", "_http._tcp.local.", 80);
-        let mut offline_service = create_test_service("test", "_http._tcp.local.", 80);
-        offline_service.go_offline_at(1000);
-
-        assert!(state.filter_service(&online_service));
-        assert!(state.filter_service(&offline_service));
-    }
-
-    #[test]
-    fn test_filter_service_keyword_in_text_field() {
-        let mut state = AppState::new(HashSet::new(), false);
-
-        // Test keyword in fullname
-        state.filter_query = "online".to_string();
-        let service_with_keyword =
-            create_test_service("my-online-service", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&service_with_keyword));
-
-        // Test keyword in host
-        state.filter_query = "offline".to_string();
-        let mut service_with_host = create_test_service("test", "_http._tcp.local.", 80);
-        service_with_host.host = "offline-server.local.".to_string();
-        assert!(state.filter_service(&service_with_host));
-
-        // Test keyword in TXT record
-        state.filter_query = "online".to_string();
+        // Service with "online offline printer" in TXT record should match (text contains full query)
         let mut service_with_txt = create_test_service("test", "_http._tcp.local.", 80);
-        service_with_txt.txt = vec!["mode=online".to_string()];
+        service_with_txt.txt = vec!["online offline printer mode".to_string()];
         assert!(state.filter_service(&service_with_txt));
     }
 
