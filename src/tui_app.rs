@@ -247,6 +247,7 @@ impl ServiceEntry {
     fn is_flapping_service(&self) -> bool {
         // Consider a service flapping if it has multiple short sessions
         const FLAPPING_SESSION_THRESHOLD: usize = 3; // Need at least 3 sessions
+        const MIN_COMPLETED_SESSIONS: usize = 3; // Minimum completed sessions to consider
         const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000; // 10 seconds
 
         if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
@@ -265,13 +266,20 @@ impl ServiceEntry {
             // Don't count ongoing sessions as short
         }
 
-        // Consider flapping if at least half of the completed sessions were short
+        // Count completed sessions (only those with end_time)
         let completed_sessions = self
             .session_history
             .iter()
             .filter(|s| s.end_time.is_some())
             .count();
-        completed_sessions > 0 && short_sessions >= (completed_sessions / 2)
+
+        // Require minimum completed sessions and at least half being short
+        if completed_sessions < MIN_COMPLETED_SESSIONS {
+            return false;
+        }
+
+        // Use multiplication to avoid integer division truncation
+        short_sessions * 2 >= completed_sessions
     }
 
     fn update_flapping_status(&mut self) {
@@ -8034,7 +8042,8 @@ mod tests {
     fn test_flapping_service_with_ongoing_sessions() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
 
-        // 3 sessions where one is ongoing - ongoing should not count as short
+        // 4 sessions where one is ongoing - ongoing should not count as short
+        // With 3 completed short sessions, should be flapping
         service.session_history = vec![
             ServiceSession {
                 start_time: 1000,
@@ -8045,13 +8054,17 @@ mod tests {
                 end_time: Some(4000),
             }, // 1 second (short)
             ServiceSession {
+                start_time: 6000,
+                end_time: Some(7000),
+            }, // 1 second (short)
+            ServiceSession {
                 start_time: 5000,
                 end_time: None,
             }, // ongoing
         ];
 
         service.update_flapping_status();
-        assert!(service.is_flapping); // 2 short out of 2 completed sessions
+        assert!(service.is_flapping); // 3 short out of 3 completed sessions
     }
 
     #[test]
