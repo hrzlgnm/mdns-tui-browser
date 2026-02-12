@@ -74,6 +74,14 @@ jobs:
           version: 0.7.2
           locked: true
 
+      - name: 🛠️📦 cargo-deb
+        if: matrix.os == 'ubuntu-latest'
+        uses: baptiste0928/cargo-install@b687c656bda5733207e629b50a22bf68974a0305 # v3
+        with:
+          crate: cargo-deb
+          version: 3.6.3
+          locked: true
+
       - name: 🛠️ dependencies
         if: matrix.dependencies
         shell: bash
@@ -96,10 +104,27 @@ jobs:
             cargo build --release --target ${{ matrix.target }}
           fi
 
+      - name: 📦 Build deb package
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          if [ "${{ inputs.tagName }}" ]; then
+            cargo --locked auditable deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
+          else
+            cargo --locked deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
+          fi
+
       - name: 📦 Build archive
         shell: bash
         run: |
-          staging="mdns-tui-browser-${{ inputs.tagName }}-${{ matrix.platform }}"
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ -n "${{ inputs.tagName }}" ]; then
+            VERSION_NAME="${{ inputs.tagName }}"
+          else
+            VERSION_NAME="$VERSION"
+          fi
+          # Use platform for tarball, but preserve original .deb name on Linux
+          staging="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}"
           mkdir -p "$staging"
           cp LICENSE "$staging/"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
@@ -118,13 +143,20 @@ jobs:
             fi
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
+            # Copy .deb file if it exists (Linux builds only)
+            if ls target/${{ matrix.target }}/debian/*.deb 1> /dev/null 2>&1; then
+              DEB_FILE=$(ls target/${{ matrix.target }}/debian/*.deb)
+              cp "$DEB_FILE" .
+              DEB_NAME=$(basename "$DEB_FILE")
+              echo "DEB_ASSET=$DEB_NAME" >> $GITHUB_ENV
+            fi
           fi
 
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
         uses: actions/attest-build-provenance@c44148e5bf178192efd8947e07a0d439a356c60b
         with:
-          subject-path: ${{ env.ASSET }}
+          subject-path: "${{ matrix.os == 'ubuntu-latest' && format('{0}\n{1}', env.ASSET, env.DEB_ASSET) || env.ASSET }}"
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
@@ -139,12 +171,20 @@ jobs:
           generate_release_notes: false
           files: |
             ${{ env.ASSET }}
+            ${{ matrix.os == 'ubuntu-latest' && env.DEB_ASSET || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
-          path: |
-            ${{ env.ASSET }}
+          path: ${{ env.ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload deb artifacts
+        if: (!inputs.tagName) && matrix.os == 'ubuntu-latest' && env.DEB_ASSET != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mdns-tui-browser-${{ matrix.target }}-deb
+          path: ${{ env.DEB_ASSET }}
           retention-days: 30
