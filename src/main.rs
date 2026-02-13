@@ -4,7 +4,10 @@
 
 mod tui_app;
 
+use std::collections::HashSet;
+
 use clap::Parser;
+use if_addrs::get_if_addrs;
 
 #[derive(Parser)]
 #[command(
@@ -28,6 +31,15 @@ struct Cli {
         help = "Disable automatic debouncing of flapping services for debugging"
     )]
     no_debounce: bool,
+
+    /// Network interfaces to use for mDNS discovery
+    #[arg(
+        long,
+        short,
+        value_delimiter = ',',
+        help = "Network interfaces to use for mDNS discovery (e.g., en0, eth0)"
+    )]
+    interfaces: Option<Vec<String>>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,9 +53,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|service_type| tui_app::normalize_service_type(&service_type))
         .collect();
 
+    // Validate interfaces before starting
+    let (interfaces, available_interfaces) = match cli.interfaces {
+        Some(ifs) => {
+            let available: HashSet<String> = get_if_addrs()
+                .map_err(|e| format!("Failed to get network interfaces: {}", e))?
+                .iter()
+                .map(|i| i.name.clone())
+                .collect();
+
+            let mut sorted: Vec<_> = available.iter().collect();
+            sorted.sort();
+
+            for interface in &ifs {
+                if !available.contains(interface) {
+                    return Err(format!(
+                        "Interface '{}' not found. Available interfaces: {}",
+                        interface,
+                        sorted
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                    .into());
+                }
+            }
+            (Some(ifs), Some(available.into_iter().collect::<Vec<_>>()))
+        }
+        None => (None, None),
+    };
+
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(tui_app::run_tui(
         user_requested_service_types,
         cli.no_debounce,
+        interfaces,
+        available_interfaces,
     ))
 }

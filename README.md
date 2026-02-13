@@ -81,6 +81,10 @@ mdns-tui-browser -s http -s ssh
 
 # Browse without debouncing (for debugging flapping services)
 mdns-tui-browser --no-debounce
+
+# Use specific network interfaces
+mdns-tui-browser -i en0
+mdns-tui-browser --interfaces en0,eth0
 ```
 
 #### Service Types Argument (`--service-types/-s`)
@@ -238,6 +242,7 @@ The application is built with:
 - **chrono** - Date and time handling for local timestamp display
 - **serde** - Serialization framework for JSON export
 - **serde_json** - JSON serialization support
+- **if-addrs** - Network interface enumeration
 
 ### Safety Policy
 
@@ -335,7 +340,7 @@ This ensures that every release binary can be independently verified for securit
 - [x] Export capabilities
 - [x] Service filtering and search
 - [x] Custom service type browsing
-- [ ] Network interface selection
+- [x] Network interface selection
 
 ## License
 
