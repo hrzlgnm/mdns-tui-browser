@@ -148,15 +148,67 @@ jobs:
               DEB_FILE=$(ls target/${{ matrix.target }}/debian/*.deb)
               cp "$DEB_FILE" .
               DEB_NAME=$(basename "$DEB_FILE")
-              echo "DEB_ASSET=$DEB_NAME" >> $GITHUB_ENV
+              echo "DEB_ASSET=$DEB_NAME" >> "$GITHUB_ENV"
+              # Convert .deb to .ipk for aarch64 and armhf (OpenWrt)
+              if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" || "${{ matrix.target }}" == "arm-unknown-linux-gnueabihf" ]]; then
+                TEMP_DIR=$(mktemp -d)
+                DEB_ABS_PATH="$GITHUB_WORKSPACE/$DEB_FILE"
+                cp "$DEB_ABS_PATH" "$TEMP_DIR/"
+                cd "$TEMP_DIR" || exit 1
+                ar x "$(basename "$DEB_FILE")"
+                # Discover actual archive filenames using pattern matching
+                DATA_TAR=$(ls data.tar.* 2>/dev/null | head -1)
+                CONTROL_TAR=$(ls control.tar.* 2>/dev/null | head -1)
+                tar -xf "$DATA_TAR"
+                tar -xf "$CONTROL_TAR"
+                # Update control file for OpenWrt
+                ARCH_MAP_ARM64="aarch64"
+                ARCH_MAP_ARMHF="armv7ahf-vfp"
+                if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+                  TARGET_ARCH="$ARCH_MAP_ARM64"
+                else
+                  TARGET_ARCH="$ARCH_MAP_ARMHF"
+                fi
+                sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" "$TEMP_DIR/control"
+                sed -i 's/libgcc-s1/libgcc1/g' "$TEMP_DIR/control"
+                # Create .ipk package - preserve control.tar.gz metadata
+                mkdir -p "$TEMP_DIR/data"
+                DATA_TAR=$(ls data.tar.* 2>/dev/null | head -1)
+                tar -xf "$DATA_TAR" -C "$TEMP_DIR/data"
+                cd "$TEMP_DIR/data" || exit 1
+                tar -czf ../data.tar.gz .
+                cd "$TEMP_DIR" || exit 1
+                # Re-create control.tar.gz from extracted directory to preserve metadata
+                mkdir -p tmp_control
+                CONTROL_TAR=$(ls control.tar.* 2>/dev/null | head -1)
+                tar -xf "$CONTROL_TAR" -C tmp_control
+                sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" tmp_control/control
+                sed -i 's/libgcc-s1/libgcc1/g' tmp_control/control
+                tar -C tmp_control -czf control.tar.gz .
+                ar cr "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" debian-binary control.tar.gz data.tar.gz
+                cp "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" "$GITHUB_WORKSPACE/"
+                echo "IPK_ASSET=mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" >> "$GITHUB_ENV"
+                cd "$GITHUB_WORKSPACE" || exit 1
+                rm -rf "$TEMP_DIR"
+              fi
             fi
+          fi
+
+      - name: 🧮 Compute attestation subjects
+        if: inputs.tagName && matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          if [ -n "${{ env.IPK_ASSET }}" ]; then
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }},${{ env.IPK_ASSET }}" >> "$GITHUB_ENV"
+          else
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }}" >> "$GITHUB_ENV"
           fi
 
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
         uses: actions/attest-build-provenance@c44148e5bf178192efd8947e07a0d439a356c60b
         with:
-          subject-path: "${{ matrix.os == 'ubuntu-latest' && format('{0}\n{1}', env.ASSET, env.DEB_ASSET) || env.ASSET }}"
+          subject-path: ${{ matrix.os == 'ubuntu-latest' && env.ATTESTATION_SUBJECTS || env.ASSET }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
@@ -172,6 +224,7 @@ jobs:
           files: |
             ${{ env.ASSET }}
             ${{ matrix.os == 'ubuntu-latest' && env.DEB_ASSET || '' }}
+            ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
@@ -187,4 +240,12 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.target }}-deb
           path: ${{ env.DEB_ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload ipk artifacts
+        if: (!inputs.tagName) && matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mdns-tui-browser-${{ matrix.target }}-ipk
+          path: ${{ env.IPK_ASSET }}
           retention-days: 30
