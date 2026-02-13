@@ -178,9 +178,13 @@ jobs:
                 cd "$TEMP_DIR/data" || exit 1
                 tar -czf ../data.tar.gz .
                 cd "$TEMP_DIR" || exit 1
-                # Re-create control.tar.gz from the entire directory to preserve metadata
-                rm -f control.tar.*
-                tar -czf control.tar.gz ./control ./conffiles ./postinst ./prerm ./md5sums 2>/dev/null || tar -czf control.tar.gz ./control
+                # Re-create control.tar.gz from extracted directory to preserve metadata
+                mkdir -p tmp_control
+                CONTROL_TAR=$(ls control.tar.* 2>/dev/null | head -1)
+                tar -xf "$CONTROL_TAR" -C tmp_control
+                sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" tmp_control/control
+                sed -i 's/libgcc-s1/libgcc1/g' tmp_control/control
+                tar -C tmp_control -czf control.tar.gz .
                 ar cr "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" debian-binary control.tar.gz data.tar.gz
                 cp "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" "$GITHUB_WORKSPACE/"
                 echo "IPK_ASSET=mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" >> "$GITHUB_ENV"
@@ -195,9 +199,9 @@ jobs:
         shell: bash
         run: |
           if [ -n "${{ env.IPK_ASSET }}" ]; then
-            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }}@${{ env.DEB_ASSET }}@${{ env.IPK_ASSET }}" >> "$GITHUB_ENV"
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }},${{ env.IPK_ASSET }}" >> "$GITHUB_ENV"
           else
-            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }}@${{ env.DEB_ASSET }}" >> "$GITHUB_ENV"
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }}" >> "$GITHUB_ENV"
           fi
 
       - name: 🔐 Generate provenance attestation
