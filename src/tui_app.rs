@@ -2947,9 +2947,44 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     lines
 }
 
+/// Runs the TUI application for mDNS service browsing.
+///
+/// # Arguments
+/// * `user_service_types` - Service types to browse for
+/// * `no_debounce` - Whether to disable debouncing of flapping services
+/// * `interfaces` - Optional list of network interface names to bind to.
+///   If `Some`, only the specified interfaces will be used.
+///   If `None`, all available interfaces will be used (default behavior).
+///   The expected string format is the interface name (e.g., "eth0", "en0").
+///   An empty vector `Some(vec![])` will result in no interfaces being used.
+/// * `available_interfaces` - List of all available network interface names.
+///   Used to disable all interfaces before enabling the requested ones.
+///
+/// # Example
+/// ```no_run
+/// use std::collections::HashSet;
+///
+/// async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+///     let service_types = HashSet::new();
+///
+///     // Use default interfaces (all available)
+///     run_tui(service_types.clone(), false, None, None).await;
+///
+///     // Use specific interfaces
+///     run_tui(
+///         service_types,
+///         false,
+///         Some(vec!["eth0".into()]),
+///         Some(vec!["eth0".into(), "lo".into()]),
+///     )
+///     .await
+/// }
+/// ```
 pub async fn run_tui(
     user_service_types: HashSet<String>,
     no_debounce: bool,
+    interfaces: Option<Vec<String>>,
+    available_interfaces: Option<Vec<String>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Setup terminal for full TUI
     enable_raw_mode()?;
@@ -2959,6 +2994,25 @@ pub async fn run_tui(
     let mut terminal = Terminal::new(backend)?;
 
     let mdns = ServiceDaemon::new()?;
+
+    if let Some(ifs) = interfaces {
+        let available = available_interfaces.ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Available interfaces required when --interfaces is set",
+            )
+        })?;
+
+        for interface in &available {
+            mdns.disable_interface(interface)
+                .map_err(|e| format!("Failed to disable interface '{}': {}", interface, e))?;
+        }
+
+        for interface in &ifs {
+            mdns.enable_interface(interface)
+                .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
+        }
+    }
 
     // Initialize app state
     let state = Arc::new(RwLock::new(AppState::new(user_service_types, no_debounce)));
