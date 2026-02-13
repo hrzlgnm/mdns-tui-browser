@@ -149,6 +149,36 @@ jobs:
               cp "$DEB_FILE" .
               DEB_NAME=$(basename "$DEB_FILE")
               echo "DEB_ASSET=$DEB_NAME" >> $GITHUB_ENV
+              # Convert .deb to .ipk for aarch64 and armhf (OpenWrt)
+              if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" || "${{ matrix.target }}" == "arm-unknown-linux-gnueabihf" ]]; then
+                TEMP_DIR=$(mktemp -d)
+                cd "$TEMP_DIR" || exit 1
+                ar x "$DEB_FILE"
+                tar -xzf data.tar.gz -C "$TEMP_DIR"
+                tar -xzf control.tar.gz -C "$TEMP_DIR"
+                # Update control file for OpenWrt
+                ARCH_MAP_ARM64="aarch64"
+                ARCH_MAP_ARMHF="armv7ahf-vfp"
+                if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+                  TARGET_ARCH="$ARCH_MAP_ARM64"
+                else
+                  TARGET_ARCH="$ARCH_MAP_ARMHF"
+                fi
+                sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" "$TEMP_DIR/control"
+                sed -i 's/libgcc-s1/libgcc1/g' "$TEMP_DIR/control"
+                # Create .ipk package
+                mkdir -p "$TEMP_DIR/data"
+                tar -xzf "$TEMP_DIR/data.tar.gz" -C "$TEMP_DIR/data"
+                cd "$TEMP_DIR/data" || exit 1
+                tar -czf ../data.tar.gz .
+                cd "$TEMP_DIR" || exit 1
+                tar -czf control.tar.gz ./control
+                ar cr "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" debian-binary control.tar.gz data.tar.gz
+                cp "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" "$GITHUB_WORKSPACE/"
+                echo "IPK_ASSET=mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" >> "$GITHUB_ENV"
+                cd "$GITHUB_WORKSPACE" || exit 1
+                rm -rf "$TEMP_DIR"
+              fi
             fi
           fi
 
@@ -156,7 +186,7 @@ jobs:
         if: inputs.tagName
         uses: actions/attest-build-provenance@c44148e5bf178192efd8947e07a0d439a356c60b
         with:
-          subject-path: "${{ matrix.os == 'ubuntu-latest' && format('{0}\n{1}', env.ASSET, env.DEB_ASSET) || env.ASSET }}"
+          subject-path: "${{ matrix.os == 'ubuntu-latest' && format('{0}\n{1}\n{2}', env.ASSET, env.DEB_ASSET, env.IPK_ASSET) || env.ASSET }}"
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
@@ -172,6 +202,7 @@ jobs:
           files: |
             ${{ env.ASSET }}
             ${{ matrix.os == 'ubuntu-latest' && env.DEB_ASSET || '' }}
+            ${{ matrix.os == 'ubuntu-latest' && env.IPK_ASSET || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
@@ -187,4 +218,12 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.target }}-deb
           path: ${{ env.DEB_ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload ipk artifacts
+        if: (!inputs.tagName) && matrix.os == 'ubuntu-latest' && env.IPK_ASSET != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mdns-tui-browser-${{ matrix.target }}-ipk
+          path: ${{ env.IPK_ASSET }}
           retention-days: 30
