@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-02-13" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-02-14" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -28,6 +28,12 @@ Disable automatic debouncing of flapping services for debugging
 .B \-i, \-\-interfaces \fIINTERFACES\fR
 Network interfaces to use for mDNS discovery (e.g., en0, eth0)
 Can be specified multiple times or comma-separated
+.TP
+.B \-\-no-ipv4
+Disable IPv4 mDNS discovery
+.TP
+.B \-\-no-ipv6
+Disable IPv6 mDNS discovery
 
 .SH SERVICE TYPES
 The \fB\-\-service-types\fR argument supports various formats:

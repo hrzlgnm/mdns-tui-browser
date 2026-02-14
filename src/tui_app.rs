@@ -7,7 +7,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
+use mdns_sd::{IfKind, ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -2985,6 +2985,8 @@ pub async fn run_tui(
     no_debounce: bool,
     interfaces: Option<Vec<String>>,
     available_interfaces: Option<Vec<String>>,
+    disable_ipv4: bool,
+    disable_ipv6: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Setup terminal for full TUI
     enable_raw_mode()?;
@@ -3012,6 +3014,16 @@ pub async fn run_tui(
             mdns.enable_interface(interface)
                 .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
         }
+    }
+
+    if disable_ipv4 {
+        mdns.disable_interface(IfKind::IPv4)
+            .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
+    }
+
+    if disable_ipv6 {
+        mdns.disable_interface(IfKind::IPv6)
+            .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
     }
 
     // Initialize app state
