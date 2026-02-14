@@ -2671,17 +2671,17 @@ fn create_service_list_item_style(
     selected_index: usize,
     service: &ServiceEntry,
 ) -> Style {
-    let foreground = if service.online {
-        Color::White
-    } else {
-        STATUS_ERROR_COLOR
-    };
+    let foreground = Color::White;
 
     let mut style = if index == selected_index {
         Style::default().bg(Color::DarkGray).fg(foreground)
     } else {
         Style::default().fg(foreground)
     };
+
+    if !service.online {
+        style = style.add_modifier(Modifier::CROSSED_OUT);
+    }
 
     // Add subtle styling for flapping services using color-blind friendly approach
     if service.is_flapping {
@@ -6130,7 +6130,8 @@ mod tests {
 
         // Test offline service
         let style = create_service_list_item_style(0, 0, &offline_service);
-        assert_eq!(style.fg, Some(Color::Yellow));
+        assert_eq!(style.fg, Some(Color::White));
+        assert!(style.add_modifier.contains(Modifier::CROSSED_OUT));
     }
 
     // Edge case tests
@@ -8225,10 +8226,11 @@ mod tests {
 
         let style = create_service_list_item_style(2, 2, &service);
 
-        // Should have darker background with underline and error color foreground when offline and flapping
+        // Should have darker background with underline and crossed out when offline and flapping
         assert_eq!(style.bg, Some(FLAPPING_COLOR_SELECTED));
-        assert_eq!(style.fg, Some(STATUS_ERROR_COLOR));
+        assert_eq!(style.fg, Some(Color::White));
         assert!(style.add_modifier.contains(Modifier::UNDERLINED));
+        assert!(style.add_modifier.contains(Modifier::CROSSED_OUT));
     }
 
     #[test]
