@@ -2290,7 +2290,7 @@ fn render_services_list(
             Span::styled(
                 format!("{}", offline_count),
                 Style::default()
-                    .fg(STATUS_OK_COLOR)
+                    .fg(STATUS_ERROR_COLOR)
                     .add_modifier(Modifier::CROSSED_OUT),
             ),
             Span::raw("/"),
