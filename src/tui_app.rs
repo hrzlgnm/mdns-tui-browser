@@ -2190,22 +2190,36 @@ fn render_service_types_list(
         get_visible_items(&type_items, &app_state.types_scroll).to_vec();
 
     let types_list = List::new(visible_type_items)
-        .block(Block::default().borders(Borders::ALL).title(format!(
-            "Service Types [{}] (←/→){}",
-            app_state.service_types.len(),
+        .block(Block::default().borders(Borders::ALL).title({
+            let mut spans = vec![Span::raw(format!(
+                "Service Types [{}] (←/→)",
+                app_state.service_types.len()
+            ))];
             if app_state.disable_ipv4 || app_state.disable_ipv6 {
                 let mut disabled = Vec::new();
                 if app_state.disable_ipv4 {
-                    disabled.push("IPv4");
+                    disabled.push(Span::styled(
+                        "IPv4",
+                        Style::default().add_modifier(Modifier::CROSSED_OUT),
+                    ));
                 }
                 if app_state.disable_ipv6 {
-                    disabled.push("IPv6");
+                    disabled.push(Span::styled(
+                        "IPv6",
+                        Style::default().add_modifier(Modifier::CROSSED_OUT),
+                    ));
                 }
-                format!(" [{}]", disabled.join(", "))
-            } else {
-                String::new()
+                spans.push(Span::raw(" ["));
+                for (i, s) in disabled.iter().enumerate() {
+                    if i > 0 {
+                        spans.push(Span::raw(", "));
+                    }
+                    spans.push(s.clone());
+                }
+                spans.push(Span::raw("]"));
             }
-        )))
+            Line::from(spans)
+        }))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut list_state = ListState::default();
