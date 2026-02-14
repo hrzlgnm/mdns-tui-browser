@@ -2996,6 +2996,8 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///   An empty vector `Some(vec![])` will result in no interfaces being used.
 /// * `available_interfaces` - List of all available network interface names.
 ///   Used to disable all interfaces before enabling the requested ones.
+/// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
+/// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
 ///
 /// # Example
 /// ```no_run
@@ -3005,7 +3007,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     let service_types = HashSet::new();
 ///
 ///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), false, None, None).await;
+///     run_tui(service_types.clone(), false, None, None, false, false).await;
 ///
 ///     // Use specific interfaces
 ///     run_tui(
@@ -3013,6 +3015,8 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///         false,
 ///         Some(vec!["eth0".into()]),
 ///         Some(vec!["eth0".into(), "lo".into()]),
+///         false,
+///         false,
 ///     )
 ///     .await
 /// }
