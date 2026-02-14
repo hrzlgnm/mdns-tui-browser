@@ -85,6 +85,10 @@ mdns-tui-browser --no-debounce
 # Use specific network interfaces
 mdns-tui-browser -i en0
 mdns-tui-browser --interfaces en0,eth0
+
+# Disable IPv4 or IPv6 mDNS discovery
+mdns-tui-browser --no-ipv4
+mdns-tui-browser --no-ipv6
 ```
 
 #### Service Types Argument (`--service-types/-s`)

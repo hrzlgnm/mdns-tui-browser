@@ -40,10 +40,22 @@ struct Cli {
         help = "Network interfaces to use for mDNS discovery (e.g., en0, eth0)"
     )]
     interfaces: Option<Vec<String>>,
+
+    /// Disable IPv4 mDNS discovery
+    #[arg(long, help = "Disable IPv4 mDNS discovery")]
+    no_ipv4: bool,
+
+    /// Disable IPv6 mDNS discovery
+    #[arg(long, help = "Disable IPv6 mDNS discovery")]
+    no_ipv6: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+
+    if cli.no_ipv4 && cli.no_ipv6 {
+        return Err("Cannot disable both IPv4 and IPv6. At least one must be enabled.".into());
+    }
 
     // Normalize service types (add .local. suffix if missing)
     let user_requested_service_types = cli
@@ -84,11 +96,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => (None, None),
     };
 
+    let disable_ipv4 = cli.no_ipv4;
+    let disable_ipv6 = cli.no_ipv6;
+
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(tui_app::run_tui(
         user_requested_service_types,
         cli.no_debounce,
         interfaces,
         available_interfaces,
+        disable_ipv4,
+        disable_ipv6,
     ))
 }
