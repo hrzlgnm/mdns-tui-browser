@@ -2243,6 +2243,13 @@ fn render_services_list(
     let filtered_indices = app_state.get_filtered_services_readonly();
     let filtered_indices_len = filtered_indices.len();
 
+    let offline_count = filtered_indices
+        .iter()
+        .filter(|&&idx| !services_clone[idx].online)
+        .count();
+    let online_count = filtered_indices_len - offline_count;
+    let total_count = services_clone.len();
+
     let service_items: Vec<ListItem> = filtered_indices
         .iter()
         .enumerate()
@@ -2272,18 +2279,42 @@ fn render_services_list(
             .add_modifier(Modifier::BOLD),
     );
 
-    let title = Line::from(vec![
-        Span::raw("Services ["),
-        Span::styled(
-            format!("{}/{}", filtered_indices_len, services_clone.len()),
-            Style::default().fg(STATUS_OK_COLOR),
-        ),
-        Span::raw("] ["),
-        sort_field_highlighted,
-        Span::raw("/"),
-        sort_dir_highlighted,
-        Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
-    ]);
+    let title = if offline_count > 0 {
+        Line::from(vec![
+            Span::raw("Services ["),
+            Span::styled(
+                format!("{}", online_count),
+                Style::default().fg(STATUS_OK_COLOR),
+            ),
+            Span::raw("/"),
+            Span::styled(
+                format!("{}", offline_count),
+                Style::default().fg(STATUS_ERROR_COLOR),
+            ),
+            Span::raw("/"),
+            Span::raw(format!("{}", total_count)),
+            Span::raw("] ["),
+            sort_field_highlighted,
+            Span::raw("/"),
+            sort_dir_highlighted,
+            Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
+        ])
+    } else {
+        Line::from(vec![
+            Span::raw("Services ["),
+            Span::styled(
+                format!("{}", online_count),
+                Style::default().fg(STATUS_OK_COLOR),
+            ),
+            Span::raw("/"),
+            Span::raw(format!("{}", total_count)),
+            Span::raw("] ["),
+            sort_field_highlighted,
+            Span::raw("/"),
+            sort_dir_highlighted,
+            Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
+        ])
+    };
 
     let services_list = List::new(visible_service_items)
         .block(Block::default().borders(Borders::ALL).title(title))
