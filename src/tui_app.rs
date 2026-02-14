@@ -2292,10 +2292,7 @@ fn render_services_list(
                 Style::default().fg(STATUS_ERROR_COLOR),
             ),
             Span::raw("/"),
-            Span::styled(
-                format!("{}", total_count),
-                Style::default().fg(STATUS_OK_COLOR),
-            ),
+            Span::raw(format!("{}", total_count)),
             Span::raw("] ["),
             sort_field_highlighted,
             Span::raw("/"),
@@ -2310,10 +2307,7 @@ fn render_services_list(
                 Style::default().fg(STATUS_OK_COLOR),
             ),
             Span::raw("/"),
-            Span::styled(
-                format!("{}", total_count),
-                Style::default().fg(STATUS_OK_COLOR),
-            ),
+            Span::raw(format!("{}", total_count)),
             Span::raw("] ["),
             sort_field_highlighted,
             Span::raw("/"),
