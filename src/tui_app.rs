@@ -2451,6 +2451,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
 }
 
 fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
+    let version = env!("CARGO_PKG_VERSION");
     let help_content = generate_help_content();
 
     let popup_area = create_centered_popup(f.area(), 60, 70);
@@ -2488,7 +2489,7 @@ fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     // Render border on top
     let border_block = Block::default()
         .borders(Borders::ALL)
-        .title("Key Bindings")
+        .title(format!("Key Bindings | v{}", version))
         .title_style(Style::default().add_modifier(Modifier::BOLD));
     f.render_widget(border_block, popup_area);
 }
@@ -2543,7 +2544,6 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Any other key     - Close this help popup"),
         Line::from(" "),
         Line::from(" Navigation:"),
-        Line::from("   ↑/↓ or j/k        - Navigate services list"),
         Line::from("   ←/→ or h/l        - Switch between service types"),
         Line::from("   H/L               - Page through service types"),
         Line::from("   PageUp/Down       - Scroll services list by page"),
