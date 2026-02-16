@@ -11,6 +11,8 @@
 
 A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface. For an alternative running as a desktop app, check out [mDNS-Browser](https://github.com/hrzlgnm/mdns-browser).
 
+![demo](./docs/assets/demo.gif)
+
 ## Features
 
 - 🖥️ **Interactive TUI**: Full terminal UI with keyboard navigation
