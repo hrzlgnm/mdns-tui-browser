@@ -1,4 +1,4 @@
-Output demo.webm
+Output mdns.webm
 Set Padding 0
 Set FontSize 14
 Set Width 1000
