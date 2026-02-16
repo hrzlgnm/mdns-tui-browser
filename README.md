@@ -9,7 +9,11 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/hrzlgnm/mdns-tui-browser/ci.yml)](https://github.com/hrzlgnm/mdns-tui-browser/actions)
 # mDNS TUI Browser
 
-![Demo](https://raw.githubusercontent.com/hrzlgnm/mdns-tui-browser/main/docs/assets/demo.gif)
+## Demo
+
+<p align="center>
+<img src="./docs/assets/demo.gif" width="100vw"></img>
+</p>
 
 A terminal-based mDNS service browser built with Rust, using `ratatui` for the TUI interface. For an alternative running as a desktop app, check out [mDNS-Browser](https://github.com/hrzlgnm/mdns-browser).
 
