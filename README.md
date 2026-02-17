@@ -91,6 +91,10 @@ mdns-tui-browser --interfaces en0,eth0
 # Disable IPv4 or IPv6 mDNS discovery
 mdns-tui-browser --no-ipv4
 mdns-tui-browser --no-ipv6
+
+# Load state from a JSON file (view-only mode, no browsing)
+mdns-tui-browser --load-state state-dump.json
+mdns-tui-browser -l state-dump.json
 ```
 
 #### Service Types Argument (`--service-types/-s`)
@@ -105,7 +109,7 @@ Service types to browse for (e.g., http, _http._tcp, printer). Auto-completes `(
 
 ## JSON State Dump
 
-The application can export the complete current state to a JSON file for debugging and analysis purposes.
+The application can export the complete current state to a JSON file for debugging and analysis purposes, and can also load a previously exported state file for inspection.
 
 ### Usage
 
@@ -114,6 +118,15 @@ Press <kbd>Ctrl</kbd>+<kbd>J</kbd> in the TUI to trigger a state dump. The file 
 ```text
 20260207T120102.089898-state-dump.json
 ```
+
+To load a previously exported state file for inspection (view-only mode, no browsing):
+
+```bash
+mdns-tui-browser --load-state state-dump.json
+mdns-tui-browser -l state-dump.json
+```
+
+When loading a state file, no mDNS browsing is performed. The border color changes to a darker color to indicate view-only mode.
 
 ### JSON Structure
 

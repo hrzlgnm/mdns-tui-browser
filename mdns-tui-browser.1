@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-02-14" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-02-17" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -34,6 +34,9 @@ Disable IPv4 mDNS discovery
 .TP
 .B \-\-no-ipv6
 Disable IPv6 mDNS discovery
+.TP
+.B \-l, \-\-load-state \fIFILE\fR
+Load state from a JSON file for inspection (view-only mode, no browsing)
 
 .SH SERVICE TYPES
 The \fB\-\-service-types\fR argument supports various formats:
@@ -110,6 +113,8 @@ Ctrl+J                 - Dump current state to JSON file
 ?                      - Toggle help popup
 .br
 q or Ctrl+c            - Quit the application
+.PP
+\fBNote:\fR When loading a state file with \fB\-\-load-state\fR, the application runs in view-only mode (no browsing). The border color changes to a darker color to indicate this mode.
 
 .SH QUICK FILTER
 The quickfilter feature allows searching across all service fields using text patterns and special keywords.
@@ -212,6 +217,10 @@ Disable IPv4 mDNS discovery:
 Disable IPv6 mDNS discovery:
 .br
 .B mdns-tui-browser \-\-no-ipv6
+.IP \(bu
+Load state from a JSON file (view-only mode):
+.br
+.B mdns-tui-browser \-\-load-state state-dump.json
 .RE
 
 .SH AUTHOR

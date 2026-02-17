@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use chrono::{DateTime, Utc};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
     execute,
@@ -16,17 +21,13 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
+const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 
 // Flapping service colors (color-blind friendly)
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
@@ -49,6 +50,24 @@ fn micros_to_iso_timestamp(micros: u64) -> String {
     }
 }
 
+fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
+        let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
+    }
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+        let duration = dt.signed_duration_since(epoch);
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
+    }
+    0
+}
+
 impl From<&ServiceEntry> for SerializableServiceEntry {
     fn from(entry: &ServiceEntry) -> Self {
         let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
@@ -62,6 +81,7 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
             None
         };
         Self {
+            fullname: entry.fullname.clone(),
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
             subtype: entry.subtype.clone(),
@@ -88,7 +108,59 @@ impl From<&ServiceSession> for SerializableServiceSession {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+impl From<&SerializableServiceEntry> for ServiceEntry {
+    fn from(entry: &SerializableServiceEntry) -> Self {
+        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
+        let updated_at_micros = entry
+            .updated_at
+            .as_ref()
+            .map(|ts| iso_timestamp_to_micros(ts))
+            .unwrap_or(first_seen_micros);
+        let last_online_micros = entry
+            .last_online_at
+            .as_ref()
+            .map(|ts| iso_timestamp_to_micros(ts));
+        let last_offline_micros = entry
+            .last_offline_at
+            .as_ref()
+            .map(|ts| iso_timestamp_to_micros(ts));
+
+        Self {
+            fullname: entry.fullname.clone(),
+            host: entry.host.clone(),
+            service_type: entry.service_type.clone(),
+            subtype: entry.subtype.clone(),
+            addrs: entry.addresses.clone(),
+            port: entry.port,
+            txt: entry.txt_records.clone(),
+            online: entry.is_online,
+            updated_at_micros,
+            first_seen_micros,
+            last_online_micros,
+            last_offline_micros,
+            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
+            is_flapping: entry.is_flapping,
+        }
+    }
+}
+
+impl From<&SerializableServiceSession> for ServiceSession {
+    fn from(session: &SerializableServiceSession) -> Self {
+        Self {
+            start_time: session
+                .start_time
+                .as_ref()
+                .map(|ts| iso_timestamp_to_micros(ts))
+                .unwrap_or(0),
+            end_time: session
+                .end_time
+                .as_ref()
+                .map(|ts| iso_timestamp_to_micros(ts)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 enum SortField {
     Host,
@@ -99,7 +171,7 @@ enum SortField {
     Timestamp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 enum SortDirection {
     Ascending,
@@ -124,27 +196,29 @@ struct ServiceEntry {
     is_flapping: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SerializableServiceEntry {
+    fullname: String,
     host: String,
     service_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     subtype: Option<String>,
     addresses: Vec<String>,
-    #[serde(skip_serializing_if = "is_zero_u16")]
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
     port: u16,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     txt_records: Vec<String>,
     is_online: bool,
     is_flapping: bool,
     created_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     updated_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     last_online_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     last_offline_at: Option<String>,
+    #[serde(default)]
     session_history: Vec<SerializableServiceSession>,
 }
 
@@ -158,12 +232,12 @@ struct ServiceSession {
     end_time: Option<u64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SerializableServiceSession {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     start_time: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     end_time: Option<String>,
 }
 
@@ -475,7 +549,7 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     &items[start..end]
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Metadata {
     dump_timestamp: String,
@@ -483,7 +557,7 @@ struct Metadata {
     version: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StateDump {
     metadata: Metadata,
@@ -494,14 +568,14 @@ struct StateDump {
     sorting: SortInfo,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FilterInfo {
     query: String,
     active_service_types: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SortInfo {
     field: String,
@@ -535,6 +609,7 @@ struct AppState {
     no_debounce: bool,
     disable_ipv4: bool,
     disable_ipv6: bool,
+    loaded_from_file: bool,
 }
 
 impl Clone for AppState {
@@ -566,6 +641,7 @@ impl Clone for AppState {
             no_debounce: self.no_debounce,
             disable_ipv4: self.disable_ipv4,
             disable_ipv6: self.disable_ipv6,
+            loaded_from_file: self.loaded_from_file,
         }
     }
 }
@@ -604,6 +680,7 @@ impl AppState {
             no_debounce,
             disable_ipv4,
             disable_ipv6,
+            loaded_from_file: false,
         };
         state.validate_selected_type();
         state
@@ -872,6 +949,37 @@ impl AppState {
 
         tokio::fs::write(&filename, json_content).await?;
         Ok(filename)
+    }
+
+    fn load_from_state_dump(&mut self, dump: StateDump) {
+        self.services = dump.services.iter().map(|s| s.into()).collect();
+        self.service_types = dump.service_types;
+        self.metrics = dump.metrics;
+        self.filter_query = dump.filters.query;
+        self.user_service_types = dump.filters.active_service_types.into_iter().collect();
+
+        let sort_field = match dump.sorting.field.as_str() {
+            "Host" => SortField::Host,
+            "ServiceType" => SortField::ServiceType,
+            "Fullname" => SortField::Fullname,
+            "Port" => SortField::Port,
+            "Address" => SortField::Address,
+            "Timestamp" => SortField::Timestamp,
+            _ => SortField::Host,
+        };
+        self.sort_field = sort_field;
+
+        let sort_direction = match dump.sorting.direction.as_str() {
+            "Ascending" => SortDirection::Ascending,
+            "Descending" => SortDirection::Descending,
+            _ => SortDirection::Ascending,
+        };
+        self.sort_direction = sort_direction;
+
+        self.loaded_from_file = true;
+        self.cache_dirty = true;
+        self.cached_sorted = false;
+        self.validate_selected_type();
     }
 
     fn update_service_type_selection(&mut self, new_type: Option<usize>) {
@@ -2081,6 +2189,14 @@ struct VisibleCounts {
     services: usize,
 }
 
+fn get_border_style(loaded_from_file: bool) -> Style {
+    if loaded_from_file {
+        Style::default().fg(VIEW_ONLY_BORDER_COLOR)
+    } else {
+        Style::default()
+    }
+}
+
 fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> MainLayout {
     let main_area = if has_filter_status {
         // Reserve 3 rows at the bottom for filter status
@@ -2189,37 +2305,43 @@ fn render_service_types_list(
     let visible_type_items: Vec<ListItem> =
         get_visible_items(&type_items, &app_state.types_scroll).to_vec();
 
+    let border_style = get_border_style(app_state.loaded_from_file);
     let types_list = List::new(visible_type_items)
-        .block(Block::default().borders(Borders::ALL).title({
-            let mut spans = vec![Span::raw(format!(
-                "Service Types [{}] (←/→)",
-                app_state.service_types.len()
-            ))];
-            if app_state.disable_ipv4 || app_state.disable_ipv6 {
-                let mut disabled = Vec::new();
-                if app_state.disable_ipv4 {
-                    disabled.push(Span::styled(
-                        "IPv4",
-                        Style::default().add_modifier(Modifier::CROSSED_OUT),
-                    ));
-                }
-                if app_state.disable_ipv6 {
-                    disabled.push(Span::styled(
-                        "IPv6",
-                        Style::default().add_modifier(Modifier::CROSSED_OUT),
-                    ));
-                }
-                spans.push(Span::raw(" ["));
-                for (i, s) in disabled.iter().enumerate() {
-                    if i > 0 {
-                        spans.push(Span::raw(", "));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .title({
+                    let mut spans = vec![Span::raw(format!(
+                        "Service Types [{}] (←/→)",
+                        app_state.service_types.len()
+                    ))];
+                    if app_state.disable_ipv4 || app_state.disable_ipv6 {
+                        let mut disabled = Vec::new();
+                        if app_state.disable_ipv4 {
+                            disabled.push(Span::styled(
+                                "IPv4",
+                                Style::default().add_modifier(Modifier::CROSSED_OUT),
+                            ));
+                        }
+                        if app_state.disable_ipv6 {
+                            disabled.push(Span::styled(
+                                "IPv6",
+                                Style::default().add_modifier(Modifier::CROSSED_OUT),
+                            ));
+                        }
+                        spans.push(Span::raw(" ["));
+                        for (i, s) in disabled.iter().enumerate() {
+                            if i > 0 {
+                                spans.push(Span::raw(", "));
+                            }
+                            spans.push(s.clone());
+                        }
+                        spans.push(Span::raw("]"));
                     }
-                    spans.push(s.clone());
-                }
-                spans.push(Span::raw("]"));
-            }
-            Line::from(spans)
-        }))
+                    Line::from(spans)
+                }),
+        )
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut list_state = ListState::default();
@@ -2316,8 +2438,14 @@ fn render_services_list(
         ])
     };
 
+    let border_style = get_border_style(app_state.loaded_from_file);
     let services_list = List::new(visible_service_items)
-        .block(Block::default().borders(Borders::ALL).title(title))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .title(title),
+        )
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut services_list_state = ListState::default();
@@ -2358,18 +2486,22 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
 
         let visible_details: Vec<Line> = details_lines.into_iter().skip(clamped_offset).collect();
 
+        let border_style = get_border_style(app_state.loaded_from_file);
         let details = Paragraph::new(visible_details)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
+                    .border_style(border_style)
                     .title("Service Details (Shift+↑/↓, J/K to scroll)"),
             )
             .wrap(Wrap { trim: true });
         f.render_widget(details, area);
     } else {
+        let border_style = get_border_style(app_state.loaded_from_file);
         let details = Paragraph::new("No service selected").block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_style(border_style)
                 .title("Service Details"),
         );
         f.render_widget(details, area);
@@ -2385,11 +2517,13 @@ fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layou
     );
 
     let input_text = format!("/{}_", app_state.filter_query);
+    let border_style = get_border_style(app_state.loaded_from_file);
 
     let filter_input = Paragraph::new(input_text)
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_style(border_style)
                 .title("Quick Filter (Enter to apply, Esc to cancel)"),
         )
         .style(Style::default().fg(UI_CONTROLS_COLOR));
@@ -2399,11 +2533,13 @@ fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layou
 
 fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
     let status_text = format!("Filter: '{}' (Press 'n' to clear)", app_state.filter_query);
+    let border_style = get_border_style(app_state.loaded_from_file);
 
     let status = Paragraph::new(status_text)
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_style(border_style)
                 .title("Active Filter"),
         )
         .style(Style::default().fg(UI_CONTROLS_COLOR));
@@ -3029,6 +3165,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///   Used to disable all interfaces before enabling the requested ones.
 /// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
 /// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
+/// * `loaded_state` - Optional JSON string to load state from file (view-only mode)
 ///
 /// # Example
 /// ```no_run
@@ -3038,7 +3175,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     let service_types = HashSet::new();
 ///
 ///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), false, None, None, false, false).await;
+///     run_tui(service_types.clone(), false, None, None, false, false, None).await;
 ///
 ///     // Use specific interfaces
 ///     run_tui(
@@ -3048,6 +3185,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///         Some(vec!["eth0".into(), "lo".into()]),
 ///         false,
 ///         false,
+///         None,
 ///     )
 ///     .await
 /// }
@@ -3059,7 +3197,24 @@ pub async fn run_tui(
     available_interfaces: Option<Vec<String>>,
     disable_ipv4: bool,
     disable_ipv6: bool,
+    loaded_state: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if disable_ipv4 && disable_ipv6 {
+        return Err("Cannot disable both IPv4 and IPv6. At least one must be enabled.".into());
+    }
+
+    let is_view_only = loaded_state.is_some();
+
+    // Parse state file before terminal setup to avoid leaving terminal in broken state on error
+    let state_dump: Option<StateDump> = if let Some(json_content) = loaded_state {
+        Some(
+            serde_json::from_str(&json_content)
+                .map_err(|e| format!("Failed to parse state file: {}", e))?,
+        )
+    } else {
+        None
+    };
+
     // Setup terminal for full TUI
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -3067,44 +3222,60 @@ pub async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mdns = ServiceDaemon::new()?;
+    let mdns = if is_view_only {
+        None
+    } else {
+        Some(ServiceDaemon::new()?)
+    };
 
-    if let Some(ifs) = interfaces {
-        let available = available_interfaces.ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Available interfaces required when --interfaces is set",
-            )
-        })?;
+    if let Some(ref mdns_ref) = mdns {
+        if let Some(ifs) = interfaces {
+            let available = available_interfaces.ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Available interfaces required when --interfaces is set",
+                )
+            })?;
 
-        for interface in &available {
-            mdns.disable_interface(interface)
-                .map_err(|e| format!("Failed to disable interface '{}': {}", interface, e))?;
+            for interface in &available {
+                mdns_ref
+                    .disable_interface(interface)
+                    .map_err(|e| format!("Failed to disable interface '{}': {}", interface, e))?;
+            }
+
+            for interface in &ifs {
+                mdns_ref
+                    .enable_interface(interface)
+                    .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
+            }
         }
 
-        for interface in &ifs {
-            mdns.enable_interface(interface)
-                .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
+        if disable_ipv4 {
+            mdns_ref
+                .disable_interface(IfKind::IPv4)
+                .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
         }
-    }
 
-    if disable_ipv4 {
-        mdns.disable_interface(IfKind::IPv4)
-            .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
-    }
-
-    if disable_ipv6 {
-        mdns.disable_interface(IfKind::IPv6)
-            .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
+        if disable_ipv6 {
+            mdns_ref
+                .disable_interface(IfKind::IPv6)
+                .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
+        }
     }
 
     // Initialize app state
     let state = Arc::new(RwLock::new(AppState::new(
-        user_service_types,
+        user_service_types.clone(),
         no_debounce,
         disable_ipv4,
         disable_ipv6,
     )));
+
+    // Load state from file if provided
+    if let Some(dump) = state_dump {
+        let mut state_write = state.write().await;
+        state_write.load_from_state_dump(dump);
+    }
 
     // Create notification channels
     let (notification_sender, notification_receiver) = flume::unbounded::<Notification>();
@@ -3112,34 +3283,38 @@ pub async fn run_tui(
     let state_clone = Arc::clone(&state);
     let notification_sender_clone = notification_sender.clone();
 
-    // Browse for user_requested service types provided via command line
-    let user_types = {
-        let state_read = state.read().await;
-        state_read.user_service_types.clone()
-    };
+    // Browse for user_requested service types provided via command line (skip in view-only mode)
+    if !is_view_only {
+        let user_types = {
+            let state_read = state.read().await;
+            state_read.user_service_types.clone()
+        };
 
-    for service_type in &user_types {
-        // Allow subtypes for user-requested service types
+        for service_type in &user_types {
+            // Allow subtypes for user-requested service types
 
-        {
-            let mut state_write = state_clone.write().await;
-            if state_write.add_service_type(service_type) {
-                state_write.update_metric("user_service_types_added");
-                let _ = notification_sender_clone.send(Notification::ServiceChanged);
-                match start_browsing_service_type(
-                    &mdns,
-                    service_type,
-                    Arc::clone(&state_clone),
-                    notification_sender_clone.clone(),
-                ) {
-                    Ok(_) => {} // Successfully started browsing
-                    Err(_) => {
-                        handle_browse_failure(
+            {
+                let mut state_write = state_clone.write().await;
+                if state_write.add_service_type(service_type) {
+                    state_write.update_metric("user_service_types_added");
+                    let _ = notification_sender_clone.send(Notification::ServiceChanged);
+                    if let Some(ref mdns_ref) = mdns {
+                        match start_browsing_service_type(
+                            mdns_ref,
                             service_type,
-                            &mut state_write,
+                            Arc::clone(&state_clone),
                             notification_sender_clone.clone(),
-                            "user_requested_service_browse_failures",
-                        );
+                        ) {
+                            Ok(_) => {} // Successfully started browsing
+                            Err(_) => {
+                                handle_browse_failure(
+                                    service_type,
+                                    &mut state_write,
+                                    notification_sender_clone.clone(),
+                                    "user_requested_service_browse_failures",
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -3148,122 +3323,133 @@ pub async fn run_tui(
 
     let mdns_for_metrics = mdns.clone();
 
-    // Start background task to periodically collect ServiceDaemon metrics
-    let state_for_metrics = Arc::clone(&state);
-    let notification_sender_for_metrics = notification_sender.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
-        loop {
-            interval.tick().await;
-
-            match mdns_for_metrics.get_metrics() {
-                Ok(metrics_receiver) => {
-                    if let Ok(daemon_metrics) = metrics_receiver.recv_async().await {
-                        let mut state = state_for_metrics.write().await;
-                        if state.update_daemon_metrics(&daemon_metrics) {
-                            // Metrics changed, trigger UI refresh
-                            let _ =
-                                notification_sender_for_metrics.send(Notification::MetricsUpdated);
-                        }
-                    }
-                }
-                Err(_) => {
-                    // If we can't get metrics, just continue
-                }
-            }
-        }
-    });
-
-    // Start global cleanup task to handle expired service removals
-    let state_for_cleanup = Arc::clone(&state);
-    let notification_sender_for_cleanup = notification_sender.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
-        loop {
-            interval.tick().await;
-
-            let ui_should_update = {
-                let mut state = state_for_cleanup.write().await;
-
-                // Only process expired removals if debouncing is enabled
-                if !state.no_debounce {
-                    // Capture state before processing expired removals
-                    let before_count = state.pending_removals.len();
-
-                    // Process expired removals
-                    state.process_expired_removals();
-
-                    // Update pending removals count metric
-                    let pending_count = state.pending_removals.len() as u64;
-                    *state
-                        .metrics
-                        .entry("pending_removals_active".to_string())
-                        .or_insert(0) = pending_count;
-
-                    // Check if any services actually changed (removed or marked offline)
-                    (before_count as u64) != pending_count
-                } else {
-                    false
-                }
-            };
-
-            // Notify UI if state changed
-            if ui_should_update {
-                let _ = notification_sender_for_cleanup.send(Notification::ServiceChanged);
-            }
-
-            // This task runs indefinitely
-        }
-    });
-
-    if state.read().await.user_service_types.is_empty() {
-        // Browse for all service types
-        let receiver = mdns.browse("_services._dns-sd._udp.local.")?;
-
-        let mdns = mdns.clone();
+    // Start background task to periodically collect ServiceDaemon metrics (skip in view-only mode)
+    if !is_view_only {
+        let state_for_metrics = Arc::clone(&state);
+        let notification_sender_for_metrics = notification_sender.clone();
         tokio::spawn(async move {
-            while let Ok(event) = receiver.recv_async().await {
-                match event {
-                    ServiceEvent::ServiceRemoved(_service_type, fullname) => {
-                        let mut state = state_clone.write().await;
-                        if state.remove_service_type(&fullname) {
-                            let _ = notification_sender_clone.send(Notification::ServiceChanged);
-                        }
-                    }
-                    ServiceEvent::ServiceFound(_service_type, fullname) => {
-                        let service_type = fullname.to_string();
-                        if is_sub_type(&service_type) {
-                            continue; // skip subtypes in auto-discovery
-                        }
-                        {
-                            let mut state = state_clone.write().await;
-                            if state.add_service_type(&service_type) {
-                                state.update_metric("service_types_discovered");
-                                let _ =
-                                    notification_sender_clone.send(Notification::ServiceChanged);
-                                match start_browsing_service_type(
-                                    &mdns,
-                                    &service_type,
-                                    Arc::clone(&state_clone),
-                                    notification_sender_clone.clone(),
-                                ) {
-                                    Ok(_) => {} // Successfully started browsing
-                                    Err(_) => {
-                                        handle_browse_failure(
-                                            &service_type,
-                                            &mut state,
-                                            notification_sender_clone.clone(),
-                                            "discovered_service_browse_failures",
-                                        );
-                                    }
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+
+                if let Some(ref mdns_ref) = mdns_for_metrics {
+                    match mdns_ref.get_metrics() {
+                        Ok(metrics_receiver) => {
+                            if let Ok(daemon_metrics) = metrics_receiver.recv_async().await {
+                                let mut state = state_for_metrics.write().await;
+                                if state.update_daemon_metrics(&daemon_metrics) {
+                                    // Metrics changed, trigger UI refresh
+                                    let _ = notification_sender_for_metrics
+                                        .send(Notification::MetricsUpdated);
                                 }
                             }
                         }
+                        Err(_) => {
+                            // If we can't get metrics, just continue
+                        }
                     }
-                    _ => (),
                 }
             }
         });
+    }
+
+    // Start global cleanup task to handle expired service removals (skip in view-only mode)
+    if !is_view_only {
+        let state_for_cleanup = Arc::clone(&state);
+        let notification_sender_for_cleanup = notification_sender.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
+            loop {
+                interval.tick().await;
+
+                let ui_should_update = {
+                    let mut state = state_for_cleanup.write().await;
+
+                    // Only process expired removals if debouncing is enabled
+                    if !state.no_debounce {
+                        // Capture state before processing expired removals
+                        let before_count = state.pending_removals.len();
+
+                        // Process expired removals
+                        state.process_expired_removals();
+
+                        // Update pending removals count metric
+                        let pending_count = state.pending_removals.len() as u64;
+                        *state
+                            .metrics
+                            .entry("pending_removals_active".to_string())
+                            .or_insert(0) = pending_count;
+
+                        // Check if any services actually changed (removed or marked offline)
+                        (before_count as u64) != pending_count
+                    } else {
+                        false
+                    }
+                };
+
+                // Notify UI if state changed
+                if ui_should_update {
+                    let _ = notification_sender_for_cleanup.send(Notification::ServiceChanged);
+                }
+
+                // This task runs indefinitely
+            }
+        });
+
+        if state.read().await.user_service_types.is_empty() {
+            // Browse for all service types
+            if let Some(ref mdns_ref) = mdns {
+                let receiver = mdns_ref.browse("_services._dns-sd._udp.local.")?;
+
+                let mdns = mdns.clone();
+                tokio::spawn(async move {
+                    while let Ok(event) = receiver.recv_async().await {
+                        match event {
+                            ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                                let mut state = state_clone.write().await;
+                                if state.remove_service_type(&fullname) {
+                                    let _ = notification_sender_clone
+                                        .send(Notification::ServiceChanged);
+                                }
+                            }
+                            ServiceEvent::ServiceFound(_service_type, fullname) => {
+                                let service_type = fullname.to_string();
+                                if is_sub_type(&service_type) {
+                                    continue; // skip subtypes in auto-discovery
+                                }
+                                {
+                                    let mut state = state_clone.write().await;
+                                    if state.add_service_type(&service_type) {
+                                        state.update_metric("service_types_discovered");
+                                        let _ = notification_sender_clone
+                                            .send(Notification::ServiceChanged);
+                                        if let Some(ref mdns_ref) = mdns {
+                                            match start_browsing_service_type(
+                                                mdns_ref,
+                                                &service_type,
+                                                Arc::clone(&state_clone),
+                                                notification_sender_clone.clone(),
+                                            ) {
+                                                Ok(_) => {} // Successfully started browsing
+                                                Err(_) => {
+                                                    handle_browse_failure(
+                                                        &service_type,
+                                                        &mut state,
+                                                        notification_sender_clone.clone(),
+                                                        "discovered_service_browse_failures",
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                });
+            }
+        }
     }
     // Initial render to show the UI immediately
     {
@@ -7511,6 +7697,28 @@ mod tests {
 
         // Clean up
         tokio::fs::remove_file(&filename).await.ok();
+    }
+
+    #[tokio::test]
+    async fn test_load_state_from_json() {
+        let mut state = AppState::new(HashSet::new(), false, false, false);
+
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 8080));
+
+        let json_str = state.dump_state_to_json().unwrap();
+
+        let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
+
+        let mut loaded_state = AppState::new(HashSet::new(), false, false, false);
+        loaded_state.load_from_state_dump(state_dump);
+
+        assert_eq!(loaded_state.services.len(), 1);
+        assert_eq!(loaded_state.service_types.len(), 1);
+        assert!(loaded_state.loaded_from_file);
+        assert_eq!(loaded_state.filter_query, "");
     }
 
     // Tests for unused helper functions

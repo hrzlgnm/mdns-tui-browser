@@ -5,6 +5,7 @@
 mod tui_app;
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 use clap::Parser;
 use if_addrs::get_if_addrs;
@@ -48,12 +49,20 @@ struct Cli {
     /// Disable IPv6 mDNS discovery
     #[arg(long, help = "Disable IPv6 mDNS discovery")]
     no_ipv6: bool,
+
+    /// Load state from a JSON file (view-only mode, no browsing)
+    #[arg(
+        long,
+        short,
+        help = "Load state from a JSON file for inspection (view-only mode, no browsing)"
+    )]
+    load_state: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    if cli.no_ipv4 && cli.no_ipv6 {
+    if cli.load_state.is_none() && cli.no_ipv4 && cli.no_ipv6 {
         return Err("Cannot disable both IPv4 and IPv6. At least one must be enabled.".into());
     }
 
@@ -99,6 +108,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let disable_ipv4 = cli.no_ipv4;
     let disable_ipv6 = cli.no_ipv6;
 
+    let loaded_state: Option<String> = cli
+        .load_state
+        .map(|path| {
+            std::fs::read_to_string(&path)
+                .map_err(|e| format!("Failed to read state file '{}': {}", path.display(), e))
+        })
+        .transpose()?;
+
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(tui_app::run_tui(
         user_requested_service_types,
@@ -107,5 +124,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         available_interfaces,
         disable_ipv4,
         disable_ipv6,
+        loaded_state,
     ))
 }
