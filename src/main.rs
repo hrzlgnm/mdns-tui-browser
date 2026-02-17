@@ -48,6 +48,14 @@ struct Cli {
     /// Disable IPv6 mDNS discovery
     #[arg(long, help = "Disable IPv6 mDNS discovery")]
     no_ipv6: bool,
+
+    /// Load state from a JSON file (view-only mode, no browsing)
+    #[arg(
+        long,
+        short,
+        help = "Load state from a JSON file for inspection (view-only mode, no browsing)"
+    )]
+    load_state: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -99,6 +107,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let disable_ipv4 = cli.no_ipv4;
     let disable_ipv6 = cli.no_ipv6;
 
+    let loaded_state: Option<String> = if let Some(path) = cli.load_state {
+        Some(
+            std::fs::read_to_string(&path)
+                .map_err(|e| format!("Failed to read state file '{}': {}", path, e))?,
+        )
+    } else {
+        None
+    };
+
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(tui_app::run_tui(
         user_requested_service_types,
@@ -107,5 +124,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         available_interfaces,
         disable_ipv4,
         disable_ipv6,
+        loaded_state,
     ))
 }
