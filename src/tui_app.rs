@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use chrono::{DateTime, Utc};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
     execute,
@@ -16,11 +21,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -53,7 +53,8 @@ fn micros_to_iso_timestamp(micros: u64) -> String {
 fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
     if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
         let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-        return duration.num_microseconds().unwrap_or(0) as u64;
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
     }
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
         let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
@@ -61,7 +62,8 @@ fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
             .and_hms_opt(0, 0, 0)
             .unwrap();
         let duration = dt.signed_duration_since(epoch);
-        return duration.num_microseconds().unwrap_or(0) as u64;
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
     }
     0
 }
@@ -79,6 +81,7 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
             None
         };
         Self {
+            fullname: entry.fullname.clone(),
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
             subtype: entry.subtype.clone(),
@@ -123,7 +126,7 @@ impl From<&SerializableServiceEntry> for ServiceEntry {
             .map(|ts| iso_timestamp_to_micros(ts));
 
         Self {
-            fullname: format!("{}.{}", entry.host, entry.service_type),
+            fullname: entry.fullname.clone(),
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
             subtype: entry.subtype.clone(),
@@ -196,6 +199,7 @@ struct ServiceEntry {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SerializableServiceEntry {
+    fullname: String,
     host: String,
     service_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3161,6 +3165,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///   Used to disable all interfaces before enabling the requested ones.
 /// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
 /// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
+/// * `loaded_state` - Optional JSON string to load state from file (view-only mode)
 ///
 /// # Example
 /// ```no_run
@@ -3170,7 +3175,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     let service_types = HashSet::new();
 ///
 ///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), false, None, None, false, false).await;
+///     run_tui(service_types.clone(), false, None, None, false, false, None).await;
 ///
 ///     // Use specific interfaces
 ///     run_tui(
@@ -3180,6 +3185,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///         Some(vec!["eth0".into(), "lo".into()]),
 ///         false,
 ///         false,
+///         None,
 ///     )
 ///     .await
 /// }
@@ -3193,14 +3199,28 @@ pub async fn run_tui(
     disable_ipv6: bool,
     loaded_state: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if disable_ipv4 && disable_ipv6 {
+        return Err("Cannot disable both IPv4 and IPv6. At least one must be enabled.".into());
+    }
+
+    let is_view_only = loaded_state.is_some();
+
+    // Parse state file before terminal setup to avoid leaving terminal in broken state on error
+    let state_dump: Option<StateDump> = if let Some(json_content) = loaded_state {
+        Some(
+            serde_json::from_str(&json_content)
+                .map_err(|e| format!("Failed to parse state file: {}", e))?,
+        )
+    } else {
+        None
+    };
+
     // Setup terminal for full TUI
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
-    let is_view_only = loaded_state.is_some();
 
     let mdns = if is_view_only {
         None
@@ -3252,11 +3272,9 @@ pub async fn run_tui(
     )));
 
     // Load state from file if provided
-    if let Some(json_content) = loaded_state {
-        let state_dump: StateDump = serde_json::from_str(&json_content)
-            .map_err(|e| format!("Failed to parse state file: {}", e))?;
+    if let Some(dump) = state_dump {
         let mut state_write = state.write().await;
-        state_write.load_from_state_dump(state_dump);
+        state_write.load_from_state_dump(dump);
     }
 
     // Create notification channels
