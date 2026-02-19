@@ -50,21 +50,27 @@ jobs:
 
       - name: 🔢 Get sha256sums
         id: sha256sums
+        env:
+          CHECKSUM_URL: ${{ matrix.package.checksum_url }}
         shell: bash
         run: |
-          URL="${{ matrix.package.checksum_url }}"
+          URL="$CHECKSUM_URL"
           echo "getting $URL"
           SUM=$(curl -LfsS "$URL" | cut -f1 -d ' ')
           echo "sha256=$SUM" >> "$GITHUB_OUTPUT"
 
       - name: 📐 Lint generated PKGBUILD
+        env:
+          VERSION: ${{ needs.release-info.outputs.version }}
+          SHA256: ${{ steps.sha256sums.outputs.sha256 }}
+          GENERATE_SCRIPT: ${{ matrix.package.generate_script }}
         shell: bash
         run: |
           su runner -c '
             set -o errexit
             mkdir -p ~/lint
             o=$(pwd)
-            ${{ matrix.package.generate_script }} "${{ needs.release-info.outputs.version }}" "${{ steps.sha256sums.outputs.sha256 }}" > ~/lint/PKGBUILD
+            $GENERATE_SCRIPT "$VERSION" "$SHA256" > ~/lint/PKGBUILD
             cd ~/lint
             cat PKGBUILD
             "$o/packaging/aur/makepkg-lint.sh"
@@ -112,10 +118,14 @@ jobs:
 
       - name: 🌀 Generate PKGBUILD update and publish
         if: github.event.release.tag_name
+        env:
+          VERSION: ${{ needs.release-info.outputs.version }}
+          SHA256: ${{ steps.sha256sums.outputs.sha256 }}
+          GENERATE_SCRIPT: ${{ matrix.package.generate_script }}
         run: |
           su runner -c '
             set -o errexit
-            ${{ matrix.package.generate_script }} "${{ needs.release-info.outputs.version }}" "${{ steps.sha256sums.outputs.sha256 }}" > ~/aur/PKGBUILD
+            $GENERATE_SCRIPT "$VERSION" "$SHA256" > ~/aur/PKGBUILD
             cd ~/aur
             if [[ -z $(git status --porcelain) ]]; then
               echo "No changes"
@@ -127,6 +137,6 @@ jobs:
             git config user.name "hrzlgnm"
             git config user.email "hrzlgnm@users.noreply.github.com"
             git add PKGBUILD .SRCINFO
-            git commit -m "New upstream release ${{ needs.release-info.outputs.version }}"
+            git commit -m "New upstream release $VERSION"
             git push origin master
           '

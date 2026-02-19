@@ -28,13 +28,18 @@ jobs:
     steps:
       - name: 🏷️
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event.release.name }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tagName }}
+          INPUT_SEMVER: ${{ inputs.semver }}
         run: |
-          if [ -n "${{ github.event.release.name }}" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          elif [ -n "${{ inputs.tagName }}" ]; then
-            echo "tag=${{ inputs.tagName }}" >> $GITHUB_OUTPUT
-          elif [ -n "${{ inputs.semver }}" ]; then
-            echo "tag=v${{ inputs.semver }}" >> $GITHUB_OUTPUT
+          if [ -n "$EVENT_NAME" ]; then
+            echo "tag=$EVENT_TAG" >> $GITHUB_OUTPUT
+          elif [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
+          elif [ -n "$INPUT_SEMVER" ]; then
+            echo "tag=v$INPUT_SEMVER" >> $GITHUB_OUTPUT
           else
             echo "Error: No tag information available"
             exit 1
@@ -50,13 +55,16 @@ jobs:
         algorithm: [sha256]
     steps:
       - name: 📥🔢☑️
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+          ALGORITHM: ${{ matrix.algorithm }}
         run: |
           set -o errexit
-          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${{ needs.tag.outputs.tag }}.tar.gz
-          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${{ needs.tag.outputs.tag }}.zip
+          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz
+          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip
           for file in *; do
             if [ -f "$file" ] && [[ "$file" != *.sha* ]]; then
-              ${{ matrix.algorithm }}sum "$file" > "$file.${{ matrix.algorithm }}"
+              ${ALGORITHM}sum "$file" > "$file.$ALGORITHM"
             fi
           done
       - name: 📤
