@@ -69,8 +69,8 @@ jobs:
           
           CMD="${ALGORITHM}sum"
           
-          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz
-          curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip
+          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
+          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
           for file in *; do
             if [ -f "$file" ] && [[ "$file" != *.sha* ]]; then
               "$CMD" "$file" > "$file.$ALGORITHM"
