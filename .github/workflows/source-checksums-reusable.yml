@@ -60,11 +60,20 @@ jobs:
           ALGORITHM: ${{ matrix.algorithm }}
         run: |
           set -o errexit
+          
+          ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
+          if [[ ! " $ALLOWED_ALGORITHMS " =~ " $ALGORITHM " ]]; then
+            echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
+            exit 1
+          fi
+          
+          CMD="${ALGORITHM}sum"
+          
           curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz
           curl -sfLO https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip
           for file in *; do
             if [ -f "$file" ] && [[ "$file" != *.sha* ]]; then
-              ${ALGORITHM}sum "$file" > "$file.$ALGORITHM"
+              "$CMD" "$file" > "$file.$ALGORITHM"
             fi
           done
       - name: 📤

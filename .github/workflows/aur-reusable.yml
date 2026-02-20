@@ -70,7 +70,7 @@ jobs:
             set -o errexit
             mkdir -p ~/lint
             o=$(pwd)
-            $GENERATE_SCRIPT "$VERSION" "$SHA256" > ~/lint/PKGBUILD
+            "$GENERATE_SCRIPT" "$VERSION" "$SHA256" > ~/lint/PKGBUILD
             cd ~/lint
             cat PKGBUILD
             "$o/packaging/aur/makepkg-lint.sh"
@@ -102,6 +102,8 @@ jobs:
 
       - name: 🔍 Check version
         if: github.event.release.tag_name
+        env:
+          RELEASE_VERSION: ${{ needs.release-info.outputs.version }}
         shell: bash
         run: |
           su runner -c '
@@ -109,8 +111,8 @@ jobs:
             cd ~/aur
             if [[ -f PKGBUILD ]]; then
               CURRENT_VERSION=$(source PKGBUILD && echo $pkgver)
-              if [[ "$(printf "%s\n%s" "$CURRENT_VERSION" "${{ needs.release-info.outputs.version }}" | sort -V | head -n1)" != "$CURRENT_VERSION" ]] || [[ "$CURRENT_VERSION" == "${{ needs.release-info.outputs.version }}" ]]; then
-                echo "New version (${{ needs.release-info.outputs.version }}) is not higher than the current version ($CURRENT_VERSION). Exiting."
+              if [[ "$(printf "%s\n%s" "$CURRENT_VERSION" "$RELEASE_VERSION" | sort -V | head -n1)" != "$CURRENT_VERSION" ]] || [[ "$CURRENT_VERSION" == "$RELEASE_VERSION" ]]; then
+                echo "New version ($RELEASE_VERSION) is not higher than the current version ($CURRENT_VERSION). Exiting."
                 exit 1
               fi
             fi
@@ -125,7 +127,7 @@ jobs:
         run: |
           su runner -c '
             set -o errexit
-            $GENERATE_SCRIPT "$VERSION" "$SHA256" > ~/aur/PKGBUILD
+            "$GENERATE_SCRIPT" "$VERSION" "$SHA256" > ~/aur/PKGBUILD
             cd ~/aur
             if [[ -z $(git status --porcelain) ]]; then
               echo "No changes"

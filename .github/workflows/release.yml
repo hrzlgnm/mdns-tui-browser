@@ -80,7 +80,7 @@ jobs:
             echo "semantic-version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "Dry run: would bump from $CURRENT_VERSION to $NEW_VERSION"
           else
-            cargo set-version --bump $VERSION_BUMP
+            cargo set-version --bump "$VERSION_BUMP"
             NEW_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
             echo "semantic-version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "Bumped version from $CURRENT_VERSION to $NEW_VERSION"
