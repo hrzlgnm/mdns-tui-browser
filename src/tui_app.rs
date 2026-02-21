@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
-use crate::terminal::TuiTerminal;
-
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -20,6 +18,8 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+
+use crate::terminal::TuiTerminal;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
