@@ -117,12 +117,16 @@ impl TuiTerminal {
         self.stop()
     }
 
-    /// Returns the current terminal size.
+    /// Clears the terminal and forces a full redraw on the next draw call.
+    ///
+    /// This is needed when the terminal state may be corrupted (e.g., after suspend/resume)
+    /// because ratatui uses diff-based rendering and won't repaint unchanged areas.
     ///
     /// # Errors
-    /// Returns an error if the terminal size cannot be determined.
-    pub fn size(&self) -> Result<ratatui::layout::Size, Box<dyn std::error::Error>> {
-        self.terminal.size().map_err(Into::into)
+    /// Returns an error if clearing fails.
+    #[cfg(unix)]
+    pub fn clear(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.terminal.clear().map_err(Into::into)
     }
 
     /// Returns the terminal area as a rectangle.
@@ -132,7 +136,7 @@ impl TuiTerminal {
     /// # Errors
     /// Returns an error if the terminal size cannot be determined.
     pub fn get_area(&self) -> Result<ratatui::layout::Rect, Box<dyn std::error::Error>> {
-        let size = self.size()?;
+        let size = self.terminal.size()?;
         Ok(ratatui::layout::Rect::new(0, 0, size.width, size.height))
     }
 
