@@ -2,20 +2,17 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+use crate::terminal::TuiTerminal;
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-};
+use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use mdns_sd::{IfKind, ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
-    Frame, Terminal,
-    backend::CrosstermBackend,
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -3216,11 +3213,7 @@ pub async fn run_tui(
     };
 
     // Setup terminal for full TUI
-    enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = TuiTerminal::new()?;
 
     let mdns = if is_view_only {
         None
@@ -3453,11 +3446,9 @@ pub async fn run_tui(
     }
     // Initial render to show the UI immediately
     {
-        let terminal_size = terminal
-            .size()
-            .unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
-        let terminal_area =
-            ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+        let terminal_area = terminal
+            .get_area()
+            .unwrap_or_else(|_| ratatui::layout::Rect::new(0, 0, 80, 24));
         {
             let mut state = state.write().await;
             state.prepare_for_rendering(terminal_area);
@@ -3518,8 +3509,9 @@ pub async fn run_tui(
                             _notification = notification_receiver.recv_async() => {
                                 // Draw UI only when there's a notification
                                 // Acquire write lock once for both preparation and rendering to prevent race conditions
-                                let terminal_size = terminal.size().unwrap_or_else(|_| ratatui::layout::Size::new(80, 24));
-                                let terminal_area = ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                                let terminal_area = terminal
+                                    .get_area()
+                                    .unwrap_or_else(|_| ratatui::layout::Rect::new(0, 0, 80, 24));
                                 {
                                     let mut state = state.write().await;
                                     state.prepare_for_rendering(terminal_area);
@@ -3530,9 +3522,7 @@ pub async fn run_tui(
     };
 
     // Restore terminal
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen,)?;
-    terminal.show_cursor()?;
+    terminal.restore()?;
 
     result
 }

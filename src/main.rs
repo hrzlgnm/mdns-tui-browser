@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+mod terminal;
 mod tui_app;
 
 use std::collections::HashSet;
