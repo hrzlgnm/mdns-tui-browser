@@ -83,9 +83,29 @@ impl TuiTerminal {
     pub fn stop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.active {
             self.active = false;
-            execute!(self.backend_mut(), LeaveAlternateScreen)?;
-            disable_raw_mode()?;
-            self.terminal.show_cursor()?;
+            let mut first_error = None;
+
+            if let Err(e) = execute!(self.backend_mut(), LeaveAlternateScreen) {
+                first_error = Some(e.into());
+            }
+
+            #[allow(clippy::collapsible_if)]
+            if let Err(e) = disable_raw_mode() {
+                if first_error.is_none() {
+                    first_error = Some(e.into());
+                }
+            }
+
+            #[allow(clippy::collapsible_if)]
+            if let Err(e) = self.terminal.show_cursor() {
+                if first_error.is_none() {
+                    first_error = Some(e.into());
+                }
+            }
+
+            if let Some(e) = first_error {
+                return Err(e);
+            }
         }
         Ok(())
     }
