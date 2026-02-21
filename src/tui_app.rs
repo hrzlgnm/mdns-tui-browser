@@ -3448,7 +3448,7 @@ pub async fn run_tui(
     {
         let terminal_area = terminal
             .get_area()
-            .unwrap_or_else(|_| ratatui::layout::Rect::new(0, 0, 80, 24));
+            .map_err(|e| format!("Failed to get terminal area: {}", e))?;
         {
             let mut state = state.write().await;
             state.prepare_for_rendering(terminal_area);
@@ -3511,7 +3511,7 @@ pub async fn run_tui(
                                 // Acquire write lock once for both preparation and rendering to prevent race conditions
                                 let terminal_area = terminal
                                     .get_area()
-                                    .unwrap_or_else(|_| ratatui::layout::Rect::new(0, 0, 80, 24));
+                                    .map_err(|e| format!("Failed to get terminal area: {}", e))?;
                                 {
                                     let mut state = state.write().await;
                                     state.prepare_for_rendering(terminal_area);

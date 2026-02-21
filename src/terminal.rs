@@ -23,7 +23,6 @@ impl TuiTerminal {
     ///
     /// # Errors
     /// Returns an error if enabling raw mode or entering alternate screen fails.
-    #[allow(dead_code)]
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         if let Err(e) = enable_raw_mode() {
             return Err(Box::new(e));
@@ -83,10 +82,10 @@ impl TuiTerminal {
     /// Returns an error if any cleanup operation fails.
     pub fn stop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.active {
+            self.active = false;
             execute!(self.backend_mut(), LeaveAlternateScreen)?;
             disable_raw_mode()?;
             self.terminal.show_cursor()?;
-            self.active = false;
         }
         Ok(())
     }
