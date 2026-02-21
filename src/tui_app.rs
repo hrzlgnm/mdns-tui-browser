@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use mdns_sd::{IfKind, ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame,
@@ -63,6 +63,47 @@ fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
         return if micros < 0 { 0 } else { micros as u64 };
     }
     0
+}
+
+#[cfg(unix)]
+async fn handle_suspend(
+    terminal: &mut TuiTerminal,
+    state: &RwLock<AppState>,
+    ui: fn(&mut Frame<'_>, &AppState),
+) {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+
+    // Stop the terminal - this restores the alternate screen and disables raw mode
+    // Only proceed with suspend if terminal stop succeeds
+    if let Err(e) = terminal.stop() {
+        eprintln!("Failed to stop terminal on suspend: {}", e);
+        return;
+    }
+
+    // Use SIGSTOP to suspend (cannot be caught, ignored, or blocked)
+    // Log error but continue - we still need to restart terminal on resume
+    if let Err(e) = kill(Pid::this(), Signal::SIGSTOP) {
+        eprintln!("Failed to send SIGSTOP: {}", e);
+    }
+
+    // After resume, we continue here
+    // Restart the terminal
+    if let Err(e) = terminal.start() {
+        eprintln!("Failed to start terminal on resume: {}", e);
+    }
+
+    // Clear the terminal to force a full redraw
+    // This is required because ratatui uses diff-based rendering
+    // and won't repaint unchanged areas without this
+    let _ = terminal.clear();
+
+    // Redraw the UI
+    if let Ok(terminal_area) = terminal.get_area() {
+        let mut state = state.write().await;
+        state.prepare_for_rendering(terminal_area);
+        let _ = terminal.draw(|f| ui(f, &state));
+    }
 }
 
 impl From<&ServiceEntry> for SerializableServiceEntry {
@@ -1292,11 +1333,7 @@ impl AppState {
             KeyCode::Char('q') => {
                 false // Signal to quit
             }
-            KeyCode::Char('c')
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 false // Signal to quit
             }
 
@@ -1313,20 +1350,12 @@ impl AppState {
             }
 
             // Service Details scrolling with Shift+Up/Down and J/K (handled first to avoid conflicts)
-            KeyCode::Up
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::SHIFT) =>
-            {
+            KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.scroll_details_up();
                 true
             }
 
-            KeyCode::Down
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::SHIFT) =>
-            {
+            KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.scroll_details_down();
                 true
             }
@@ -1342,11 +1371,7 @@ impl AppState {
             }
 
             // JSON state dump with Ctrl+J (must come before regular 'j' handler)
-            KeyCode::Char('j')
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 let state_clone = self.clone();
                 tokio::spawn(async move {
                     let result_str = {
@@ -1404,20 +1429,12 @@ impl AppState {
             }
 
             // Service type beginning/end navigation with Ctrl+Home/Ctrl+End
-            KeyCode::Home
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            KeyCode::Home if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.navigate_service_types_to_first();
                 true
             }
 
-            KeyCode::End
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-            {
+            KeyCode::End if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.navigate_service_types_to_last();
                 true
             }
@@ -3458,67 +3475,85 @@ pub async fn run_tui(
 
     let result = loop {
         tokio::select! {
-                            // Handle user input events
-                            event_result = async {
-                                match event::poll(Duration::from_millis(50)) {
-                                    Ok(true) => {
-                                        match event::read() {
-                                            Ok(event) => Some(event),
-                                            Err(e) => {
-                                                eprintln!("Error reading event: {}", e);
-                                                None
-                                            }
-                                        }
-                                    }
-                                    Ok(false) => None,
-                                    Err(e) => {
-                                        eprintln!("Error polling for events: {}", e);
-                                        None
-                                    }
-                                }
-                            } => {
-                                if let Some(event) = event_result {
-                                    match event {
-                                        Event::Key(key) => {
-                                            #[cfg(target_os = "windows")]
-                                            {
-                                                // On Windows, ignore key release events to prevent duplicate handling
-                                                if key.kind == crossterm::event::KeyEventKind::Release {
-                                                    continue;
-        }
-        }
-
-                                            let mut state = state.write().await;
-                                            let should_continue = state.handle_key_event(key);
-                                            if should_continue {
-                                                let _ = notification_sender.send(Notification::UserInput);
-                                            } else {
-                                                break Ok(());
-                                            }
-                                        }
-                                        Event::Resize(_, _) => {
-                                            // Trigger a redraw on terminal resize
-                                            let _ = notification_sender.send(Notification::UserInput);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-
-                // Handle notifications for rendering
-                            _notification = notification_receiver.recv_async() => {
-                                // Draw UI only when there's a notification
-                                // Acquire write lock once for both preparation and rendering to prevent race conditions
-                                let terminal_area = terminal
-                                    .get_area()
-                                    .map_err(|e| format!("Failed to get terminal area: {}", e))?;
-                                {
-                                    let mut state = state.write().await;
-                                    state.prepare_for_rendering(terminal_area);
-                                    terminal.draw(|f| ui(f, &state))?;
-                                }
+            // Handle user input events
+            event_result = async {
+                match event::poll(Duration::from_millis(50)) {
+                    Ok(true) => {
+                        match event::read() {
+                            Ok(event) => Some(event),
+                            Err(e) => {
+                                eprintln!("Error reading event: {}", e);
+                                None
                             }
                         }
+                    }
+                    Ok(false) => None,
+                    Err(e) => {
+                        eprintln!("Error polling for events: {}", e);
+                        None
+                    }
+                }
+            } => {
+                if let Some(event) = event_result {
+                    match event {
+                            Event::Key(key) => {
+                            #[cfg(unix)]
+                            {
+                                if key.code == KeyCode::Char('z')
+                                    && key.modifiers.contains(KeyModifiers::CONTROL)
+                                {
+                                    handle_suspend(&mut terminal, &state, ui).await;
+                                    continue;
+                                }
+                            }
+
+                            #[cfg(target_os = "windows")]
+                            {
+                                // On Windows, ignore key release events to prevent duplicate handling
+                                if key.kind == crossterm::event::KeyEventKind::Release {
+                                    continue;
+                                }
+                            }
+
+                            let mut state = state.write().await;
+                            let should_continue = state.handle_key_event(key);
+                            if should_continue {
+                                let _ = notification_sender.send(Notification::UserInput);
+                            } else {
+                                break Ok(());
+                            }
+                        }
+                        Event::Resize(_, _) => {
+                            let _ = notification_sender.send(Notification::UserInput);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // Handle notifications for rendering
+            _notification = notification_receiver.recv_async() => {
+                // Draw UI only when there's a notification
+                // Acquire write lock once for both preparation and rendering to prevent race conditions
+                let terminal_area = match terminal.get_area() {
+                    Ok(area) => area,
+                    Err(e) => {
+                        let err_msg = format!("Failed to get terminal area: {}", e);
+                        eprintln!("{}", err_msg);
+                        break Err(err_msg.into());
+                    }
+                };
+                {
+                    let mut state = state.write().await;
+                    state.prepare_for_rendering(terminal_area);
+                    if let Err(e) = terminal.draw(|f| ui(f, &state)) {
+                        let err_msg = format!("Failed to draw terminal: {}", e);
+                        eprintln!("{}", err_msg);
+                        break Err(err_msg.into());
+                    }
+                }
+            }
+        }
     };
 
     // Restore terminal
@@ -4602,7 +4637,7 @@ mod tests {
                     }
                 },
                 initial_offset: 3,
-                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
                 expected_offset: Some(2), // Should decrease by 1
                 expected_popup_open: true,
                 description: "Scroll up should decrease offset",
@@ -4616,7 +4651,7 @@ mod tests {
                     }
                 },
                 initial_offset: 0,
-                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
                 expected_offset: Some(0), // Should stay at boundary
                 expected_popup_open: true,
                 description: "Scroll up at top should stay at 0",
@@ -4630,7 +4665,7 @@ mod tests {
                     }
                 },
                 initial_offset: 0,
-                key_event: KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
                 expected_offset: Some(1), // Should increase by 1
                 expected_popup_open: true,
                 description: "Scroll down should increase offset",
@@ -4644,7 +4679,7 @@ mod tests {
                     }
                 },
                 initial_offset: 5,
-                key_event: KeyEvent::new(KeyCode::PageUp, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
                 expected_offset: Some(0), // Should reset to 0 when closing
                 expected_popup_open: false,
                 description: "PageUp should close popup and reset offset",
@@ -4658,7 +4693,7 @@ mod tests {
                     }
                 },
                 initial_offset: 0,
-                key_event: KeyEvent::new(KeyCode::PageDown, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
                 expected_offset: Some(0), // Should reset to 0 when closing
                 expected_popup_open: false,
                 description: "PageDown should close popup and reset offset",
@@ -4672,7 +4707,7 @@ mod tests {
                     }
                 },
                 initial_offset: 3,
-                key_event: KeyEvent::new(KeyCode::Home, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::Home, KeyModifiers::NONE),
                 expected_offset: Some(0), // Should reset to 0 when closing
                 expected_popup_open: false,
                 description: "Home should close popup and reset offset",
@@ -4686,7 +4721,7 @@ mod tests {
                     }
                 },
                 initial_offset: 3,
-                key_event: KeyEvent::new(KeyCode::End, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::End, KeyModifiers::NONE),
                 expected_offset: Some(0), // Should reset to 0 when closing
                 expected_popup_open: false,
                 description: "End should close popup and reset offset",
@@ -4700,7 +4735,7 @@ mod tests {
                     }
                 },
                 initial_offset: 3,
-                key_event: KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
                 expected_offset: Some(0), // Should reset offset when closing (matches actual behavior)
                 expected_popup_open: false,
                 description: "Escape should close popup and reset offset",
@@ -4714,7 +4749,7 @@ mod tests {
                     }
                 },
                 initial_offset: 3,
-                key_event: KeyEvent::new(KeyCode::F(3), crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
                 expected_offset: Some(0), // Should reset offset when closing (matches actual behavior)
                 expected_popup_open: false,
                 description: "F3 should close popup and reset offset",
@@ -4728,7 +4763,7 @@ mod tests {
                     }
                 },
                 initial_offset: 0,
-                key_event: KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE),
+                key_event: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
                 expected_offset: Some(0), // After sequence of 3 operations
                 expected_popup_open: true,
                 description: "Multiple operations should behave correctly",
@@ -5620,7 +5655,7 @@ mod tests {
 
         // Test scrolling down when possible
         state.metrics_scroll.offset = 3;
-        let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_metrics_popup); // Should remain open
@@ -5629,7 +5664,7 @@ mod tests {
 
         // Test scrolling up at boundary (should not go below 0)
         state.metrics_scroll.offset = 0;
-        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_metrics_popup); // Should remain open
@@ -5637,7 +5672,7 @@ mod tests {
 
         // Test any other key closes popup and resets scroll
         state.metrics_scroll.offset = 10;
-        let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(!state.show_metrics_popup); // Should close
@@ -5651,14 +5686,14 @@ mod tests {
 
         // Test scrolling down when at max scroll offset
         state.help_scroll.offset = 0;
-        let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_help_popup); // Should remain open
 
         // Test scrolling up when at boundary (should not go below 0)
         state.help_scroll.offset = 0;
-        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(state.show_help_popup); // Should remain open
@@ -5666,7 +5701,7 @@ mod tests {
 
         // Test any other key closes popup and resets scroll
         state.help_scroll.offset = 10;
-        let key_event = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
         assert!(!state.show_help_popup); // Should close
@@ -5719,7 +5754,7 @@ mod tests {
         // Test scrolling up when already at top (should stay at 0)
         state.metrics_scroll.offset = 0;
         state.show_metrics_popup = true; // Show popup
-        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         state.handle_key_event(key_event);
         assert_eq!(state.metrics_scroll.offset, 0);
 
@@ -5731,7 +5766,7 @@ mod tests {
 
         // Test scrolling down from various positions
         state.metrics_scroll.offset = 0;
-        let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         state.handle_key_event(key_event);
         // Should increment
         assert!(state.metrics_scroll.offset > 0);
@@ -5750,7 +5785,7 @@ mod tests {
         let mut state = AppState::new(HashSet::new(), false, false, false);
         state.show_metrics_popup = false;
         state.metrics_scroll.offset = 5;
-        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
 
         // This should not be called when popup is not shown, but let's test it anyway
         state.handle_key_event(key_event);
@@ -5772,7 +5807,7 @@ mod tests {
         state.metrics_scroll.offset = 10;
 
         // Close popup with a non-scroll key
-        let key_event = KeyEvent::new(KeyCode::Char('q'), crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
         assert!(!state.show_metrics_popup);
@@ -5781,7 +5816,7 @@ mod tests {
         // Test with Enter key
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 15;
-        let key_event = KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
         assert!(!state.show_metrics_popup);
@@ -5790,7 +5825,7 @@ mod tests {
         // Test with Escape key
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 20;
-        let key_event = KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE);
+        let key_event = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
         assert!(!state.show_metrics_popup);
@@ -5803,9 +5838,9 @@ mod tests {
         state.show_metrics_popup = true;
 
         // Test that all key events return true (continue running)
-        let up_key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
-        let down_key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
-        let close_key = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let close_key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
 
         state.handle_key_event(up_key);
         state.handle_key_event(down_key);
@@ -5824,13 +5859,13 @@ mod tests {
         state.metrics_scroll.offset = 2;
 
         // Test scrolling with Control modifier (should still work)
-        let key_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::CONTROL);
+        let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL);
         state.handle_key_event(key_event);
         assert_eq!(state.metrics_scroll.offset, 1);
 
         // Test scrolling with Shift modifier
         state.metrics_scroll.offset = 2;
-        let key_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::SHIFT);
+        let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
         state.handle_key_event(key_event);
         assert!(state.metrics_scroll.offset > 2);
     }
@@ -5841,8 +5876,8 @@ mod tests {
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 5;
 
-        let up_key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
-        let down_key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
 
         // Test multiple up operations
         for _ in 0..10 {
@@ -5875,7 +5910,7 @@ mod tests {
 
         // Test PageUp key (should behave like Up in current implementation)
         state.metrics_scroll.offset = 5;
-        let page_up_key = KeyEvent::new(KeyCode::PageUp, crossterm::event::KeyModifiers::NONE);
+        let page_up_key = KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE);
         state.handle_key_event(page_up_key);
         assert!(!state.show_metrics_popup); // PageUp closes popup
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -5883,7 +5918,7 @@ mod tests {
         // Test PageDown key (should behave like Down in current implementation)
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 0;
-        let page_down_key = KeyEvent::new(KeyCode::PageDown, crossterm::event::KeyModifiers::NONE);
+        let page_down_key = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
         state.handle_key_event(page_down_key);
         assert!(!state.show_metrics_popup); // PageDown closes popup
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -5891,7 +5926,7 @@ mod tests {
         // Test Home key (should close popup)
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 3;
-        let home_key = KeyEvent::new(KeyCode::Home, crossterm::event::KeyModifiers::NONE);
+        let home_key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
         state.handle_key_event(home_key);
         assert!(!state.show_metrics_popup);
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -5899,7 +5934,7 @@ mod tests {
         // Test End key (should close popup)
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 3;
-        let end_key = KeyEvent::new(KeyCode::End, crossterm::event::KeyModifiers::NONE);
+        let end_key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
         state.handle_key_event(end_key);
         assert!(!state.show_metrics_popup);
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -5912,7 +5947,7 @@ mod tests {
         state.metrics_scroll.offset = 3;
 
         // Test F1 key (should close popup)
-        let f1_key = KeyEvent::new(KeyCode::F(1), crossterm::event::KeyModifiers::NONE);
+        let f1_key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         state.handle_key_event(f1_key);
         assert!(!state.show_metrics_popup);
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -5920,7 +5955,7 @@ mod tests {
         // Test F5 key (should close popup)
         state.show_metrics_popup = true;
         state.metrics_scroll.offset = 3;
-        let f5_key = KeyEvent::new(KeyCode::F(5), crossterm::event::KeyModifiers::NONE);
+        let f5_key = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
         state.handle_key_event(f5_key);
         assert!(!state.show_metrics_popup);
         assert_eq!(state.metrics_scroll.offset, 0);
@@ -5933,13 +5968,13 @@ mod tests {
 
         // Test with very large scroll offset (should be clamped)
         state.metrics_scroll.offset = 1000;
-        let down_key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         state.handle_key_event(down_key);
         assert!(state.metrics_scroll.offset <= 6); // Should be clamped to max
 
         // Test with negative scroll offset (can't happen in practice, but test robustness)
         state.metrics_scroll.offset = 0;
-        let up_key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         for _ in 0..10 {
             state.handle_key_event(up_key);
         }
@@ -7340,7 +7375,7 @@ mod tests {
         let mut state = AppState::new(HashSet::new(), false, false, false);
 
         let mut key = KeyEvent::from(KeyCode::Char('c'));
-        key.modifiers = crossterm::event::KeyModifiers::CONTROL;
+        key.modifiers = KeyModifiers::CONTROL;
 
         let should_continue = state.handle_key_event(key);
 

@@ -209,6 +209,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show service metrics
 - <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file
+- <kbd>Ctrl</kbd>+<kbd>Z</kbd> - Suspend the application (Unix only)
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
@@ -262,6 +263,7 @@ The application is built with:
 - **serde** - Serialization framework for JSON export
 - **serde_json** - JSON serialization support
 - **if-addrs** - Network interface enumeration
+- **nix** - Unix system calls (signal handling for Ctrl+Z suspend)
 
 ### Safety Policy
 
@@ -281,6 +283,7 @@ This project follows a **Safe Rust Only** policy:
 src/
 ├── main.rs       # Entry point with cli argument handling
 ├── tui_app.rs    # Full TUI implementation
+├── terminal.rs   # Terminal management
 └── README.md     # This file
 ```
 
