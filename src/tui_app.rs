@@ -2687,7 +2687,7 @@ fn render_metrics_popup(f: &mut Frame, app_state: &AppState, metrics_scroll_offs
 }
 
 fn generate_help_content() -> Vec<Line<'static>> {
-    vec![
+    let mut lines = vec![
         Line::from(""),
         Line::from(" Help Controls:"),
         Line::from("   ↑/↓               - Scroll this help content"),
@@ -2713,6 +2713,12 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   ?                 - Toggle this help popup"),
         Line::from("   Ctrl+j            - Dump state to json file"),
         Line::from("   q or Ctrl+c       - Quit the application"),
+    ];
+
+    #[cfg(unix)]
+    lines.push(Line::from("   Ctrl+z            - Suspend the application"));
+
+    lines.extend([
         Line::from(" "),
         Line::from(" Sorting:"),
         Line::from(
@@ -2739,7 +2745,8 @@ fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Combined: 'online http' shows online HTTP services"),
         Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
-    ]
+    ]);
+    lines
 }
 
 fn generate_metrics_content(metrics: &BTreeMap<String, u64>) -> Vec<Line<'static>> {
