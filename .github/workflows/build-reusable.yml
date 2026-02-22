@@ -120,9 +120,11 @@ jobs:
           # Rename deb to avoid conflicts between ubuntu-latest and ubuntu-22.04
           if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
             cd "target/${{ matrix.target }}/debian" || exit 1
-            ORIGINAL_DEB=$(ls *.deb)
-            NEW_NAME="${ORIGINAL_DEB%.deb}-glibc2.35.deb"
-            mv "$ORIGINAL_DEB" "$NEW_NAME"
+            for deb_file in *.deb; do
+              [ -f "$deb_file" ] || continue
+              new_name="${deb_file%.deb}-glibc2.35.deb"
+              mv "$deb_file" "$new_name"
+            done
           fi
 
       - name: 📦 Build archive
