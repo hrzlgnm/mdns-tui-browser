@@ -156,7 +156,7 @@ src/
 5. Run `cargo nextest run --profile ci` to run tests
 6. Run `actionlint` to check GitHub Actions workflows if modified
 7. Test the application manually with `cargo run`
-8. If README.md was updated, update the manpage (`mdns-tui-browser.1`)
+8. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
 9. Commit only when all checks pass
 10. After committing, push to the repository and create a pull request if applicable
 11. After the pull request is created, add a comment `@coderabbitai review`
@@ -166,7 +166,7 @@ src/
 ## Documentation Maintenance
 
 ### Manpage Updates
-The manpage (`mdns-tui-browser.1`) must be kept in sync with `README.md`. When updating documentation:
+The manpage (`docs/mdns-tui-browser.1`) must be kept in sync with `README.md`. When updating documentation:
 
 1. **CLI Options**: Update both README.md CLI Options section and manpage OPTIONS section
 2. **Controls**: Update both README.md Controls section and manpage CONTROLS section  

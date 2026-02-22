@@ -152,7 +152,7 @@ jobs:
             # Include manpage for Unix-like builds (Linux and macOS)
             if [[ "${{ matrix.os }}" == "ubuntu-latest" || "${{ matrix.os }}" == "macos-latest" ]]; then
               mkdir -p "$staging/man/man1"
-              cp "mdns-tui-browser.1" "$staging/man/man1/"
+              cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             fi
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV

@@ -11,7 +11,7 @@ copyright = "Copyright 2026 hrzlgnm"
 license-file = "LICENSE"
 depends = "libgcc-s1 (>= 4.2)"
 assets = [
-    ["mdns-tui-browser.1", "usr/share/man/man1/mdns-tui-browser.1", "644"],
+    ["docs/mdns-tui-browser.1", "usr/share/man/man1/mdns-tui-browser.1", "644"],
     ["target/release/mdns-tui-browser", "usr/bin/", "755"],
 ]
 
