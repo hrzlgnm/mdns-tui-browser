@@ -79,7 +79,7 @@ jobs:
           locked: true
 
       - name: 🛠️📦 cargo-deb
-        if: matrix.os == 'ubuntu-latest'
+        if: contains(matrix.os, 'ubuntu')
         uses: baptiste0928/cargo-install@b687c656bda5733207e629b50a22bf68974a0305 # v3
         with:
           crate: cargo-deb
@@ -109,7 +109,7 @@ jobs:
           fi
 
       - name: 📦 Build deb package
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'
+        if: contains(matrix.os, 'ubuntu')
         shell: bash
         run: |
           if [ "${{ inputs.tagName }}" ]; then
@@ -206,7 +206,7 @@ jobs:
           fi
 
       - name: 🧮 Compute attestation subjects
-        if: inputs.tagName && (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04')
+        if: inputs.tagName && contains(matrix.os, 'ubuntu')
         shell: bash
         run: |
           if [ -n "${{ env.IPK_ASSET }}" ]; then
@@ -234,7 +234,7 @@ jobs:
           generate_release_notes: false
           files: |
             ${{ env.ASSET }}
-            ${{ (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04') && env.DEB_ASSET || '' }}
+            ${{ contains(matrix.os, 'ubuntu') && env.DEB_ASSET || '' }}
             ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
 
       - name: 📦 Upload artifacts
@@ -246,7 +246,7 @@ jobs:
           retention-days: 30
 
       - name: 📦 Upload deb artifacts
-        if: (!inputs.tagName) && (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04') && env.DEB_ASSET != ''
+        if: (!inputs.tagName) && contains(matrix.os, 'ubuntu') && env.DEB_ASSET != ''
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: mdns-tui-browser-${{ matrix.target }}-deb
