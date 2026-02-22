@@ -20,6 +20,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: "ubuntu-22.04"
+            symbol: 🐧 x86_64
+            target: x86_64-unknown-linux-gnu
+            platform: Linux-x86_64-glibc-2.35
           - os: "ubuntu-latest"
             symbol: 🐧 x86_64
             target: x86_64-unknown-linux-gnu
