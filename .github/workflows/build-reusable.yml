@@ -21,37 +21,37 @@ jobs:
       matrix:
         include:
           - os: "ubuntu-22.04"
-            symbol: 🐧 x86_64
+            symbol: 🐧 x86_64 glibc-2.35
             target: x86_64-unknown-linux-gnu
             platform: Linux-x86_64-glibc-2.35
           - os: "ubuntu-latest"
-            symbol: 🐧 x86_64
+            symbol: 🐧 x86_64 latest
             target: x86_64-unknown-linux-gnu
             platform: Linux-x86_64
           - os: "ubuntu-latest"
-            symbol: 🐧 aarch64
+            symbol: 🐧 aarch64 latest
             target: aarch64-unknown-linux-gnu
             platform: Linux-aarch64
             dependencies: |
               sudo apt-get update
               sudo apt-get -y install gcc-aarch64-linux-gnu
           - os: "ubuntu-latest"
-            symbol: 🐧 arm
+            symbol: 🐧 arm latest
             target: arm-unknown-linux-gnueabihf
             platform: Linux-arm
             dependencies: |
               sudo apt-get update
               sudo apt-get -y install gcc-arm-linux-gnueabihf
           - os: "macos-latest"
-            symbol: 🍏 aarch64
+            symbol: 🍏 aarch64 latest
             target: aarch64-apple-darwin
             platform: macOS-aarch64
           - os: "macos-latest"
-            symbol: 🍏 x86_64
+            symbol: 🍏 x86_64 latest
             target: x86_64-apple-darwin
             platform: macOS-x86_64
           - os: "windows-latest"
-            symbol: 🪟 x86_64
+            symbol: 🪟 x86_64 latest
             platform: Windows-x86_64
             target: x86_64-pc-windows-msvc
 
@@ -109,13 +109,20 @@ jobs:
           fi
 
       - name: 📦 Build deb package
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'
         shell: bash
         run: |
           if [ "${{ inputs.tagName }}" ]; then
             cargo --locked auditable deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
           else
             cargo --locked deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
+          fi
+          # Rename deb to avoid conflicts between ubuntu-latest and ubuntu-22.04
+          if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            cd "target/${{ matrix.target }}/debian" || exit 1
+            ORIGINAL_DEB=$(ls *.deb)
+            NEW_NAME="${ORIGINAL_DEB%.deb}-glibc2.35.deb"
+            mv "$ORIGINAL_DEB" "$NEW_NAME"
           fi
 
       - name: 📦 Build archive
@@ -199,7 +206,7 @@ jobs:
           fi
 
       - name: 🧮 Compute attestation subjects
-        if: inputs.tagName && matrix.os == 'ubuntu-latest'
+        if: inputs.tagName && (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04')
         shell: bash
         run: |
           if [ -n "${{ env.IPK_ASSET }}" ]; then
@@ -227,7 +234,7 @@ jobs:
           generate_release_notes: false
           files: |
             ${{ env.ASSET }}
-            ${{ matrix.os == 'ubuntu-latest' && env.DEB_ASSET || '' }}
+            ${{ (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04') && env.DEB_ASSET || '' }}
             ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
 
       - name: 📦 Upload artifacts
@@ -239,7 +246,7 @@ jobs:
           retention-days: 30
 
       - name: 📦 Upload deb artifacts
-        if: (!inputs.tagName) && matrix.os == 'ubuntu-latest' && env.DEB_ASSET != ''
+        if: (!inputs.tagName) && (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04') && env.DEB_ASSET != ''
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: mdns-tui-browser-${{ matrix.target }}-deb
