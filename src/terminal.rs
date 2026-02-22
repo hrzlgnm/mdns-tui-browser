@@ -54,7 +54,7 @@ impl TuiTerminal {
     /// # Errors
     /// Returns an error if enabling raw mode or entering alternate screen fails.
     /// If an error occurs, raw mode is disabled before returning.
-    #[allow(dead_code)]
+    #[cfg(unix)]
     pub fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if !self.active {
             enable_raw_mode()?;
