@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -161,8 +163,6 @@ impl ServiceEntry {
 }
 
 fn format_timestamp_micros(timestamp_micros: u64) -> String {
-    use chrono::{DateTime, Local, Utc};
-
     let seconds = timestamp_micros / 1_000_000;
     let nanoseconds = (timestamp_micros % 1_000_000) * 1000;
 
@@ -239,10 +239,6 @@ pub(crate) fn format_duration_micros(duration_micros: u64) -> String {
 
     parts.join(" ")
 }
-
-use std::collections::BTreeMap;
-
-use chrono::{DateTime, Utc};
 
 pub fn micros_to_iso_timestamp(micros: u64) -> String {
     let duration = std::time::Duration::from_micros(micros);
