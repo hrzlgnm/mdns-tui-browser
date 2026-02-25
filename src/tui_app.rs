@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use mdns_sd::{IfKind, ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
@@ -16,9 +15,10 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
+use crate::models::{ServiceEntry, ServiceSession, SortDirection, SortField};
+use crate::persistence::{AppStateSnapshot, parse_state_dump};
 use crate::terminal::TuiTerminal;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
@@ -34,36 +34,6 @@ const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
 // Service debouncing constants
 const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
 const CLEANUP_INTERVAL_MS: u64 = 250;
-
-// Timestamp conversion utilities for JSON serialization
-fn micros_to_iso_timestamp(micros: u64) -> String {
-    let duration = Duration::from_micros(micros);
-    let secs = duration.as_secs() as i64;
-    let nanos = duration.subsec_micros() * 1000;
-
-    match DateTime::<Utc>::from_timestamp(secs, nanos) {
-        Some(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
-        None => "1970-01-01T00:00:00.000000Z".to_string(), // Fallback for invalid timestamps
-    }
-}
-
-fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
-    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
-        let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-        let micros = duration.num_microseconds().unwrap_or(0);
-        return if micros < 0 { 0 } else { micros as u64 };
-    }
-    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
-        let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
-        let duration = dt.signed_duration_since(epoch);
-        let micros = duration.num_microseconds().unwrap_or(0);
-        return if micros < 0 { 0 } else { micros as u64 };
-    }
-    0
-}
 
 #[cfg(unix)]
 async fn handle_suspend(
@@ -103,350 +73,6 @@ async fn handle_suspend(
         let mut state = state.write().await;
         state.prepare_for_rendering(terminal_area);
         let _ = terminal.draw(|f| ui(f, &state));
-    }
-}
-
-impl From<&ServiceEntry> for SerializableServiceEntry {
-    fn from(entry: &ServiceEntry) -> Self {
-        let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
-            Some(micros_to_iso_timestamp(entry.updated_at_micros))
-        } else {
-            None
-        };
-        let last_online_at = if entry.last_online_micros != Some(entry.first_seen_micros) {
-            entry.last_online_micros.map(micros_to_iso_timestamp)
-        } else {
-            None
-        };
-        Self {
-            fullname: entry.fullname.clone(),
-            host: entry.host.clone(),
-            service_type: entry.service_type.clone(),
-            subtype: entry.subtype.clone(),
-            addresses: entry.addrs.clone(),
-            port: entry.port,
-            txt_records: entry.txt.clone(),
-            is_online: entry.online,
-            is_flapping: entry.is_flapping,
-            created_at: micros_to_iso_timestamp(entry.first_seen_micros),
-            updated_at,
-            last_online_at,
-            last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
-            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
-        }
-    }
-}
-
-impl From<&ServiceSession> for SerializableServiceSession {
-    fn from(session: &ServiceSession) -> Self {
-        Self {
-            start_time: Some(micros_to_iso_timestamp(session.start_time)),
-            end_time: session.end_time.map(micros_to_iso_timestamp),
-        }
-    }
-}
-
-impl From<&SerializableServiceEntry> for ServiceEntry {
-    fn from(entry: &SerializableServiceEntry) -> Self {
-        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
-        let updated_at_micros = entry
-            .updated_at
-            .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts))
-            .unwrap_or(first_seen_micros);
-        let last_online_micros = entry
-            .last_online_at
-            .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts));
-        let last_offline_micros = entry
-            .last_offline_at
-            .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts));
-
-        Self {
-            fullname: entry.fullname.clone(),
-            host: entry.host.clone(),
-            service_type: entry.service_type.clone(),
-            subtype: entry.subtype.clone(),
-            addrs: entry.addresses.clone(),
-            port: entry.port,
-            txt: entry.txt_records.clone(),
-            online: entry.is_online,
-            updated_at_micros,
-            first_seen_micros,
-            last_online_micros,
-            last_offline_micros,
-            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
-            is_flapping: entry.is_flapping,
-        }
-    }
-}
-
-impl From<&SerializableServiceSession> for ServiceSession {
-    fn from(session: &SerializableServiceSession) -> Self {
-        Self {
-            start_time: session
-                .start_time
-                .as_ref()
-                .map(|ts| iso_timestamp_to_micros(ts))
-                .unwrap_or(0),
-            end_time: session
-                .end_time
-                .as_ref()
-                .map(|ts| iso_timestamp_to_micros(ts)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum SortField {
-    Host,
-    ServiceType,
-    Fullname,
-    Port,
-    Address,
-    Timestamp,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum SortDirection {
-    Ascending,
-    Descending,
-}
-
-#[derive(Clone, Debug)]
-struct ServiceEntry {
-    fullname: String,
-    host: String,
-    service_type: String,
-    subtype: Option<String>,
-    addrs: Vec<String>,
-    port: u16,
-    txt: Vec<String>,
-    online: bool,
-    updated_at_micros: u64,
-    first_seen_micros: u64,
-    last_online_micros: Option<u64>,
-    last_offline_micros: Option<u64>,
-    session_history: Vec<ServiceSession>,
-    is_flapping: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializableServiceEntry {
-    fullname: String,
-    host: String,
-    service_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    subtype: Option<String>,
-    addresses: Vec<String>,
-    #[serde(default, skip_serializing_if = "is_zero_u16")]
-    port: u16,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    txt_records: Vec<String>,
-    is_online: bool,
-    is_flapping: bool,
-    created_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    updated_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_online_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_offline_at: Option<String>,
-    #[serde(default)]
-    session_history: Vec<SerializableServiceSession>,
-}
-
-fn is_zero_u16(v: &u16) -> bool {
-    *v == 0
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct ServiceSession {
-    start_time: u64,
-    end_time: Option<u64>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializableServiceSession {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    start_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    end_time: Option<String>,
-}
-
-impl ServiceEntry {
-    fn go_offline_at(&mut self, timestamp_micros: u64) {
-        if !self.online {
-            return;
-        }
-        self.online = false;
-        self.updated_at_micros = timestamp_micros;
-        self.last_offline_micros = Some(timestamp_micros);
-
-        if let Some(last_online) = self.last_online_micros {
-            if let Some(session) = self.session_history.iter_mut().last() {
-                session.end_time = Some(timestamp_micros);
-            } else {
-                self.session_history.push(ServiceSession {
-                    start_time: last_online,
-                    end_time: Some(timestamp_micros),
-                });
-            }
-        }
-
-        // Update flapping status when service goes offline
-        self.update_flapping_status();
-    }
-
-    fn go_online_at(&mut self, timestamp_micros: u64) {
-        if self.online {
-            return;
-        }
-        self.updated_at_micros = timestamp_micros;
-        self.online = true;
-        self.last_online_micros = Some(timestamp_micros);
-
-        self.session_history.push(ServiceSession {
-            start_time: timestamp_micros,
-            end_time: None,
-        });
-
-        // Update flapping status when service comes online
-        self.update_flapping_status();
-    }
-
-    fn get_session_history(&self) -> String {
-        let mut completed_sessions = Vec::new();
-        let mut max_session_num_length = 0;
-
-        for (i, session) in self.session_history.iter().enumerate() {
-            let session_num = i + 1;
-            max_session_num_length = max_session_num_length.max(session_num.to_string().len());
-            completed_sessions.push((session_num, session));
-        }
-
-        let mut timeline = Vec::new();
-        for (session_num, session) in completed_sessions {
-            let start_str = format_timestamp_micros(session.start_time);
-            let (duration_str, end_str) = if let Some(end_time) = session.end_time {
-                let duration = end_time.saturating_sub(session.start_time);
-                (
-                    format_duration_micros(duration),
-                    format_timestamp_micros(end_time),
-                )
-            } else {
-                ("N/A".to_string(), "Ongoing".to_string())
-            };
-
-            timeline.push(format!(
-                "Session {:>session_width$}: {} → {:<timestamp_width$} = {}",
-                session_num,
-                start_str,
-                end_str,
-                duration_str,
-                session_width = max_session_num_length,
-                timestamp_width = 26, // Fixed width for timestamps
-            ));
-        }
-        timeline.join("\n")
-    }
-
-    fn is_flapping_service(&self) -> bool {
-        // Consider a service flapping if it has multiple short sessions
-        const FLAPPING_SESSION_THRESHOLD: usize = 3; // Need at least 3 sessions
-        const MIN_COMPLETED_SESSIONS: usize = 3; // Minimum completed sessions to consider
-        const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000; // 10 seconds
-
-        if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
-            return false;
-        }
-
-        // Count how many sessions were shorter than the threshold
-        let mut short_sessions = 0;
-        for session in &self.session_history {
-            if let Some(end_time) = session.end_time {
-                let duration = end_time.saturating_sub(session.start_time);
-                if duration < SHORT_SESSION_DURATION_MICROS {
-                    short_sessions += 1;
-                }
-            }
-            // Don't count ongoing sessions as short
-        }
-
-        // Count completed sessions (only those with end_time)
-        let completed_sessions = self
-            .session_history
-            .iter()
-            .filter(|s| s.end_time.is_some())
-            .count();
-
-        // Require minimum completed sessions and at least half being short
-        if completed_sessions < MIN_COMPLETED_SESSIONS {
-            return false;
-        }
-
-        // Use multiplication to avoid integer division truncation
-        short_sessions * 2 >= completed_sessions
-    }
-
-    fn update_flapping_status(&mut self) {
-        self.is_flapping = self.is_flapping_service();
-    }
-}
-
-impl From<ResolvedService> for ServiceEntry {
-    fn from(resolved_service: ResolvedService) -> Self {
-        let current_timestamp = current_timestamp_micros();
-        Self {
-            fullname: resolved_service.get_fullname().to_string(),
-            host: resolved_service.get_hostname().to_string(),
-            service_type: resolved_service.ty_domain.to_string(),
-            subtype: resolved_service
-                .get_subtype()
-                .as_ref()
-                .map(|s| s.to_string()),
-            addrs: {
-                let mut addrs: Vec<String> = resolved_service
-                    .get_addresses()
-                    .iter()
-                    .map(|ip| ip.to_string())
-                    .collect();
-                addrs.sort();
-                addrs
-            },
-            port: resolved_service.get_port(),
-            txt: {
-                let mut txt: Vec<String> = resolved_service
-                    .get_properties()
-                    .iter()
-                    .filter_map(|prop| {
-                        prop.val()
-                            .map(|val| format!("{}={}", prop.key(), String::from_utf8_lossy(val)))
-                    })
-                    .collect();
-                txt.sort_by(|a, b| {
-                    let a_key = a.split('=').next().unwrap_or(a);
-                    let b_key = b.split('=').next().unwrap_or(b);
-                    a_key.cmp(b_key)
-                });
-                txt
-            },
-            online: true,
-            updated_at_micros: current_timestamp,
-            first_seen_micros: current_timestamp,
-            last_online_micros: Some(current_timestamp),
-            last_offline_micros: None,
-            session_history: vec![ServiceSession {
-                start_time: current_timestamp,
-                end_time: None,
-            }],
-            is_flapping: false,
-        }
     }
 }
 
@@ -585,39 +211,6 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     }
     let end = std::cmp::min(end, items.len());
     &items[start..end]
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Metadata {
-    dump_timestamp: String,
-    application_name: String,
-    version: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StateDump {
-    metadata: Metadata,
-    services: Vec<SerializableServiceEntry>,
-    service_types: Vec<String>,
-    metrics: BTreeMap<String, u64>,
-    filters: FilterInfo,
-    sorting: SortInfo,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FilterInfo {
-    query: String,
-    active_service_types: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SortInfo {
-    field: String,
-    direction: String,
 }
 
 struct AppState {
@@ -948,72 +541,42 @@ impl AppState {
         removed
     }
 
-    // JSON state dump functionality
-    fn create_state_dump(&self) -> StateDump {
-        let meta = Metadata {
-            dump_timestamp: Utc::now().format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            application_name: env!("CARGO_PKG_NAME").to_string(),
-        };
-        StateDump {
-            metadata: meta,
-            services: self
-                .services
-                .iter()
-                .map(|s: &ServiceEntry| s.into())
-                .collect(),
-            service_types: self.service_types.clone(),
-            metrics: self.metrics.clone(),
-            filters: FilterInfo {
-                query: self.filter_query.clone(),
-                active_service_types: self.user_service_types.iter().cloned().collect(),
-            },
-            sorting: SortInfo {
-                field: format!("{:?}", self.sort_field),
-                direction: format!("{:?}", self.sort_direction),
-            },
-        }
-    }
-
     fn dump_state_to_json(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let dump = self.create_state_dump();
-        Ok(serde_json::to_string_pretty(&dump)?)
+        crate::persistence::dump_state_to_json(
+            &self.services,
+            &self.service_types,
+            &self.metrics,
+            &self.filter_query,
+            &self.user_service_types,
+            self.sort_field,
+            self.sort_direction,
+        )
     }
 
     async fn save_json_dump(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let timestamp = Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
-        let filename = format!("{}-state-dump.json", timestamp);
-        let json_content = self.dump_state_to_json()?;
-
-        tokio::fs::write(&filename, json_content).await?;
-        Ok(filename)
+        crate::persistence::save_json_dump(
+            &self.services,
+            &self.service_types,
+            &self.metrics,
+            &self.filter_query,
+            &self.user_service_types,
+            self.sort_field,
+            self.sort_direction,
+        )
+        .await
     }
 
-    fn load_from_state_dump(&mut self, dump: StateDump) {
-        self.services = dump.services.iter().map(|s| s.into()).collect();
-        self.service_types = dump.service_types;
-        self.metrics = dump.metrics;
-        self.filter_query = dump.filters.query;
-        self.user_service_types = dump.filters.active_service_types.into_iter().collect();
-
-        let sort_field = match dump.sorting.field.as_str() {
-            "Host" => SortField::Host,
-            "ServiceType" => SortField::ServiceType,
-            "Fullname" => SortField::Fullname,
-            "Port" => SortField::Port,
-            "Address" => SortField::Address,
-            "Timestamp" => SortField::Timestamp,
-            _ => SortField::Host,
-        };
-        self.sort_field = sort_field;
-
-        let sort_direction = match dump.sorting.direction.as_str() {
-            "Ascending" => SortDirection::Ascending,
-            "Descending" => SortDirection::Descending,
-            _ => SortDirection::Ascending,
-        };
-        self.sort_direction = sort_direction;
-
+    fn load_from_state_dump(&mut self, dump: AppStateSnapshot) {
+        crate::persistence::load_from_state(
+            &mut self.services,
+            &mut self.service_types,
+            &mut self.metrics,
+            &mut self.filter_query,
+            &mut self.user_service_types,
+            &mut self.sort_field,
+            &mut self.sort_direction,
+            dump,
+        );
         self.loaded_from_file = true;
         self.cache_dirty = true;
         self.cached_sorted = false;
@@ -2085,6 +1648,57 @@ pub fn normalize_service_type(service_type: &str) -> String {
         _ => {
             // Already complex format (like existing subtypes), just add .local. if missing
             format!("{}.local.", trimmed)
+        }
+    }
+}
+
+impl From<ResolvedService> for ServiceEntry {
+    fn from(resolved_service: ResolvedService) -> Self {
+        let current_timestamp = current_timestamp_micros();
+        Self {
+            fullname: resolved_service.get_fullname().to_string(),
+            host: resolved_service.get_hostname().to_string(),
+            service_type: resolved_service.ty_domain.to_string(),
+            subtype: resolved_service
+                .get_subtype()
+                .as_ref()
+                .map(|s| s.to_string()),
+            addrs: {
+                let mut addrs: Vec<String> = resolved_service
+                    .get_addresses()
+                    .iter()
+                    .map(|ip| ip.to_string())
+                    .collect();
+                addrs.sort();
+                addrs
+            },
+            port: resolved_service.get_port(),
+            txt: {
+                let mut txt: Vec<String> = resolved_service
+                    .get_properties()
+                    .iter()
+                    .filter_map(|prop| {
+                        prop.val()
+                            .map(|val| format!("{}={}", prop.key(), String::from_utf8_lossy(val)))
+                    })
+                    .collect();
+                txt.sort_by(|a, b| {
+                    let a_key = a.split('=').next().unwrap_or(a);
+                    let b_key = b.split('=').next().unwrap_or(b);
+                    a_key.cmp(b_key)
+                });
+                txt
+            },
+            online: true,
+            updated_at_micros: current_timestamp,
+            first_seen_micros: current_timestamp,
+            last_online_micros: Some(current_timestamp),
+            last_offline_micros: None,
+            session_history: vec![ServiceSession {
+                start_time: current_timestamp,
+                end_time: None,
+            }],
+            is_flapping: false,
         }
     }
 }
@@ -3227,7 +2841,7 @@ pub async fn run_tui(
     let is_view_only = loaded_state.is_some();
 
     // Parse state file before terminal setup to avoid leaving terminal in broken state on error
-    let state_dump: Option<StateDump> = if let Some(json_content) = loaded_state {
+    let state_dump: Option<AppStateSnapshot> = if let Some(json_content) = loaded_state {
         Some(
             serde_json::from_str(&json_content)
                 .map_err(|e| format!("Failed to parse state file: {}", e))?,
@@ -7742,7 +7356,7 @@ mod tests {
 
         let json_str = state.dump_state_to_json().unwrap();
 
-        let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
+        let state_dump = parse_state_dump(&json_str).expect("Should be valid JSON");
 
         let mut loaded_state = AppState::new(HashSet::new(), false, false, false);
         loaded_state.load_from_state_dump(state_dump);
