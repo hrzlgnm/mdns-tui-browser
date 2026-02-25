@@ -173,7 +173,7 @@ fn format_timestamp_micros(timestamp_micros: u64) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
 }
 
-fn format_duration_micros(duration_micros: u64) -> String {
+pub(crate) fn format_duration_micros(duration_micros: u64) -> String {
     let total_seconds = duration_micros / 1_000_000;
     let remaining_micros = duration_micros % 1_000_000;
 

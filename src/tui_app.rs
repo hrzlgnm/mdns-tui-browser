@@ -541,6 +541,15 @@ impl AppState {
         removed
     }
 
+    async fn save_json_dump(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
+        let filename = format!("{}-state-dump.json", timestamp);
+        let json_content = self.dump_state_to_json()?;
+
+        tokio::fs::write(&filename, json_content).await?;
+        Ok(filename)
+    }
+
     fn dump_state_to_json(&self) -> Result<String, Box<dyn std::error::Error>> {
         crate::persistence::dump_state_to_json(
             &self.services,
@@ -551,19 +560,6 @@ impl AppState {
             self.sort_field,
             self.sort_direction,
         )
-    }
-
-    async fn save_json_dump(&self) -> Result<String, Box<dyn std::error::Error>> {
-        crate::persistence::save_json_dump(
-            &self.services,
-            &self.service_types,
-            &self.metrics,
-            &self.filter_query,
-            &self.user_service_types,
-            self.sort_field,
-            self.sort_direction,
-        )
-        .await
     }
 
     fn load_from_state_dump(&mut self, dump: AppStateSnapshot) {
@@ -2535,79 +2531,6 @@ fn format_timestamp_micros(timestamp_micros: u64) -> String {
         .with_timezone(&Local);
 
     datetime.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
-}
-
-fn format_duration_micros(duration_micros: u64) -> String {
-    let total_seconds = duration_micros / 1_000_000;
-    let remaining_micros = duration_micros % 1_000_000;
-
-    let seconds = total_seconds % 60;
-    let mut minutes = (total_seconds / 60) % 60;
-    let mut hours = (total_seconds / 3600) % 24;
-    let mut days = total_seconds / 86400;
-
-    let mut parts = Vec::new();
-
-    // Handle fractional seconds and potential rounding
-    if remaining_micros > 0 {
-        let precise_seconds = seconds as f64 + remaining_micros as f64 / 1_000_000.0;
-        let rounded_seconds = (precise_seconds * 1000.0).round() / 1000.0;
-
-        // Check if rounding causes seconds to roll over to 60
-        if rounded_seconds >= 60.0 {
-            minutes += 1;
-
-            // Handle minute rollover
-            if minutes >= 60 {
-                minutes = 0;
-                hours += 1;
-
-                // Handle hour rollover
-                if hours >= 24 {
-                    hours = 0;
-                    days += 1;
-                }
-            }
-        }
-
-        let final_seconds = if rounded_seconds >= 60.0 {
-            0.0
-        } else {
-            rounded_seconds
-        };
-
-        if days > 0 {
-            parts.push(format!("{}d", days));
-        }
-        if hours > 0 {
-            parts.push(format!("{}h", hours));
-        }
-        if minutes > 0 {
-            parts.push(format!("{}m", minutes));
-        }
-
-        // Only show seconds if they're non-zero OR if there are no minutes/higher units
-        if final_seconds > 0.0 || (days == 0 && hours == 0 && minutes == 0) {
-            parts.push(format!("{:.3}s", final_seconds));
-        }
-    } else {
-        if days > 0 {
-            parts.push(format!("{}d", days));
-        }
-        if hours > 0 {
-            parts.push(format!("{}h", hours));
-        }
-        if minutes > 0 {
-            parts.push(format!("{}m", minutes));
-        }
-
-        // Only show seconds if they're non-zero OR if there are no minutes/higher units
-        if seconds > 0 || (days == 0 && hours == 0 && minutes == 0) {
-            parts.push(format!("{}s", seconds));
-        }
-    }
-
-    parts.join(" ")
 }
 
 fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
