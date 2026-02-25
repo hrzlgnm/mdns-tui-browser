@@ -8,7 +8,6 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-
 use ratatui::{Frame, Terminal, backend::CrosstermBackend};
 
 pub struct TuiTerminal {

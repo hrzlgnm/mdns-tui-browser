@@ -7,7 +7,6 @@ use std::collections::{BTreeMap, HashSet};
 use chrono::Utc;
 
 pub use crate::models::{AppStateSnapshot, DumpMetadata, FilterSettings, SortSettings};
-
 use crate::models::{ServiceEntry, SortDirection, SortField};
 
 pub fn create_state_dump(
@@ -97,9 +96,10 @@ pub fn load_from_state(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::models::ServiceSession;
-    use std::collections::BTreeMap;
 
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
         ServiceEntry {
