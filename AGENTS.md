@@ -188,6 +188,7 @@ The manpage should contain only essential usage information without excessive de
 ## Common Pitfalls to Avoid
 
 - **Never** use `unsafe` code - this will cause CI to fail
+- **Never** use `#[allow(dead_code)]` or `#[allow(unused_imports)]` - fix the underlying issue instead
 - **Always** format code before committing
 - **Always** run clippy and fix warnings
 - **Don't** add dependencies without updating Cargo.toml properly

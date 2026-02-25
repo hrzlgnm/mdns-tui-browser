@@ -120,7 +120,6 @@ pub fn load_from_state(
     };
 }
 
-#[allow(dead_code)]
 pub fn parse_state_dump(
     json_content: &str,
 ) -> Result<AppStateSnapshot, Box<dyn std::error::Error>> {
