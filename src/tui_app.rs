@@ -18,6 +18,7 @@ use ratatui::{
 use tokio::sync::RwLock;
 
 use crate::models::{ServiceEntry, ServiceSession, SortDirection, SortField};
+#[allow(unused_imports)]
 use crate::persistence::{AppStateSnapshot, parse_state_dump};
 use crate::terminal::TuiTerminal;
 
@@ -541,6 +542,7 @@ impl AppState {
         removed
     }
 
+    #[allow(dead_code)]
     fn dump_state_to_json(&self) -> Result<String, Box<dyn std::error::Error>> {
         crate::persistence::dump_state_to_json(
             &self.services,
@@ -2537,6 +2539,7 @@ fn format_timestamp_micros(timestamp_micros: u64) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
 }
 
+#[allow(dead_code)]
 fn format_duration_micros(duration_micros: u64) -> String {
     let total_seconds = duration_micros / 1_000_000;
     let remaining_micros = duration_micros % 1_000_000;
@@ -3186,6 +3189,7 @@ pub async fn run_tui(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::ServiceSession;
 
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {

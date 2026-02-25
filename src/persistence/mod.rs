@@ -8,7 +8,7 @@ use chrono::Utc;
 
 pub use crate::models::{AppStateSnapshot, DumpMetadata, FilterSettings, SortSettings};
 
-use crate::models::{ServiceEntry, ServiceSession, SortDirection, SortField};
+use crate::models::{ServiceEntry, SortDirection, SortField};
 
 pub fn create_state_dump(
     services: &[ServiceEntry],
@@ -120,6 +120,7 @@ pub fn load_from_state(
     };
 }
 
+#[allow(dead_code)]
 pub fn parse_state_dump(
     json_content: &str,
 ) -> Result<AppStateSnapshot, Box<dyn std::error::Error>> {
@@ -129,6 +130,7 @@ pub fn parse_state_dump(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::ServiceSession;
     use std::collections::BTreeMap;
 
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
