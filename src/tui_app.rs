@@ -3109,8 +3109,7 @@ pub async fn run_tui(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::ServiceSession;
-    use crate::persistence::parse_state_dump;
+    use crate::models::{ServiceSession, format_duration_micros};
 
     // Helper function for creating test services
     fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
@@ -7174,122 +7173,6 @@ mod tests {
         state.clear_stale_service_types();
 
         assert_eq!(state.service_types.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_json_state_dump() {
-        let mut state = AppState::new(HashSet::new(), false, false, false);
-
-        // Add some test data
-        state.add_service_type("_http._tcp.local.");
-        state
-            .services
-            .push(create_test_service("test1", "_http._tcp.local.", 8080));
-        state
-            .services
-            .push(create_test_service("test2", "_http._tcp.local.", 8081));
-
-        // Test JSON dump creation
-        let json_result = state.dump_state_to_json();
-        assert!(json_result.is_ok(), "JSON dump should succeed");
-
-        let json_str = json_result.unwrap();
-
-        // Verify it's valid JSON
-        let parsed: serde_json::Value =
-            serde_json::from_str(&json_str).expect("Generated JSON should be valid");
-
-        // Check required fields
-        assert!(parsed.get("metadata").is_some(), "Should have metadata");
-        assert!(
-            parsed.get("services").is_some(),
-            "Should have services array"
-        );
-        assert!(
-            parsed.get("serviceTypes").is_some(),
-            "Should have service types"
-        );
-        assert!(parsed.get("metrics").is_some(), "Should have metrics");
-        assert!(parsed.get("filters").is_some(), "Should have filters");
-        assert!(parsed.get("sorting").is_some(), "Should have sorting");
-
-        // Check services array
-        if let serde_json::Value::Array(services) = &parsed["services"] {
-            assert_eq!(services.len(), 2, "Should have 2 services");
-        } else {
-            panic!("Services should be an array");
-        }
-
-        // Check serviceTypes array
-        if let serde_json::Value::Array(service_types) = &parsed["serviceTypes"] {
-            assert_eq!(service_types.len(), 1, "Should have 1 service type");
-            assert_eq!(service_types[0], "_http._tcp.local.");
-        } else {
-            panic!("Service types should be an array");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_json_dump_file_creation() {
-        let mut state = AppState::new(HashSet::new(), false, false, false);
-
-        // Add minimal test data
-        state.add_service_type("_test._tcp.local.");
-        state
-            .services
-            .push(create_test_service("test", "_test._tcp.local.", 1234));
-
-        // Test file creation
-        let filename_result = state.save_json_dump().await;
-        assert!(filename_result.is_ok(), "File creation should succeed");
-
-        let filename = filename_result.unwrap();
-
-        // Verify filename format
-        assert!(
-            filename.starts_with("20"),
-            "Filename should start with year"
-        );
-        assert!(
-            filename.ends_with("-state-dump.json"),
-            "Filename should end with suffix"
-        );
-
-        // Verify file exists and has content
-        let content = tokio::fs::read_to_string(&filename)
-            .await
-            .expect("Should be able to read the created file");
-
-        assert!(!content.is_empty(), "File should not be empty");
-
-        // Verify content is valid JSON
-        let _parsed: serde_json::Value =
-            serde_json::from_str(&content).expect("File content should be valid JSON");
-
-        // Clean up
-        tokio::fs::remove_file(&filename).await.ok();
-    }
-
-    #[tokio::test]
-    async fn test_load_state_from_json() {
-        let mut state = AppState::new(HashSet::new(), false, false, false);
-
-        state.add_service_type("_http._tcp.local.");
-        state
-            .services
-            .push(create_test_service("test", "_http._tcp.local.", 8080));
-
-        let json_str = state.dump_state_to_json().unwrap();
-
-        let state_dump = parse_state_dump(&json_str).expect("Should be valid JSON");
-
-        let mut loaded_state = AppState::new(HashSet::new(), false, false, false);
-        loaded_state.load_from_state_dump(state_dump);
-
-        assert_eq!(loaded_state.services.len(), 1);
-        assert_eq!(loaded_state.service_types.len(), 1);
-        assert!(loaded_state.loaded_from_file);
-        assert_eq!(loaded_state.filter_query, "");
     }
 
     // Tests for unused helper functions

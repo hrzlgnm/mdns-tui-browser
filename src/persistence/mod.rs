@@ -61,31 +61,6 @@ pub fn dump_state_to_json(
     Ok(serde_json::to_string_pretty(&dump)?)
 }
 
-pub async fn save_json_dump(
-    services: &[ServiceEntry],
-    service_types: &[String],
-    metrics: &BTreeMap<String, u64>,
-    filter_query: &str,
-    user_service_types: &HashSet<String>,
-    sort_field: SortField,
-    sort_direction: SortDirection,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let timestamp = Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
-    let filename = format!("{}-state-dump.json", timestamp);
-    let json_content = dump_state_to_json(
-        services,
-        service_types,
-        metrics,
-        filter_query,
-        user_service_types,
-        sort_field,
-        sort_direction,
-    )?;
-
-    tokio::fs::write(&filename, json_content).await?;
-    Ok(filename)
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn load_from_state(
     services: &mut Vec<ServiceEntry>,
@@ -118,12 +93,6 @@ pub fn load_from_state(
         "Descending" => SortDirection::Descending,
         _ => SortDirection::Ascending,
     };
-}
-
-pub fn parse_state_dump(
-    json_content: &str,
-) -> Result<AppStateSnapshot, Box<dyn std::error::Error>> {
-    Ok(serde_json::from_str(json_content)?)
 }
 
 #[cfg(test)]
@@ -238,6 +207,171 @@ mod tests {
             &mut loaded_sort_field,
             &mut loaded_sort_direction,
             snapshot,
+        );
+
+        assert_eq!(loaded_services.len(), 1);
+        assert_eq!(loaded_service_types.len(), 1);
+        assert_eq!(loaded_filter_query, "test");
+        assert!(loaded_user_types.contains("_http._tcp.local."));
+    }
+
+    #[test]
+    fn test_json_state_dump() {
+        let services = vec![
+            create_test_service("test1", "_http._tcp.local.", 8080),
+            create_test_service("test2", "_http._tcp.local.", 8081),
+        ];
+        let service_types = vec!["_http._tcp.local.".to_string()];
+        let metrics = BTreeMap::new();
+        let filter_query = "".to_string();
+        let user_service_types = HashSet::new();
+
+        let json_result = dump_state_to_json(
+            &services,
+            &service_types,
+            &metrics,
+            &filter_query,
+            &user_service_types,
+            SortField::Host,
+            SortDirection::Ascending,
+        );
+
+        assert!(json_result.is_ok(), "JSON dump should succeed");
+
+        let json_str = json_result.unwrap();
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Generated JSON should be valid");
+
+        assert!(parsed.get("metadata").is_some(), "Should have metadata");
+        assert!(
+            parsed.get("services").is_some(),
+            "Should have services array"
+        );
+        assert!(
+            parsed.get("serviceTypes").is_some(),
+            "Should have service types"
+        );
+        assert!(parsed.get("metrics").is_some(), "Should have metrics");
+        assert!(parsed.get("filters").is_some(), "Should have filters");
+        assert!(parsed.get("sorting").is_some(), "Should have sorting");
+
+        if let serde_json::Value::Array(services) = &parsed["services"] {
+            assert_eq!(services.len(), 2, "Should have 2 services");
+        } else {
+            panic!("Services should be an array");
+        }
+
+        if let serde_json::Value::Array(service_types) = &parsed["serviceTypes"] {
+            assert_eq!(service_types.len(), 1, "Should have 1 service type");
+            assert_eq!(service_types[0], "_http._tcp.local.");
+        } else {
+            panic!("Service types should be an array");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_json_dump_file_creation() {
+        let services = vec![create_test_service("test", "_test._tcp.local.", 1234)];
+        let service_types = vec!["_test._tcp.local.".to_string()];
+        let metrics = BTreeMap::new();
+        let filter_query = "".to_string();
+        let user_service_types = HashSet::new();
+
+        let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
+        let filename = format!("{}-state-dump.json", timestamp);
+        let json_content = dump_state_to_json(
+            &services,
+            &service_types,
+            &metrics,
+            &filter_query,
+            &user_service_types,
+            SortField::Host,
+            SortDirection::Ascending,
+        )
+        .unwrap();
+
+        tokio::fs::write(&filename, &json_content).await.unwrap();
+
+        let content = tokio::fs::read_to_string(&filename)
+            .await
+            .expect("Should be able to read the created file");
+
+        assert!(!content.is_empty(), "File should not be empty");
+
+        let _parsed: serde_json::Value =
+            serde_json::from_str(&content).expect("File content should be valid JSON");
+
+        tokio::fs::remove_file(&filename).await.ok();
+    }
+
+    #[test]
+    fn test_parse_state_dump() {
+        let services = vec![create_test_service("test", "_http._tcp.local.", 8080)];
+        let service_types = vec!["_http._tcp.local.".to_string()];
+        let metrics = BTreeMap::new();
+        let filter_query = "test".to_string();
+        let user_service_types: HashSet<String> =
+            vec!["_http._tcp.local.".to_string()].into_iter().collect();
+
+        let json = dump_state_to_json(
+            &services,
+            &service_types,
+            &metrics,
+            &filter_query,
+            &user_service_types,
+            SortField::Host,
+            SortDirection::Ascending,
+        )
+        .unwrap();
+
+        let state_dump: AppStateSnapshot =
+            serde_json::from_str(&json).expect("Should be valid JSON");
+
+        assert_eq!(state_dump.services.len(), 1);
+        assert_eq!(state_dump.service_types.len(), 1);
+    }
+
+    #[test]
+    fn test_load_state_from_json() {
+        let services = vec![create_test_service("test", "_http._tcp.local.", 8080)];
+        let service_types = vec!["_http._tcp.local.".to_string()];
+        let metrics = BTreeMap::new();
+        let filter_query = "test".to_string();
+        let user_service_types: HashSet<String> =
+            vec!["_http._tcp.local.".to_string()].into_iter().collect();
+
+        let snapshot = create_state_dump(
+            &services,
+            &service_types,
+            &metrics,
+            &filter_query,
+            &user_service_types,
+            SortField::Host,
+            SortDirection::Ascending,
+        );
+
+        let json_str = serde_json::to_string(&snapshot).unwrap();
+        let parsed: AppStateSnapshot =
+            serde_json::from_str(&json_str).expect("Should be valid JSON");
+
+        let mut loaded_services = Vec::new();
+        let mut loaded_service_types = Vec::new();
+        let mut loaded_metrics = BTreeMap::new();
+        let mut loaded_filter_query = String::new();
+        let mut loaded_user_types = HashSet::new();
+        let mut loaded_sort_field = SortField::Timestamp;
+        let mut loaded_sort_direction = SortDirection::Descending;
+
+        load_from_state(
+            &mut loaded_services,
+            &mut loaded_service_types,
+            &mut loaded_metrics,
+            &mut loaded_filter_query,
+            &mut loaded_user_types,
+            &mut loaded_sort_field,
+            &mut loaded_sort_direction,
+            parsed,
         );
 
         assert_eq!(loaded_services.len(), 1);
