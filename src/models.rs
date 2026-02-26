@@ -16,7 +16,6 @@ pub struct ServiceSession {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum SortField {
     Host,
     ServiceType,
@@ -27,7 +26,6 @@ pub enum SortField {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum SortDirection {
     Ascending,
     Descending,
