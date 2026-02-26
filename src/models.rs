@@ -75,7 +75,7 @@ fn iso_timestamp_to_micros(timestamp: &str) -> Option<u64> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
         let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
         let micros = duration.num_microseconds()?;
-        return Some(micros as u64);
+        return (micros >= 0).then_some(micros as u64);
     }
     if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
         let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
@@ -84,7 +84,7 @@ fn iso_timestamp_to_micros(timestamp: &str) -> Option<u64> {
             .unwrap();
         let duration = dt.signed_duration_since(epoch);
         let micros = duration.num_microseconds()?;
-        return Some(micros as u64);
+        return (micros >= 0).then_some(micros as u64);
     }
     None
 }
