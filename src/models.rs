@@ -376,3 +376,53 @@ pub fn current_timestamp_micros() -> u64 {
         .unwrap_or_default()
         .as_micros() as u64
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    pub fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        let last_octet = (port % 254) + 1;
+        ServiceEntry {
+            fullname: format!("{}.{}", name, service_type),
+            host: format!("{}.local.", name),
+            service_type: service_type.to_string(),
+            subtype: None,
+            addrs: vec![format!("192.168.1.{}", last_octet)],
+            port,
+            txt: vec![],
+            online: true,
+            updated_at_micros: 1000,
+            session_history: vec![ServiceSession {
+                start_time: 1000,
+                end_time: None,
+            }],
+            first_seen_micros: 1000,
+            last_online_micros: Some(1000),
+            last_offline_micros: None,
+            is_flapping: false,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_test_service_with_sessions(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        sessions: Vec<ServiceSession>,
+        online: bool,
+        updated_at_micros: u64,
+        first_seen_micros: u64,
+        last_online_micros: Option<u64>,
+        last_offline_micros: Option<u64>,
+    ) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.online = online;
+        service.updated_at_micros = updated_at_micros;
+        service.session_history = sessions;
+        service.first_seen_micros = first_seen_micros;
+        service.last_online_micros = last_online_micros;
+        service.last_offline_micros = last_offline_micros;
+        service
+    }
+}
