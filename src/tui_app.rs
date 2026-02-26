@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use mdns_sd::{IfKind, ResolvedService, ServiceDaemon, ServiceEvent};
 use ratatui::{
@@ -19,8 +19,8 @@ use ratatui::{
 use tokio::sync::RwLock;
 
 use crate::models::{
-    FilterInfo, Metadata, SerializableServiceEntry, SerializableServiceSession, ServiceSession,
-    SortDirection, SortField, SortInfo, StateDump,
+    FilterInfo, Metadata, ServiceEntry, ServiceSession, SortDirection, SortField, SortInfo,
+    StateDump,
 };
 use crate::terminal::TuiTerminal;
 
@@ -37,36 +37,6 @@ const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
 // Service debouncing constants
 const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
 const CLEANUP_INTERVAL_MS: u64 = 250;
-
-// Timestamp conversion utilities for JSON serialization
-fn micros_to_iso_timestamp(micros: u64) -> String {
-    let duration = Duration::from_micros(micros);
-    let secs = duration.as_secs() as i64;
-    let nanos = duration.subsec_micros() * 1000;
-
-    match DateTime::<Utc>::from_timestamp(secs, nanos) {
-        Some(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
-        None => "1970-01-01T00:00:00.000000Z".to_string(), // Fallback for invalid timestamps
-    }
-}
-
-fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
-    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
-        let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-        let micros = duration.num_microseconds().unwrap_or(0);
-        return if micros < 0 { 0 } else { micros as u64 };
-    }
-    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
-        let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
-        let duration = dt.signed_duration_since(epoch);
-        let micros = duration.num_microseconds().unwrap_or(0);
-        return if micros < 0 { 0 } else { micros as u64 };
-    }
-    0
-}
 
 #[cfg(unix)]
 async fn handle_suspend(
@@ -106,236 +76,6 @@ async fn handle_suspend(
         let mut state = state.write().await;
         state.prepare_for_rendering(terminal_area);
         let _ = terminal.draw(|f| ui(f, &state));
-    }
-}
-
-impl From<&ServiceEntry> for SerializableServiceEntry {
-    fn from(entry: &ServiceEntry) -> Self {
-        let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
-            Some(micros_to_iso_timestamp(entry.updated_at_micros))
-        } else {
-            None
-        };
-        let last_online_at = if entry.last_online_micros != Some(entry.first_seen_micros) {
-            entry.last_online_micros.map(micros_to_iso_timestamp)
-        } else {
-            None
-        };
-        Self {
-            fullname: entry.fullname.clone(),
-            host: entry.host.clone(),
-            service_type: entry.service_type.clone(),
-            subtype: entry.subtype.clone(),
-            addresses: entry.addrs.clone(),
-            port: entry.port,
-            txt_records: entry.txt.clone(),
-            is_online: entry.online,
-            is_flapping: entry.is_flapping,
-            created_at: micros_to_iso_timestamp(entry.first_seen_micros),
-            updated_at,
-            last_online_at,
-            last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
-            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
-        }
-    }
-}
-
-impl From<&ServiceSession> for SerializableServiceSession {
-    fn from(session: &ServiceSession) -> Self {
-        Self {
-            start_time: Some(micros_to_iso_timestamp(session.start_time)),
-            end_time: session.end_time.map(micros_to_iso_timestamp),
-        }
-    }
-}
-
-impl From<&SerializableServiceEntry> for ServiceEntry {
-    fn from(entry: &SerializableServiceEntry) -> Self {
-        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
-        let updated_at_micros = entry
-            .updated_at
-            .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts))
-            .unwrap_or(first_seen_micros);
-        let last_online_micros = entry
-            .last_online_at
-            .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts));
-        let last_offline_micros = entry
-            .last_offline_at
-            .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts));
-
-        Self {
-            fullname: entry.fullname.clone(),
-            host: entry.host.clone(),
-            service_type: entry.service_type.clone(),
-            subtype: entry.subtype.clone(),
-            addrs: entry.addresses.clone(),
-            port: entry.port,
-            txt: entry.txt_records.clone(),
-            online: entry.is_online,
-            updated_at_micros,
-            first_seen_micros,
-            last_online_micros,
-            last_offline_micros,
-            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
-            is_flapping: entry.is_flapping,
-        }
-    }
-}
-
-impl From<&SerializableServiceSession> for ServiceSession {
-    fn from(session: &SerializableServiceSession) -> Self {
-        Self {
-            start_time: session
-                .start_time
-                .as_ref()
-                .map(|ts| iso_timestamp_to_micros(ts))
-                .unwrap_or(0),
-            end_time: session
-                .end_time
-                .as_ref()
-                .map(|ts| iso_timestamp_to_micros(ts)),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct ServiceEntry {
-    fullname: String,
-    host: String,
-    service_type: String,
-    subtype: Option<String>,
-    addrs: Vec<String>,
-    port: u16,
-    txt: Vec<String>,
-    online: bool,
-    updated_at_micros: u64,
-    first_seen_micros: u64,
-    last_online_micros: Option<u64>,
-    last_offline_micros: Option<u64>,
-    session_history: Vec<ServiceSession>,
-    is_flapping: bool,
-}
-
-impl ServiceEntry {
-    fn go_offline_at(&mut self, timestamp_micros: u64) {
-        if !self.online {
-            return;
-        }
-        self.online = false;
-        self.updated_at_micros = timestamp_micros;
-        self.last_offline_micros = Some(timestamp_micros);
-
-        if let Some(last_online) = self.last_online_micros {
-            if let Some(session) = self.session_history.iter_mut().last() {
-                session.end_time = Some(timestamp_micros);
-            } else {
-                self.session_history.push(ServiceSession {
-                    start_time: last_online,
-                    end_time: Some(timestamp_micros),
-                });
-            }
-        }
-
-        // Update flapping status when service goes offline
-        self.update_flapping_status();
-    }
-
-    fn go_online_at(&mut self, timestamp_micros: u64) {
-        if self.online {
-            return;
-        }
-        self.updated_at_micros = timestamp_micros;
-        self.online = true;
-        self.last_online_micros = Some(timestamp_micros);
-
-        self.session_history.push(ServiceSession {
-            start_time: timestamp_micros,
-            end_time: None,
-        });
-
-        // Update flapping status when service comes online
-        self.update_flapping_status();
-    }
-
-    fn get_session_history(&self) -> String {
-        let mut completed_sessions = Vec::new();
-        let mut max_session_num_length = 0;
-
-        for (i, session) in self.session_history.iter().enumerate() {
-            let session_num = i + 1;
-            max_session_num_length = max_session_num_length.max(session_num.to_string().len());
-            completed_sessions.push((session_num, session));
-        }
-
-        let mut timeline = Vec::new();
-        for (session_num, session) in completed_sessions {
-            let start_str = format_timestamp_micros(session.start_time);
-            let (duration_str, end_str) = if let Some(end_time) = session.end_time {
-                let duration = end_time.saturating_sub(session.start_time);
-                (
-                    format_duration_micros(duration),
-                    format_timestamp_micros(end_time),
-                )
-            } else {
-                ("N/A".to_string(), "Ongoing".to_string())
-            };
-
-            timeline.push(format!(
-                "Session {:>session_width$}: {} → {:<timestamp_width$} = {}",
-                session_num,
-                start_str,
-                end_str,
-                duration_str,
-                session_width = max_session_num_length,
-                timestamp_width = 26, // Fixed width for timestamps
-            ));
-        }
-        timeline.join("\n")
-    }
-
-    fn is_flapping_service(&self) -> bool {
-        // Consider a service flapping if it has multiple short sessions
-        const FLAPPING_SESSION_THRESHOLD: usize = 3; // Need at least 3 sessions
-        const MIN_COMPLETED_SESSIONS: usize = 3; // Minimum completed sessions to consider
-        const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000; // 10 seconds
-
-        if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
-            return false;
-        }
-
-        // Count how many sessions were shorter than the threshold
-        let mut short_sessions = 0;
-        for session in &self.session_history {
-            if let Some(end_time) = session.end_time {
-                let duration = end_time.saturating_sub(session.start_time);
-                if duration < SHORT_SESSION_DURATION_MICROS {
-                    short_sessions += 1;
-                }
-            }
-            // Don't count ongoing sessions as short
-        }
-
-        // Count completed sessions (only those with end_time)
-        let completed_sessions = self
-            .session_history
-            .iter()
-            .filter(|s| s.end_time.is_some())
-            .count();
-
-        // Require minimum completed sessions and at least half being short
-        if completed_sessions < MIN_COMPLETED_SESSIONS {
-            return false;
-        }
-
-        // Use multiplication to avoid integer division truncation
-        short_sessions * 2 >= completed_sessions
-    }
-
-    fn update_flapping_status(&mut self) {
-        self.is_flapping = self.is_flapping_service();
     }
 }
 
@@ -2888,6 +2628,42 @@ fn format_duration_micros(duration_micros: u64) -> String {
     parts.join(" ")
 }
 
+fn get_session_history(service: &ServiceEntry) -> String {
+    let mut completed_sessions = Vec::new();
+    let mut max_session_num_length = 0;
+
+    for (i, session) in service.session_history.iter().enumerate() {
+        let session_num = i + 1;
+        max_session_num_length = max_session_num_length.max(session_num.to_string().len());
+        completed_sessions.push((session_num, session));
+    }
+
+    let mut timeline = Vec::new();
+    for (session_num, session) in completed_sessions {
+        let start_str = format_timestamp_micros(session.start_time);
+        let (duration_str, end_str) = if let Some(end_time) = session.end_time {
+            let duration = end_time.saturating_sub(session.start_time);
+            (
+                format_duration_micros(duration),
+                format_timestamp_micros(end_time),
+            )
+        } else {
+            ("N/A".to_string(), "Ongoing".to_string())
+        };
+
+        timeline.push(format!(
+            "Session {:>session_width$}: {} → {:<timestamp_width$} = {}",
+            session_num,
+            start_str,
+            end_str,
+            duration_str,
+            session_width = max_session_num_length,
+            timestamp_width = 26,
+        ));
+    }
+    timeline.join("\n")
+}
+
 fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
@@ -3056,7 +2832,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
         "Session History:",
         Style::default().add_modifier(Modifier::BOLD),
     )]));
-    let timeline = service.get_session_history();
+    let timeline = get_session_history(service);
     for timeline_line in timeline.lines() {
         lines.push(Line::from(timeline_line.to_string()));
     }
@@ -4892,7 +4668,7 @@ mod tests {
             Some(9000000),
         );
 
-        let timeline = service.get_session_history();
+        let timeline = get_session_history(&service);
         let lines: Vec<&str> = timeline.lines().collect();
 
         assert_eq!(lines.len(), 2);
@@ -4925,7 +4701,7 @@ mod tests {
             Some(4000000),
         );
 
-        let timeline = service.get_session_history();
+        let timeline = get_session_history(&service);
         let lines: Vec<&str> = timeline.lines().collect();
 
         assert_eq!(lines.len(), 2);
@@ -4956,7 +4732,7 @@ mod tests {
             Some(92000000),
         );
 
-        let timeline = service.get_session_history();
+        let timeline = get_session_history(&service);
         let lines: Vec<&str> = timeline.lines().collect();
 
         assert_eq!(lines.len(), 10);
@@ -4994,7 +4770,7 @@ mod tests {
             Some(3700000000),
         );
 
-        let timeline = service.get_session_history();
+        let timeline = get_session_history(&service);
         let lines: Vec<&str> = timeline.lines().collect();
 
         assert_eq!(lines.len(), 3);
@@ -5034,7 +4810,7 @@ mod tests {
             Some(2000000),
         );
 
-        let timeline = service.get_session_history();
+        let timeline = get_session_history(&service);
         let lines: Vec<&str> = timeline.lines().collect();
 
         assert_eq!(lines.len(), 1);
@@ -5067,7 +4843,7 @@ mod tests {
             Some(500000000000),
         );
 
-        let timeline = service.get_session_history();
+        let timeline = get_session_history(&service);
         let lines: Vec<&str> = timeline.lines().collect();
 
         assert_eq!(lines.len(), 2);
@@ -7936,7 +7712,7 @@ mod tests {
         let service = create_test_service("test", "_http._tcp.local.", 8080);
 
         // Test get_session_history with single session
-        let history = service.get_session_history();
+        let history = get_session_history(&service);
         assert!(!history.is_empty());
 
         // Test create_test_service_with_sessions with multiple sessions
@@ -7968,7 +7744,7 @@ mod tests {
         assert_eq!(service_with_sessions.updated_at_micros, 4000);
 
         // Test session history formatting
-        let history = service_with_sessions.get_session_history();
+        let history = get_session_history(&service_with_sessions);
         assert!(history.contains("Session 1"));
         assert!(history.contains("Session 2"));
         assert!(history.contains("Ongoing"));

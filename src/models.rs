@@ -3,7 +3,9 @@
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,6 +59,221 @@ pub struct SerializableServiceEntry {
 
 fn is_zero_u16(v: &u16) -> bool {
     *v == 0
+}
+
+fn micros_to_iso_timestamp(micros: u64) -> String {
+    let duration = Duration::from_micros(micros);
+    let secs = duration.as_secs() as i64;
+    let nanos = duration.subsec_micros() * 1000;
+
+    match DateTime::<Utc>::from_timestamp(secs, nanos) {
+        Some(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
+        None => "1970-01-01T00:00:00.000000Z".to_string(),
+    }
+}
+
+fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
+        let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+        let duration = dt.signed_duration_since(epoch);
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
+    }
+    0
+}
+
+#[derive(Clone, Debug)]
+pub struct ServiceEntry {
+    pub fullname: String,
+    pub host: String,
+    pub service_type: String,
+    pub subtype: Option<String>,
+    pub addrs: Vec<String>,
+    pub port: u16,
+    pub txt: Vec<String>,
+    pub online: bool,
+    pub updated_at_micros: u64,
+    pub first_seen_micros: u64,
+    pub last_online_micros: Option<u64>,
+    pub last_offline_micros: Option<u64>,
+    pub session_history: Vec<ServiceSession>,
+    pub is_flapping: bool,
+}
+
+impl ServiceEntry {
+    pub fn go_offline_at(&mut self, timestamp_micros: u64) {
+        if !self.online {
+            return;
+        }
+        self.online = false;
+        self.updated_at_micros = timestamp_micros;
+        self.last_offline_micros = Some(timestamp_micros);
+
+        if let Some(last_online) = self.last_online_micros {
+            if let Some(session) = self.session_history.iter_mut().last() {
+                session.end_time = Some(timestamp_micros);
+            } else {
+                self.session_history.push(ServiceSession {
+                    start_time: last_online,
+                    end_time: Some(timestamp_micros),
+                });
+            }
+        }
+
+        self.update_flapping_status();
+    }
+
+    pub fn go_online_at(&mut self, timestamp_micros: u64) {
+        if self.online {
+            return;
+        }
+        self.updated_at_micros = timestamp_micros;
+        self.online = true;
+        self.last_online_micros = Some(timestamp_micros);
+
+        self.session_history.push(ServiceSession {
+            start_time: timestamp_micros,
+            end_time: None,
+        });
+
+        self.update_flapping_status();
+    }
+
+    pub fn is_flapping_service(&self) -> bool {
+        const FLAPPING_SESSION_THRESHOLD: usize = 3;
+        const MIN_COMPLETED_SESSIONS: usize = 3;
+        const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000;
+
+        if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
+            return false;
+        }
+
+        let mut short_sessions = 0;
+        for session in &self.session_history {
+            if let Some(end_time) = session.end_time {
+                let duration = end_time.saturating_sub(session.start_time);
+                if duration < SHORT_SESSION_DURATION_MICROS {
+                    short_sessions += 1;
+                }
+            }
+        }
+
+        let completed_sessions = self
+            .session_history
+            .iter()
+            .filter(|s| s.end_time.is_some())
+            .count();
+
+        if completed_sessions < MIN_COMPLETED_SESSIONS {
+            return false;
+        }
+
+        short_sessions * 2 >= completed_sessions
+    }
+
+    pub fn update_flapping_status(&mut self) {
+        self.is_flapping = self.is_flapping_service();
+    }
+}
+
+impl From<&ServiceEntry> for SerializableServiceEntry {
+    fn from(entry: &ServiceEntry) -> Self {
+        let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
+            Some(micros_to_iso_timestamp(entry.updated_at_micros))
+        } else {
+            None
+        };
+        let last_online_at = if entry.last_online_micros != Some(entry.first_seen_micros) {
+            entry.last_online_micros.map(micros_to_iso_timestamp)
+        } else {
+            None
+        };
+        Self {
+            fullname: entry.fullname.clone(),
+            host: entry.host.clone(),
+            service_type: entry.service_type.clone(),
+            subtype: entry.subtype.clone(),
+            addresses: entry.addrs.clone(),
+            port: entry.port,
+            txt_records: entry.txt.clone(),
+            is_online: entry.online,
+            is_flapping: entry.is_flapping,
+            created_at: micros_to_iso_timestamp(entry.first_seen_micros),
+            updated_at,
+            last_online_at,
+            last_offline_at: entry.last_offline_micros.map(micros_to_iso_timestamp),
+            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
+        }
+    }
+}
+
+impl From<&ServiceSession> for SerializableServiceSession {
+    fn from(session: &ServiceSession) -> Self {
+        Self {
+            start_time: Some(micros_to_iso_timestamp(session.start_time)),
+            end_time: session.end_time.map(micros_to_iso_timestamp),
+        }
+    }
+}
+
+impl From<&SerializableServiceEntry> for ServiceEntry {
+    fn from(entry: &SerializableServiceEntry) -> Self {
+        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
+        let updated_at_micros = entry
+            .updated_at
+            .as_ref()
+            .map(|ts| iso_timestamp_to_micros(ts))
+            .unwrap_or(first_seen_micros);
+        let last_online_micros = entry
+            .last_online_at
+            .as_ref()
+            .map(|ts| iso_timestamp_to_micros(ts));
+        let last_offline_micros = entry
+            .last_offline_at
+            .as_ref()
+            .map(|ts| iso_timestamp_to_micros(ts));
+
+        Self {
+            fullname: entry.fullname.clone(),
+            host: entry.host.clone(),
+            service_type: entry.service_type.clone(),
+            subtype: entry.subtype.clone(),
+            addrs: entry.addresses.clone(),
+            port: entry.port,
+            txt: entry.txt_records.clone(),
+            online: entry.is_online,
+            updated_at_micros,
+            first_seen_micros,
+            last_online_micros,
+            last_offline_micros,
+            session_history: entry.session_history.iter().map(|s| s.into()).collect(),
+            is_flapping: entry.is_flapping,
+        }
+    }
+}
+
+impl From<&SerializableServiceSession> for ServiceSession {
+    fn from(session: &SerializableServiceSession) -> Self {
+        Self {
+            start_time: session
+                .start_time
+                .as_ref()
+                .map(|ts| iso_timestamp_to_micros(ts))
+                .unwrap_or(0),
+            end_time: session
+                .end_time
+                .as_ref()
+                .map(|ts| iso_timestamp_to_micros(ts)),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
