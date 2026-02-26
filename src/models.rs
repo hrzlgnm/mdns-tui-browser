@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use mdns_sd::ResolvedService;
 use serde::{Deserialize, Serialize};
 
