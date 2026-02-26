@@ -4,11 +4,11 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
-use mdns_sd::{IfKind, ResolvedService, ServiceDaemon, ServiceEvent};
+use mdns_sd::{IfKind, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -19,8 +19,8 @@ use ratatui::{
 use tokio::sync::RwLock;
 
 use crate::models::{
-    FilterInfo, Metadata, ServiceEntry, ServiceSession, SortDirection, SortField, SortInfo,
-    StateDump,
+    current_timestamp_micros, FilterInfo, Metadata, ServiceEntry, ServiceSession, SortDirection,
+    SortField, SortInfo, StateDump,
 };
 use crate::terminal::TuiTerminal;
 
@@ -76,57 +76,6 @@ async fn handle_suspend(
         let mut state = state.write().await;
         state.prepare_for_rendering(terminal_area);
         let _ = terminal.draw(|f| ui(f, &state));
-    }
-}
-
-impl From<ResolvedService> for ServiceEntry {
-    fn from(resolved_service: ResolvedService) -> Self {
-        let current_timestamp = current_timestamp_micros();
-        Self {
-            fullname: resolved_service.get_fullname().to_string(),
-            host: resolved_service.get_hostname().to_string(),
-            service_type: resolved_service.ty_domain.to_string(),
-            subtype: resolved_service
-                .get_subtype()
-                .as_ref()
-                .map(|s| s.to_string()),
-            addrs: {
-                let mut addrs: Vec<String> = resolved_service
-                    .get_addresses()
-                    .iter()
-                    .map(|ip| ip.to_string())
-                    .collect();
-                addrs.sort();
-                addrs
-            },
-            port: resolved_service.get_port(),
-            txt: {
-                let mut txt: Vec<String> = resolved_service
-                    .get_properties()
-                    .iter()
-                    .map(|prop| match prop.val() {
-                        Some(val) => format!("{}={}", prop.key(), String::from_utf8_lossy(val)),
-                        None => prop.key().to_string(),
-                    })
-                    .collect();
-                txt.sort_by(|a, b| {
-                    let a_key = a.split('=').next().unwrap_or(a);
-                    let b_key = b.split('=').next().unwrap_or(b);
-                    a_key.cmp(b_key)
-                });
-                txt
-            },
-            online: true,
-            updated_at_micros: current_timestamp,
-            first_seen_micros: current_timestamp,
-            last_online_micros: Some(current_timestamp),
-            last_offline_micros: None,
-            session_history: vec![ServiceSession {
-                start_time: current_timestamp,
-                end_time: None,
-            }],
-            is_flapping: false,
-        }
     }
 }
 
@@ -1724,13 +1673,6 @@ pub fn normalize_service_type(service_type: &str) -> String {
 fn is_sub_type(service_type: &str) -> bool {
     // Check if this is a subtype (contains _sub.)
     service_type.contains("_sub.")
-}
-
-fn current_timestamp_micros() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_micros() as u64
 }
 
 fn start_browsing_service_type(

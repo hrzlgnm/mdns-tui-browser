@@ -3,9 +3,10 @@
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use mdns_sd::ResolvedService;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -184,6 +185,57 @@ impl ServiceEntry {
     }
 }
 
+impl From<ResolvedService> for ServiceEntry {
+    fn from(resolved_service: ResolvedService) -> Self {
+        let current_timestamp = current_timestamp_micros();
+        Self {
+            fullname: resolved_service.get_fullname().to_string(),
+            host: resolved_service.get_hostname().to_string(),
+            service_type: resolved_service.ty_domain.to_string(),
+            subtype: resolved_service
+                .get_subtype()
+                .as_ref()
+                .map(|s| s.to_string()),
+            addrs: {
+                let mut addrs: Vec<String> = resolved_service
+                    .get_addresses()
+                    .iter()
+                    .map(|ip| ip.to_string())
+                    .collect();
+                addrs.sort();
+                addrs
+            },
+            port: resolved_service.get_port(),
+            txt: {
+                let mut txt: Vec<String> = resolved_service
+                    .get_properties()
+                    .iter()
+                    .map(|prop| match prop.val() {
+                        Some(val) => format!("{}={}", prop.key(), String::from_utf8_lossy(val)),
+                        None => prop.key().to_string(),
+                    })
+                    .collect();
+                txt.sort_by(|a, b| {
+                    let a_key = a.split('=').next().unwrap_or(a);
+                    let b_key = b.split('=').next().unwrap_or(b);
+                    a_key.cmp(b_key)
+                });
+                txt
+            },
+            online: true,
+            updated_at_micros: current_timestamp,
+            first_seen_micros: current_timestamp,
+            last_online_micros: Some(current_timestamp),
+            last_offline_micros: None,
+            session_history: vec![ServiceSession {
+                start_time: current_timestamp,
+                end_time: None,
+            }],
+            is_flapping: false,
+        }
+    }
+}
+
 impl From<&ServiceEntry> for SerializableServiceEntry {
     fn from(entry: &ServiceEntry) -> Self {
         let updated_at = if entry.updated_at_micros != entry.first_seen_micros {
@@ -316,4 +368,11 @@ pub struct FilterInfo {
 pub struct SortInfo {
     pub field: SortField,
     pub direction: SortDirection,
+}
+
+pub fn current_timestamp_micros() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros() as u64
 }
