@@ -425,4 +425,165 @@ pub mod tests {
         service.last_offline_micros = last_offline_micros;
         service
     }
+
+    #[test]
+    fn test_service_entry_go_offline_at() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        assert!(service.online);
+        service.go_offline_at(2000);
+        assert!(!service.online);
+        assert_eq!(service.updated_at_micros, 2000);
+        assert_eq!(service.last_offline_micros, Some(2000));
+        assert_eq!(service.session_history.len(), 1);
+    }
+
+    #[test]
+    fn test_service_entry_full_online_offline_cycle() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        service.go_offline_at(2000);
+        assert_eq!(service.session_history.len(), 1);
+
+        service.go_online_at(3000);
+        assert_eq!(service.session_history.len(), 2);
+        service.go_offline_at(5000);
+
+        assert_eq!(service.session_history.len(), 2);
+    }
+
+    #[test]
+    fn test_flapping_service_not_enough_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            },
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(4000),
+            },
+        ];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_short_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            },
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(4000),
+            },
+            ServiceSession {
+                start_time: 5000,
+                end_time: Some(6000),
+            },
+        ];
+
+        service.update_flapping_status();
+        assert!(service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_mixed_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        // 3 sessions, 2 short and 1 long - should be flapping (2/3 >= 1/2)
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            }, // 1 second (short)
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(15000000),
+            }, // 12 seconds (not short)
+            ServiceSession {
+                start_time: 16000000,
+                end_time: Some(17000000),
+            }, // 1 second (short)
+        ];
+
+        service.update_flapping_status();
+        assert!(service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_long_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(11000000), // 11 seconds
+            },
+            ServiceSession {
+                start_time: 12000000,
+                end_time: Some(23000000), // 11 seconds
+            },
+            ServiceSession {
+                start_time: 24000000,
+                end_time: Some(35000000), // 11 seconds
+            },
+        ];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_with_ongoing_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: Some(2000),
+            },
+            ServiceSession {
+                start_time: 3000,
+                end_time: Some(4000),
+            },
+            ServiceSession {
+                start_time: 5000,
+                end_time: None, // Ongoing - shouldn't count as short
+            },
+        ];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_flapping_service_no_completed_sessions() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        service.session_history = vec![
+            ServiceSession {
+                start_time: 1000,
+                end_time: None,
+            },
+            ServiceSession {
+                start_time: 3000,
+                end_time: None,
+            },
+            ServiceSession {
+                start_time: 5000,
+                end_time: None,
+            },
+        ];
+
+        service.update_flapping_status();
+        assert!(!service.is_flapping);
+    }
 }
