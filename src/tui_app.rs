@@ -2571,17 +2571,17 @@ fn format_duration_micros(duration_micros: u64) -> String {
 }
 
 fn get_session_history(service: &ServiceEntry) -> String {
-    let mut completed_sessions = Vec::new();
-    let mut max_session_num_length = 0;
-
-    for (i, session) in service.session_history.iter().enumerate() {
-        let session_num = i + 1;
-        max_session_num_length = max_session_num_length.max(session_num.to_string().len());
-        completed_sessions.push((session_num, session));
-    }
+    let max_session_num_length = service
+        .session_history
+        .iter()
+        .enumerate()
+        .map(|(i, _)| (i + 1).to_string().len())
+        .max()
+        .unwrap_or(0);
 
     let mut timeline = Vec::new();
-    for (session_num, session) in completed_sessions {
+    for (i, session) in service.session_history.iter().enumerate() {
+        let session_num = i + 1;
         let start_str = format_timestamp_micros(session.start_time);
         let (duration_str, end_str) = if let Some(end_time) = session.end_time {
             let duration = end_time.saturating_sub(session.start_time);

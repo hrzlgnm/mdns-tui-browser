@@ -73,11 +73,11 @@ fn micros_to_iso_timestamp(micros: u64) -> String {
     }
 }
 
-fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
+fn iso_timestamp_to_micros(timestamp: &str) -> Option<u64> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
         let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-        let micros = duration.num_microseconds().unwrap_or(0);
-        return if micros < 0 { 0 } else { micros as u64 };
+        let micros = duration.num_microseconds()?;
+        return Some(micros as u64);
     }
     if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
         let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
@@ -85,10 +85,10 @@ fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
             .and_hms_opt(0, 0, 0)
             .unwrap();
         let duration = dt.signed_duration_since(epoch);
-        let micros = duration.num_microseconds().unwrap_or(0);
-        return if micros < 0 { 0 } else { micros as u64 };
+        let micros = duration.num_microseconds()?;
+        return Some(micros as u64);
     }
-    0
+    None
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +110,11 @@ pub struct ServiceEntry {
 }
 
 impl ServiceEntry {
+    /// Marks the service as offline at the given timestamp.
+    ///
+    /// Updates `online` to `false`, sets `updated_at_micros` and `last_offline_micros`.
+    /// If there was a previous online session, closes it by setting its `end_time`.
+    /// Calls `update_flapping_status` as a side effect.
     pub fn go_offline_at(&mut self, timestamp_micros: u64) {
         if !self.online {
             return;
@@ -132,6 +137,11 @@ impl ServiceEntry {
         self.update_flapping_status();
     }
 
+    /// Marks the service as online at the given timestamp.
+    ///
+    /// Updates `online` to `true`, sets `updated_at_micros` and `last_online_micros`.
+    /// Creates a new session in `session_history` with the current timestamp as start time.
+    /// Calls `update_flapping_status` as a side effect.
     pub fn go_online_at(&mut self, timestamp_micros: u64) {
         if self.online {
             return;
@@ -148,6 +158,10 @@ impl ServiceEntry {
         self.update_flapping_status();
     }
 
+    /// Determines if the service is flapping based on session history.
+    ///
+    /// Returns `true` if the service has at least 3 sessions with at least 3 completed,
+    /// and at least half of the completed sessions are shorter than 10 seconds.
     pub fn is_flapping_service(&self) -> bool {
         const FLAPPING_SESSION_THRESHOLD: usize = 3;
         const MIN_COMPLETED_SESSIONS: usize = 3;
@@ -180,6 +194,9 @@ impl ServiceEntry {
         short_sessions * 2 >= completed_sessions
     }
 
+    /// Updates the flapping status based on the current session history.
+    ///
+    /// Side effect: sets `is_flapping` field based on `is_flapping_service()`.
     pub fn update_flapping_status(&mut self) {
         self.is_flapping = self.is_flapping_service();
     }
@@ -278,20 +295,20 @@ impl From<&ServiceSession> for SerializableServiceSession {
 
 impl From<&SerializableServiceEntry> for ServiceEntry {
     fn from(entry: &SerializableServiceEntry) -> Self {
-        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
+        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at).unwrap_or(0);
         let updated_at_micros = entry
             .updated_at
             .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts))
+            .and_then(|ts| iso_timestamp_to_micros(ts))
             .unwrap_or(first_seen_micros);
         let last_online_micros = entry
             .last_online_at
             .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts));
+            .and_then(|ts| iso_timestamp_to_micros(ts));
         let last_offline_micros = entry
             .last_offline_at
             .as_ref()
-            .map(|ts| iso_timestamp_to_micros(ts));
+            .and_then(|ts| iso_timestamp_to_micros(ts));
 
         Self {
             fullname: entry.fullname.clone(),
@@ -318,12 +335,12 @@ impl From<&SerializableServiceSession> for ServiceSession {
             start_time: session
                 .start_time
                 .as_ref()
-                .map(|ts| iso_timestamp_to_micros(ts))
+                .and_then(|ts| iso_timestamp_to_micros(ts))
                 .unwrap_or(0),
             end_time: session
                 .end_time
                 .as_ref()
-                .map(|ts| iso_timestamp_to_micros(ts)),
+                .and_then(|ts| iso_timestamp_to_micros(ts)),
         }
     }
 }
@@ -370,6 +387,7 @@ pub struct SortInfo {
     pub direction: SortDirection,
 }
 
+/// Returns the current timestamp in microseconds since the Unix epoch.
 pub fn current_timestamp_micros() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
