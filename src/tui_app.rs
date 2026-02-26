@@ -424,9 +424,9 @@ impl From<ResolvedService> for ServiceEntry {
                 let mut txt: Vec<String> = resolved_service
                     .get_properties()
                     .iter()
-                    .filter_map(|prop| {
-                        prop.val()
-                            .map(|val| format!("{}={}", prop.key(), String::from_utf8_lossy(val)))
+                    .map(|prop| match prop.val() {
+                        Some(val) => format!("{}={}", prop.key(), String::from_utf8_lossy(val)),
+                        None => prop.key().to_string(),
                     })
                     .collect();
                 txt.sort_by(|a, b| {
