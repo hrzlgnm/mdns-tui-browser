@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+mod models;
 mod terminal;
 mod tui_app;
 
