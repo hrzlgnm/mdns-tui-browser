@@ -219,7 +219,7 @@ jobs:
 
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
-        uses: actions/attest-build-provenance@e4d4f7c39adfa4c260fb5c147f0622000aa14b99
+        uses: actions/attest-build-provenance@0856891a35570e4ac506b510f0358a4308f82385
         with:
           subject-path: ${{ matrix.os == 'ubuntu-latest' && env.ATTESTATION_SUBJECTS || env.ASSET }}
 
