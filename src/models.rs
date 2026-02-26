@@ -59,7 +59,6 @@ pub struct SerializableServiceEntry {
 fn is_zero_u16(v: &u16) -> bool {
     *v == 0
 }
-
 fn micros_to_iso_timestamp(micros: u64) -> String {
     let duration = Duration::from_micros(micros);
     let secs = duration.as_secs() as i64;
@@ -67,26 +66,26 @@ fn micros_to_iso_timestamp(micros: u64) -> String {
 
     match DateTime::<Utc>::from_timestamp(secs, nanos) {
         Some(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string(),
-        None => "1970-01-01T00:00:00.000000Z".to_string(),
+        None => "1970-01-01T00:00:00.000000Z".to_string(), // Fallback for invalid timestamps
     }
 }
 
-fn iso_timestamp_to_micros(timestamp: &str) -> Option<u64> {
+fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
     if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
         let duration = dt.signed_duration_since(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-        let micros = duration.num_microseconds()?;
-        return (micros >= 0).then_some(micros as u64);
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
     }
-    if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
-        let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
             .unwrap()
             .and_hms_opt(0, 0, 0)
             .unwrap();
         let duration = dt.signed_duration_since(epoch);
-        let micros = duration.num_microseconds()?;
-        return (micros >= 0).then_some(micros as u64);
+        let micros = duration.num_microseconds().unwrap_or(0);
+        return if micros < 0 { 0 } else { micros as u64 };
     }
-    None
+    0
 }
 
 #[derive(Clone, Debug)]
@@ -290,23 +289,22 @@ impl From<&ServiceSession> for SerializableServiceSession {
         }
     }
 }
-
 impl From<&SerializableServiceEntry> for ServiceEntry {
     fn from(entry: &SerializableServiceEntry) -> Self {
-        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at).unwrap_or(0);
+        let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
         let updated_at_micros = entry
             .updated_at
             .as_ref()
-            .and_then(|ts| iso_timestamp_to_micros(ts))
+            .map(|ts| iso_timestamp_to_micros(ts))
             .unwrap_or(first_seen_micros);
         let last_online_micros = entry
             .last_online_at
             .as_ref()
-            .and_then(|ts| iso_timestamp_to_micros(ts));
+            .map(|ts| iso_timestamp_to_micros(ts));
         let last_offline_micros = entry
             .last_offline_at
             .as_ref()
-            .and_then(|ts| iso_timestamp_to_micros(ts));
+            .map(|ts| iso_timestamp_to_micros(ts));
 
         Self {
             fullname: entry.fullname.clone(),
@@ -333,12 +331,12 @@ impl From<&SerializableServiceSession> for ServiceSession {
             start_time: session
                 .start_time
                 .as_ref()
-                .and_then(|ts| iso_timestamp_to_micros(ts))
+                .map(|ts| iso_timestamp_to_micros(ts))
                 .unwrap_or(0),
             end_time: session
                 .end_time
                 .as_ref()
-                .and_then(|ts| iso_timestamp_to_micros(ts)),
+                .map(|ts| iso_timestamp_to_micros(ts)),
         }
     }
 }
