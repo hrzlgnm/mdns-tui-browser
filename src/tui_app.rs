@@ -16,9 +16,12 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
+use crate::models::{
+    FilterInfo, Metadata, SerializableServiceEntry, SerializableServiceSession, ServiceSession,
+    SortDirection, SortField, SortInfo, StateDump,
+};
 use crate::terminal::TuiTerminal;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
@@ -198,24 +201,6 @@ impl From<&SerializableServiceSession> for ServiceSession {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum SortField {
-    Host,
-    ServiceType,
-    Fullname,
-    Port,
-    Address,
-    Timestamp,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum SortDirection {
-    Ascending,
-    Descending,
-}
-
 #[derive(Clone, Debug)]
 struct ServiceEntry {
     fullname: String,
@@ -232,51 +217,6 @@ struct ServiceEntry {
     last_offline_micros: Option<u64>,
     session_history: Vec<ServiceSession>,
     is_flapping: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializableServiceEntry {
-    fullname: String,
-    host: String,
-    service_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    subtype: Option<String>,
-    addresses: Vec<String>,
-    #[serde(default, skip_serializing_if = "is_zero_u16")]
-    port: u16,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    txt_records: Vec<String>,
-    is_online: bool,
-    is_flapping: bool,
-    created_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    updated_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_online_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_offline_at: Option<String>,
-    #[serde(default)]
-    session_history: Vec<SerializableServiceSession>,
-}
-
-fn is_zero_u16(v: &u16) -> bool {
-    *v == 0
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct ServiceSession {
-    start_time: u64,
-    end_time: Option<u64>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializableServiceSession {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    start_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    end_time: Option<String>,
 }
 
 impl ServiceEntry {
@@ -585,39 +525,6 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     }
     let end = std::cmp::min(end, items.len());
     &items[start..end]
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Metadata {
-    dump_timestamp: String,
-    application_name: String,
-    version: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StateDump {
-    metadata: Metadata,
-    services: Vec<SerializableServiceEntry>,
-    service_types: Vec<String>,
-    metrics: BTreeMap<String, u64>,
-    filters: FilterInfo,
-    sorting: SortInfo,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FilterInfo {
-    query: String,
-    active_service_types: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SortInfo {
-    field: String,
-    direction: String,
 }
 
 struct AppState {
