@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ServiceSession {
@@ -96,6 +97,6 @@ pub struct FilterInfo {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SortInfo {
-    pub field: String,
-    pub direction: String,
+    pub field: SortField,
+    pub direction: SortDirection,
 }

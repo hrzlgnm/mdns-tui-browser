@@ -876,8 +876,8 @@ impl AppState {
                 active_service_types: self.user_service_types.iter().cloned().collect(),
             },
             sorting: SortInfo {
-                field: format!("{:?}", self.sort_field),
-                direction: format!("{:?}", self.sort_direction),
+                field: self.sort_field,
+                direction: self.sort_direction,
             },
         }
     }
@@ -903,23 +903,8 @@ impl AppState {
         self.filter_query = dump.filters.query;
         self.user_service_types = dump.filters.active_service_types.into_iter().collect();
 
-        let sort_field = match dump.sorting.field.as_str() {
-            "Host" => SortField::Host,
-            "ServiceType" => SortField::ServiceType,
-            "Fullname" => SortField::Fullname,
-            "Port" => SortField::Port,
-            "Address" => SortField::Address,
-            "Timestamp" => SortField::Timestamp,
-            _ => SortField::Host,
-        };
-        self.sort_field = sort_field;
-
-        let sort_direction = match dump.sorting.direction.as_str() {
-            "Ascending" => SortDirection::Ascending,
-            "Descending" => SortDirection::Descending,
-            _ => SortDirection::Ascending,
-        };
-        self.sort_direction = sort_direction;
+        self.sort_field = dump.sorting.field;
+        self.sort_direction = dump.sorting.direction;
 
         self.loaded_from_file = true;
         self.cache_dirty = true;
