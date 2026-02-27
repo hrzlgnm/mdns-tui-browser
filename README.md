@@ -281,10 +281,12 @@ This project follows a **Safe Rust Only** policy:
 
 ```
 src/
-├── main.rs       # Entry point with cli argument handling
-├── tui_app.rs    # Full TUI implementation
-├── terminal.rs   # Terminal management
-└── README.md     # This file
+├── main.rs       # Entry point with CLI argument handling
+├── tui_app.rs    # Main TUI application logic
+├── popup.rs      # Popup UI components (help, metrics)
+├── scroll.rs     # Scroll state management
+├── models.rs     # Data models
+└── terminal.rs  # Terminal management
 ```
 
 ## Building
