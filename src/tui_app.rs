@@ -22,6 +22,8 @@ use crate::models::{
     FilterInfo, Metadata, ServiceEntry, SortDirection, SortField, SortInfo, StateDump,
     current_timestamp_micros,
 };
+use crate::popup::PopupState;
+use crate::scroll::ScrollState;
 use crate::terminal::TuiTerminal;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
@@ -76,66 +78,6 @@ async fn handle_suspend(
         let mut state = state.write().await;
         state.prepare_for_rendering(terminal_area);
         let _ = terminal.draw(|f| ui(f, &state));
-    }
-}
-
-// Generic scroll utilities
-#[derive(Debug, Clone)]
-struct ScrollState {
-    offset: usize,
-    visible_items: usize,
-}
-
-impl ScrollState {
-    fn new() -> Self {
-        Self {
-            offset: 0,
-            visible_items: 0,
-        }
-    }
-
-    fn update_offset(&mut self, selected_index: usize, total_items: usize) {
-        if selected_index < self.offset {
-            self.offset = selected_index;
-        } else if self.visible_items > 0 && selected_index >= self.offset + self.visible_items {
-            self.offset = selected_index - self.visible_items + 1;
-        }
-
-        // Ensure offset doesn't exceed bounds
-        if total_items > 0 && self.offset > total_items.saturating_sub(1) {
-            self.offset = total_items.saturating_sub(1);
-        }
-    }
-
-    fn page_scroll_amount(&self) -> usize {
-        self.visible_items.saturating_sub(1)
-    }
-
-    fn reset(&mut self) {
-        self.offset = 0;
-    }
-}
-
-// Generic popup scrolling utilities
-fn handle_popup_scroll(
-    key_code: KeyCode,
-    scroll_offset: &mut usize,
-    total_content_lines: usize,
-    max_visible_lines: usize,
-) -> bool {
-    match key_code {
-        KeyCode::Up => {
-            if *scroll_offset > 0 {
-                *scroll_offset -= 1;
-            }
-            true
-        }
-        KeyCode::Down => {
-            let max_scroll_offset = total_content_lines.saturating_sub(max_visible_lines);
-            *scroll_offset = std::cmp::min(*scroll_offset + 1, max_scroll_offset);
-            true
-        }
-        _ => false,
     }
 }
 
@@ -223,14 +165,11 @@ struct AppState {
     selected_type: Option<usize>,
     types_scroll: ScrollState,
     services_scroll: ScrollState,
-    help_scroll: ScrollState,
-    metrics_scroll: ScrollState,
     details_scroll: ScrollState,
     cached_filtered_services: Vec<usize>,
     cache_dirty: bool,
     cached_sorted: bool,
-    show_help_popup: bool,
-    show_metrics_popup: bool,
+    pub(crate) popup_state: PopupState,
     metrics: BTreeMap<String, u64>,
     sort_field: SortField,
     sort_direction: SortDirection,
@@ -255,14 +194,11 @@ impl Clone for AppState {
             selected_type: self.selected_type,
             types_scroll: self.types_scroll.clone(),
             services_scroll: self.services_scroll.clone(),
-            help_scroll: self.help_scroll.clone(),
-            metrics_scroll: self.metrics_scroll.clone(),
             details_scroll: self.details_scroll.clone(),
             cached_filtered_services: self.cached_filtered_services.clone(),
             cache_dirty: self.cache_dirty,
             cached_sorted: self.cached_sorted,
-            show_help_popup: self.show_help_popup,
-            show_metrics_popup: self.show_metrics_popup,
+            popup_state: self.popup_state.clone(),
             metrics: self.metrics.clone(),
             sort_field: self.sort_field,
             sort_direction: self.sort_direction,
@@ -294,14 +230,11 @@ impl AppState {
             selected_type: None,
             types_scroll: ScrollState::new(),
             services_scroll: ScrollState::new(),
-            help_scroll: ScrollState::new(),
-            metrics_scroll: ScrollState::new(),
             details_scroll: ScrollState::new(),
             cached_filtered_services: Vec::new(),
             cache_dirty: true,
             cached_sorted: false,
-            show_help_popup: false,
-            show_metrics_popup: false,
+            popup_state: PopupState::new(),
             metrics: BTreeMap::new(),
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
@@ -798,91 +731,13 @@ impl AppState {
             return true;
         }
 
-        if self.show_help_popup {
-            self.handle_help_popup_key(key)
-        } else if self.show_metrics_popup {
-            self.handle_metrics_popup_key(key)
+        if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
+            self.popup_state
+                .handle_key_event(key, self.terminal_area, &self.metrics)
         } else if self.filter_input_mode {
             self.handle_filter_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
-        }
-    }
-
-    fn handle_help_popup_key(&mut self, key: KeyEvent) -> bool {
-        match key.code {
-            KeyCode::Up | KeyCode::Down => {
-                // Calculate actual popup dimensions and content length using stored terminal area
-                let popup_area = create_centered_popup(self.terminal_area, 60, 70);
-                let inner_area = ratatui::layout::Rect::new(
-                    popup_area.x + 1,
-                    popup_area.y + 1,
-                    popup_area.width.saturating_sub(2),
-                    popup_area.height.saturating_sub(2),
-                );
-                let max_visible_lines = inner_area.height as usize;
-
-                // Generate actual help content to count lines
-                let help_content = generate_help_content();
-                let total_help_lines = help_content.len();
-
-                // Set visible items for scroll state
-                self.help_scroll.visible_items = max_visible_lines;
-
-                // Use generic popup scroll handling
-                handle_popup_scroll(
-                    key.code,
-                    &mut self.help_scroll.offset,
-                    total_help_lines,
-                    max_visible_lines,
-                );
-                true
-            }
-            // Any other key closes the help popup and returns to normal mode
-            _ => {
-                self.show_help_popup = false;
-                self.help_scroll.reset(); // Reset scroll offset when closing
-                true // Continue running
-            }
-        }
-    }
-
-    fn handle_metrics_popup_key(&mut self, key: KeyEvent) -> bool {
-        match key.code {
-            KeyCode::Up | KeyCode::Down => {
-                // Calculate actual popup dimensions and content length using stored terminal area
-                let popup_area = create_centered_popup(self.terminal_area, 60, 70);
-                let inner_area = ratatui::layout::Rect::new(
-                    popup_area.x + 1,
-                    popup_area.y + 1,
-                    popup_area.width.saturating_sub(2),
-                    popup_area.height.saturating_sub(2),
-                );
-                let max_visible_lines = inner_area.height as usize;
-
-                // Generate actual metrics content to count lines
-                let metrics_content = generate_metrics_content(&self.metrics);
-                let total_metrics_lines = metrics_content.len();
-
-                // Set visible items for scroll state
-                self.metrics_scroll.visible_items = max_visible_lines;
-
-                // Use generic popup scroll handling
-                handle_popup_scroll(
-                    key.code,
-                    &mut self.metrics_scroll.offset,
-                    total_metrics_lines,
-                    max_visible_lines,
-                );
-                true
-            }
-            // Any other key closes the metrics popup and returns to normal mode
-            _ => {
-                self.show_metrics_popup = false;
-                // Reset scroll offset for all keys
-                self.metrics_scroll.reset(); // Reset scroll offset when closing
-                true // Continue running
-            }
         }
     }
 
@@ -1072,7 +927,7 @@ impl AppState {
     }
 
     fn toggle_help(&mut self) {
-        self.show_help_popup = !self.show_help_popup;
+        self.popup_state.toggle_help();
     }
 
     fn update_metric(&mut self, key: &str) {
@@ -1101,7 +956,7 @@ impl AppState {
     }
 
     fn toggle_metrics(&mut self) {
-        self.show_metrics_popup = !self.show_metrics_popup;
+        self.popup_state.toggle_metrics();
     }
 
     fn add_or_update_service(&mut self, service_entry: ServiceEntry) -> bool {
@@ -1758,11 +1613,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     render_status_message(f, app_state);
 
     // Render popups if active
-    if app_state.show_help_popup {
-        render_help_popup(f, app_state.help_scroll.offset);
-    } else if app_state.show_metrics_popup {
-        render_metrics_popup(f, app_state, app_state.metrics_scroll.offset);
-    }
+    app_state
+        .popup_state
+        .render(f, app_state.terminal_area, &app_state.metrics);
 }
 
 struct MainLayout {
@@ -2172,233 +2025,6 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
 
         f.render_widget(paragraph, inner_area);
     }
-}
-
-fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
-    let version = env!("CARGO_PKG_VERSION");
-    let help_content = generate_help_content();
-
-    let popup_area = create_centered_popup(f.area(), 60, 70);
-
-    // Clear the background first
-    f.render_widget(ratatui::widgets::Clear, popup_area);
-
-    // Create a solid background block to ensure readability
-    let background_block =
-        ratatui::widgets::Block::default().style(Style::default().bg(ratatui::style::Color::Black));
-    f.render_widget(background_block, popup_area);
-
-    // Create inner area with padding by reducing the popup area
-    let inner_area = ratatui::layout::Rect::new(
-        popup_area.x + 1,
-        popup_area.y + 1,
-        popup_area.width.saturating_sub(2),
-        popup_area.height.saturating_sub(2),
-    );
-
-    // Apply scroll offset to help content with clamping
-    let clamped_offset = if help_content.is_empty() {
-        0
-    } else {
-        help_scroll_offset.min(help_content.len().saturating_sub(1))
-    };
-    let visible_help_content: Vec<Line> = help_content.into_iter().skip(clamped_offset).collect();
-
-    let help_paragraph = Paragraph::new(visible_help_content)
-        .style(Style::default().fg(Color::White))
-        .wrap(Wrap { trim: false });
-
-    f.render_widget(help_paragraph, inner_area);
-
-    // Render border on top
-    let border_block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!("Key Bindings | v{}", version))
-        .title_style(Style::default().add_modifier(Modifier::BOLD));
-    f.render_widget(border_block, popup_area);
-}
-
-fn render_metrics_popup(f: &mut Frame, app_state: &AppState, metrics_scroll_offset: usize) {
-    let metrics_content = generate_metrics_content(&app_state.metrics);
-
-    let popup_area = create_centered_popup(f.area(), 60, 70);
-
-    // Clear the background first
-    f.render_widget(ratatui::widgets::Clear, popup_area);
-
-    // Create a solid background block to ensure readability
-    let background_block =
-        ratatui::widgets::Block::default().style(Style::default().bg(ratatui::style::Color::Black));
-    f.render_widget(background_block, popup_area);
-
-    // Create inner area with padding by reducing the popup area
-    let inner_area = ratatui::layout::Rect::new(
-        popup_area.x + 1,
-        popup_area.y + 1,
-        popup_area.width.saturating_sub(2),
-        popup_area.height.saturating_sub(2),
-    );
-
-    // Apply scroll offset to metrics content with clamping
-    let visible_lines = inner_area.height as usize;
-    let max_offset = metrics_content.len().saturating_sub(visible_lines);
-    let clamped_offset = metrics_scroll_offset.min(max_offset);
-    let visible_metrics_content: Vec<Line> =
-        metrics_content.into_iter().skip(clamped_offset).collect();
-
-    let metrics_paragraph = Paragraph::new(visible_metrics_content)
-        .style(Style::default().fg(Color::White))
-        .wrap(Wrap { trim: false });
-
-    f.render_widget(metrics_paragraph, inner_area);
-
-    // Render border on top
-    let border_block = Block::default()
-        .borders(Borders::ALL)
-        .title("Service Metrics")
-        .title_style(Style::default().add_modifier(Modifier::BOLD));
-    f.render_widget(border_block, popup_area);
-}
-
-fn generate_help_content() -> Vec<Line<'static>> {
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(" Help Controls:"),
-        Line::from("   ↑/↓               - Scroll this help content"),
-        Line::from("   Any other key     - Close this help popup"),
-        Line::from(" "),
-        Line::from(" Navigation:"),
-        Line::from("   ←/→ or h/l        - Switch between service types"),
-        Line::from("   H/L               - Page through service types"),
-        Line::from("   PageUp/Down       - Scroll services list by page"),
-        Line::from("   b/f/Space         - Scroll services list by page"),
-        Line::from("   Home/End          - Jump to first/last service"),
-        Line::from("   Ctrl+Home/End     - Jump to first/last service type"),
-        Line::from(" "),
-        Line::from(" Service Details:"),
-        Line::from("   Shift+↑/↓ or J/K  - Scroll service details"),
-        Line::from(" "),
-        Line::from(" Actions:"),
-        Line::from("   d                 - Remove offline services"),
-        Line::from("   D                 - Clear stale service types"),
-        Line::from("   m                 - Show service metrics"),
-        Line::from("   /                 - Enter quick filter mode"),
-        Line::from("   n                 - Clear current filter"),
-        Line::from("   ?                 - Toggle this help popup"),
-        Line::from("   Ctrl+j            - Dump state to json file"),
-        Line::from("   q or Ctrl+c       - Quit the application"),
-    ];
-
-    #[cfg(unix)]
-    lines.push(Line::from("   Ctrl+z            - Suspend the application"));
-
-    lines.extend([
-        Line::from(" "),
-        Line::from(" Sorting:"),
-        Line::from(
-            "   s                 - Cycle sort field: Host → Type → Name → Port → Addr → Time",
-        ),
-        Line::from("   S                 - Cycle sort field backward"),
-        Line::from("   o                 - Toggle sort direction (↑/↓)"),
-        Line::from(" "),
-        Line::from("   Sort field highlighted in white (underlined), direction in cyan (bold)"),
-        Line::from(" "),
-        Line::from(" Quick Filter:"),
-        Line::from("   /                 - Start typing to filter services"),
-        Line::from("   Enter             - Apply filter"),
-        Line::from("   Esc               - Cancel filter input"),
-        Line::from("   Backspace         - Delete last character"),
-        Line::from("   n (normal mode)   - Clear current filter"),
-        Line::from(" "),
-        Line::from("   Special keywords:"),
-        Line::from("   'online'          - Show online services + services with 'online' in text"),
-        Line::from(
-            "   'offline'         - Show offline services + services with 'offline' in text",
-        ),
-        Line::from("   Case-insensitive: ONLINE, Online, offline, OFFLINE all work"),
-        Line::from("   Combined: 'online http' shows online HTTP services"),
-        Line::from(" "),
-        Line::from("   Filter searches all service fields case-insensitively"),
-    ]);
-    lines
-}
-
-fn generate_metrics_content(metrics: &BTreeMap<String, u64>) -> Vec<Line<'static>> {
-    let mut metrics_content: Vec<Line> = vec![
-        Line::from(""),
-        Line::from(" Metrics Controls:"),
-        Line::from("   ↑/↓               - Scroll this metrics content"),
-        Line::from("   Any other key     - Close this metrics popup"),
-        Line::from(" "),
-        Line::from(" Service Discovery Metrics:"),
-        Line::from(" "),
-    ];
-
-    // Separate custom metrics from daemon metrics
-    let mut custom_metrics = Vec::new();
-    let mut daemon_metrics = Vec::new();
-
-    for (key, value) in metrics.iter() {
-        if *value > 0 {
-            if key.starts_with("daemon_") {
-                let clean_key = key.strip_prefix("daemon_").unwrap().replace('_', " ");
-                daemon_metrics.push((clean_key, *value));
-            } else {
-                let formatted_key = key.replace('_', " ");
-                custom_metrics.push((formatted_key, *value));
-            }
-        }
-    }
-
-    // Sort both alphabetically
-    custom_metrics.sort_by(|a, b| a.0.cmp(&b.0));
-    daemon_metrics.sort_by(|a, b| a.0.cmp(&b.0));
-
-    // Display custom metrics first
-    if !custom_metrics.is_empty() {
-        metrics_content.push(Line::from(" Custom Metrics:"));
-        for (key, value) in &custom_metrics {
-            metrics_content.push(Line::from(format!("   {}: {}", key, value)));
-        }
-        metrics_content.push(Line::from(" "));
-    }
-
-    // Display daemon metrics
-    if !daemon_metrics.is_empty() {
-        metrics_content.push(Line::from(" Daemon Metrics (from ServiceDaemon):"));
-        for (key, value) in &daemon_metrics {
-            metrics_content.push(Line::from(format!("   {}: {}", key, value)));
-        }
-        metrics_content.push(Line::from(" "));
-    }
-
-    if custom_metrics.is_empty() && daemon_metrics.is_empty() {
-        metrics_content.push(Line::from("   No metrics collected yet"));
-    }
-
-    metrics_content
-}
-
-fn create_centered_popup(
-    parent_area: ratatui::layout::Rect,
-    width_percent: u16,
-    height_percent: u16,
-) -> ratatui::layout::Rect {
-    let popup_width = (parent_area.width * width_percent) / 100;
-    let popup_height = (parent_area.height * height_percent) / 100;
-
-    // Add margins (at least 2 cells on each side if possible)
-    let margin_x = std::cmp::min(2, parent_area.width.saturating_sub(popup_width) / 2);
-    let margin_y = std::cmp::min(1, parent_area.height.saturating_sub(popup_height) / 2);
-
-    let x = parent_area.x + (parent_area.width - popup_width) / 2 + margin_x;
-    let y = parent_area.y + (parent_area.height - popup_height) / 2 + margin_y;
-
-    // Adjust width and height to account for margins
-    let adjusted_width = popup_width - (margin_x * 2);
-    let adjusted_height = popup_height - (margin_y * 2);
-
-    ratatui::layout::Rect::new(x, y, adjusted_width, adjusted_height)
 }
 
 // Helper functions for formatting
@@ -4344,8 +3970,8 @@ mod tests {
 
         for test_case in test_cases {
             let mut state = AppState::new(HashSet::new(), false, false, false);
-            state.show_metrics_popup = true;
-            state.metrics_scroll.offset = test_case.initial_offset;
+            state.popup_state.metrics_popup.active = true;
+            state.popup_state.metrics_popup.scroll.offset = test_case.initial_offset;
             (test_case.setup_metrics)(&mut state);
 
             // Handle the key event
@@ -4354,24 +3980,24 @@ mod tests {
             // Check results
             if let Some(expected_offset) = test_case.expected_offset {
                 assert_eq!(
-                    state.metrics_scroll.offset,
+                    state.popup_state.metrics_popup.scroll.offset,
                     expected_offset,
                     "{}: {} - Expected offset {}, got {}",
                     test_case.name,
                     test_case.description,
                     expected_offset,
-                    state.metrics_scroll.offset
+                    state.popup_state.metrics_popup.scroll.offset
                 );
             }
 
             assert_eq!(
-                state.show_metrics_popup,
+                state.popup_state.metrics_popup.active,
                 test_case.expected_popup_open,
                 "{}: {} - Expected popup open: {}, got {}",
                 test_case.name,
                 test_case.description,
                 test_case.expected_popup_open,
-                state.show_metrics_popup
+                state.popup_state.metrics_popup.active
             );
         }
     }
@@ -4522,8 +4148,8 @@ mod tests {
         assert_eq!(state.types_scroll.offset, 0);
         assert_eq!(state.services_scroll.offset, 0);
         assert!(state.cache_dirty);
-        assert!(!state.show_help_popup);
-        assert!(!state.show_metrics_popup);
+        assert!(!state.popup_state.help_popup.active);
+        assert!(!state.popup_state.metrics_popup.active);
         assert!(state.user_service_types.is_empty());
     }
 
@@ -4938,33 +4564,33 @@ mod tests {
     #[test]
     fn test_handle_key_event_toggle_help() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        assert!(!state.show_help_popup);
+        assert!(!state.popup_state.help_popup.active);
 
         let key = KeyEvent::from(KeyCode::Char('?'));
         assert!(state.handle_key_event(key)); // Should return true to continue
-        assert!(state.show_help_popup);
+        assert!(state.popup_state.help_popup.active);
 
         assert!(state.handle_key_event(key));
-        assert!(!state.show_help_popup);
+        assert!(!state.popup_state.help_popup.active);
     }
 
     #[test]
     fn test_handle_key_event_toggle_metrics() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        assert!(!state.show_metrics_popup);
+        assert!(!state.popup_state.metrics_popup.active);
 
         let key = KeyEvent::from(KeyCode::Char('m'));
         assert!(state.handle_key_event(key));
-        assert!(state.show_metrics_popup);
+        assert!(state.popup_state.metrics_popup.active);
 
         assert!(state.handle_key_event(key));
-        assert!(!state.show_metrics_popup);
+        assert!(!state.popup_state.metrics_popup.active);
     }
 
     #[test]
     fn test_handle_metrics_popup_key() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
+        state.popup_state.metrics_popup.active = true;
 
         // Add some metrics to ensure there's content to scroll through
         state.update_metric("test_metric_1");
@@ -4979,58 +4605,58 @@ mod tests {
         }
 
         // Test scrolling down when possible
-        state.metrics_scroll.offset = 3;
+        state.popup_state.metrics_popup.scroll.offset = 3;
         let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
-        assert!(state.show_metrics_popup); // Should remain open
+        assert!(state.popup_state.metrics_popup.active); // Should remain open
         // The exact scroll offset now depends on content length and terminal size
-        assert!(state.metrics_scroll.offset >= 3); // Should not decrease
+        assert!(state.popup_state.metrics_popup.scroll.offset >= 3); // Should not decrease
 
         // Test scrolling up at boundary (should not go below 0)
-        state.metrics_scroll.offset = 0;
+        state.popup_state.metrics_popup.scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
-        assert!(state.show_metrics_popup); // Should remain open
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(state.popup_state.metrics_popup.active); // Should remain open
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
 
         // Test any other key closes popup and resets scroll
-        state.metrics_scroll.offset = 10;
+        state.popup_state.metrics_popup.scroll.offset = 10;
         let key_event = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
-        assert!(!state.show_metrics_popup); // Should close
-        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
+        assert!(!state.popup_state.metrics_popup.active); // Should close
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0); // Should reset
     }
 
     #[test]
     fn test_handle_help_popup_key() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_help_popup = true;
+        state.popup_state.help_popup.active = true;
 
         // Test scrolling down when at max scroll offset
-        state.help_scroll.offset = 0;
+        state.popup_state.help_popup.scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
-        assert!(state.show_help_popup); // Should remain open
+        assert!(state.popup_state.help_popup.active); // Should remain open
 
         // Test scrolling up when at boundary (should not go below 0)
-        state.help_scroll.offset = 0;
+        state.popup_state.help_popup.scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
-        assert!(state.show_help_popup); // Should remain open
-        assert_eq!(state.help_scroll.offset, 0);
+        assert!(state.popup_state.help_popup.active); // Should remain open
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 0);
 
         // Test any other key closes popup and resets scroll
-        state.help_scroll.offset = 10;
+        state.popup_state.help_popup.scroll.offset = 10;
         let key_event = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let result = state.handle_key_event(key_event);
         assert!(result);
-        assert!(!state.show_help_popup); // Should close
-        assert_eq!(state.help_scroll.offset, 0); // Should reset
+        assert!(!state.popup_state.help_popup.active); // Should close
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 0); // Should reset
     }
 
     // Metrics tests
@@ -5077,90 +4703,90 @@ mod tests {
         }
 
         // Test scrolling up when already at top (should stay at 0)
-        state.metrics_scroll.offset = 0;
-        state.show_metrics_popup = true; // Show popup
+        state.popup_state.metrics_popup.scroll.offset = 0;
+        state.popup_state.metrics_popup.active = true; // Show popup
         let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         state.handle_key_event(key_event);
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
 
         // Test scrolling up from higher position
-        state.metrics_scroll.offset = 3;
-        let initial_offset = state.metrics_scroll.offset;
+        state.popup_state.metrics_popup.scroll.offset = 3;
+        let initial_offset = state.popup_state.metrics_popup.scroll.offset;
         state.handle_key_event(key_event);
-        assert!(state.metrics_scroll.offset < initial_offset); // Should scroll up
+        assert!(state.popup_state.metrics_popup.scroll.offset < initial_offset); // Should scroll up
 
         // Test scrolling down from various positions
-        state.metrics_scroll.offset = 0;
+        state.popup_state.metrics_popup.scroll.offset = 0;
         let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         state.handle_key_event(key_event);
         // Should increment
-        assert!(state.metrics_scroll.offset > 0);
+        assert!(state.popup_state.metrics_popup.scroll.offset > 0);
 
         // Test scrolling down when already at max - set to very high value first
-        state.metrics_scroll.offset = 100;
-        let max_before = state.metrics_scroll.offset;
+        state.popup_state.metrics_popup.scroll.offset = 100;
+        let max_before = state.popup_state.metrics_popup.scroll.offset;
         state.handle_key_event(key_event);
         // Should not exceed max
-        assert!(state.metrics_scroll.offset <= max_before);
+        assert!(state.popup_state.metrics_popup.scroll.offset <= max_before);
     }
 
     #[test]
     fn test_metrics_scroll_with_popup() {
         // Test that scrolling only works when popup is shown
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = false;
-        state.metrics_scroll.offset = 5;
+        state.popup_state.metrics_popup.active = false;
+        state.popup_state.metrics_popup.scroll.offset = 5;
         let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
 
         // This should not be called when popup is not shown, but let's test it anyway
         state.handle_key_event(key_event);
-        let _offset_without_popup = state.metrics_scroll.offset;
+        let _offset_without_popup = state.popup_state.metrics_popup.scroll.offset;
 
         // Now test with popup shown
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 5;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 5;
         state.handle_key_event(key_event);
         // With popup shown, scrolling should work and offset should decrease
-        assert!(state.metrics_scroll.offset < 5);
+        assert!(state.popup_state.metrics_popup.scroll.offset < 5);
         // Note: behavior without popup is undefined since key shouldn't be handled then
     }
 
     #[test]
     fn test_metrics_scroll_reset_on_close() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 10;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 10;
 
         // Close popup with a non-scroll key
         let key_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0); // Should reset
 
         // Test with Enter key
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 15;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 15;
         let key_event = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0); // Should reset
 
         // Test with Escape key
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 20;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 20;
         let key_event = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         state.handle_key_event(key_event);
 
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0); // Should reset
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0); // Should reset
     }
 
     #[test]
     fn test_metrics_scroll_return_value() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
+        state.popup_state.metrics_popup.active = true;
 
         // Test that all key events return true (continue running)
         let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
@@ -5175,31 +4801,31 @@ mod tests {
     #[test]
     fn test_metrics_scroll_with_modifiers() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
+        state.popup_state.metrics_popup.active = true;
 
         // Add some metrics to ensure there's content to scroll through
         for i in 1..20 {
             state.update_metric(&format!("test_metric_{}", i));
         }
-        state.metrics_scroll.offset = 2;
+        state.popup_state.metrics_popup.scroll.offset = 2;
 
         // Test scrolling with Control modifier (should still work)
         let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL);
         state.handle_key_event(key_event);
-        assert_eq!(state.metrics_scroll.offset, 1);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 1);
 
         // Test scrolling with Shift modifier
-        state.metrics_scroll.offset = 2;
+        state.popup_state.metrics_popup.scroll.offset = 2;
         let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
         state.handle_key_event(key_event);
-        assert!(state.metrics_scroll.offset > 2);
+        assert!(state.popup_state.metrics_popup.scroll.offset > 2);
     }
 
     #[test]
     fn test_metrics_scroll_multiple_operations() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 5;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 5;
 
         let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
@@ -5208,102 +4834,102 @@ mod tests {
         for _ in 0..10 {
             state.handle_key_event(up_key);
         }
-        assert_eq!(state.metrics_scroll.offset, 0); // Should stop at 0
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0); // Should stop at 0
 
         // Test multiple down operations
         for _ in 0..20 {
             state.handle_key_event(down_key);
         }
         // Should not exceed calculated maximum
-        assert!(state.metrics_scroll.offset <= 6);
+        assert!(state.popup_state.metrics_popup.scroll.offset <= 6);
 
         // Test mixed operations
-        state.metrics_scroll.offset = 3;
+        state.popup_state.metrics_popup.scroll.offset = 3;
         state.handle_key_event(up_key); // to 2
         state.handle_key_event(up_key); // to 1
         state.handle_key_event(down_key); // to 2
         state.handle_key_event(up_key); // to 1
         state.handle_key_event(up_key); // to 0
 
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
     }
 
     #[test]
     fn test_metrics_scroll_page_navigation() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
+        state.popup_state.metrics_popup.active = true;
 
         // Test PageUp key (should behave like Up in current implementation)
-        state.metrics_scroll.offset = 5;
+        state.popup_state.metrics_popup.scroll.offset = 5;
         let page_up_key = KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE);
         state.handle_key_event(page_up_key);
-        assert!(!state.show_metrics_popup); // PageUp closes popup
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(!state.popup_state.metrics_popup.active); // PageUp closes popup
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
 
         // Test PageDown key (should behave like Down in current implementation)
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 0;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 0;
         let page_down_key = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
         state.handle_key_event(page_down_key);
-        assert!(!state.show_metrics_popup); // PageDown closes popup
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(!state.popup_state.metrics_popup.active); // PageDown closes popup
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
 
         // Test Home key (should close popup)
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 3;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 3;
         let home_key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
         state.handle_key_event(home_key);
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
 
         // Test End key (should close popup)
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 3;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 3;
         let end_key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
         state.handle_key_event(end_key);
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
     }
 
     #[test]
     fn test_metrics_scroll_function_key_navigation() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 3;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 3;
 
         // Test F1 key (should close popup)
         let f1_key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         state.handle_key_event(f1_key);
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
 
         // Test F5 key (should close popup)
-        state.show_metrics_popup = true;
-        state.metrics_scroll.offset = 3;
+        state.popup_state.metrics_popup.active = true;
+        state.popup_state.metrics_popup.scroll.offset = 3;
         let f5_key = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
         state.handle_key_event(f5_key);
-        assert!(!state.show_metrics_popup);
-        assert_eq!(state.metrics_scroll.offset, 0);
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0);
     }
 
     #[test]
     fn test_metrics_scroll_edge_cases() {
         let mut state = AppState::new(HashSet::new(), false, false, false);
-        state.show_metrics_popup = true;
+        state.popup_state.metrics_popup.active = true;
 
         // Test with very large scroll offset (should be clamped)
-        state.metrics_scroll.offset = 1000;
+        state.popup_state.metrics_popup.scroll.offset = 1000;
         let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         state.handle_key_event(down_key);
-        assert!(state.metrics_scroll.offset <= 6); // Should be clamped to max
+        assert!(state.popup_state.metrics_popup.scroll.offset <= 6); // Should be clamped to max
 
         // Test with negative scroll offset (can't happen in practice, but test robustness)
-        state.metrics_scroll.offset = 0;
+        state.popup_state.metrics_popup.scroll.offset = 0;
         let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         for _ in 0..10 {
             state.handle_key_event(up_key);
         }
-        assert_eq!(state.metrics_scroll.offset, 0); // Should never go negative
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 0); // Should never go negative
     }
 
     // Cache tests
@@ -5649,26 +5275,6 @@ mod tests {
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
-    }
-
-    #[test]
-    fn test_create_centered_popup() {
-        let parent = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let popup = create_centered_popup(parent, 50, 50);
-
-        // Popup should be smaller than parent
-        assert!(popup.width <= parent.width);
-        assert!(popup.height <= parent.height);
-
-        // Popup should be centered (roughly)
-        let center_x = parent.width / 2;
-        let center_y = parent.height / 2;
-        let popup_center_x = popup.x + popup.width / 2;
-        let popup_center_y = popup.y + popup.height / 2;
-
-        // Allow some margin of error due to rounding and margins
-        assert!((popup_center_x as i32 - center_x as i32).abs() < 10);
-        assert!((popup_center_y as i32 - center_y as i32).abs() < 10);
     }
 
     #[test]
@@ -7114,65 +6720,6 @@ mod tests {
         // Test with single item
         scroll_state.update_offset(0, 1);
         assert_eq!(scroll_state.offset, 0);
-    }
-
-    #[test]
-    fn test_handle_popup_scroll() {
-        let mut scroll_offset = 5;
-        let total_content_lines = 20;
-        let max_visible_lines = 10;
-
-        // Test scroll up
-        let handled = handle_popup_scroll(
-            KeyCode::Up,
-            &mut scroll_offset,
-            total_content_lines,
-            max_visible_lines,
-        );
-        assert!(handled);
-        assert_eq!(scroll_offset, 4);
-
-        // Test scroll up at boundary
-        scroll_offset = 0;
-        let handled = handle_popup_scroll(
-            KeyCode::Up,
-            &mut scroll_offset,
-            total_content_lines,
-            max_visible_lines,
-        );
-        assert!(handled);
-        assert_eq!(scroll_offset, 0);
-
-        // Test scroll down
-        scroll_offset = 5;
-        let handled = handle_popup_scroll(
-            KeyCode::Down,
-            &mut scroll_offset,
-            total_content_lines,
-            max_visible_lines,
-        );
-        assert!(handled);
-        assert_eq!(scroll_offset, 6);
-
-        // Test scroll down at boundary
-        scroll_offset = 10; // max scroll offset
-        let handled = handle_popup_scroll(
-            KeyCode::Down,
-            &mut scroll_offset,
-            total_content_lines,
-            max_visible_lines,
-        );
-        assert!(handled);
-        assert_eq!(scroll_offset, 10);
-
-        // Test unhandled key
-        let handled = handle_popup_scroll(
-            KeyCode::Char('x'),
-            &mut scroll_offset,
-            total_content_lines,
-            max_visible_lines,
-        );
-        assert!(!handled);
     }
 
     #[test]

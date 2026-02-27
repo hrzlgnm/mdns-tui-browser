@@ -3,6 +3,8 @@
 #![forbid(unsafe_code)]
 
 mod models;
+mod popup;
+mod scroll;
 mod terminal;
 mod tui_app;
 
