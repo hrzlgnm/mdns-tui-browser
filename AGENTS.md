@@ -144,7 +144,10 @@ actionlint
 src/
 ├── main.rs          # Entry point, CLI argument parsing
 ├── tui_app.rs       # Main TUI application logic and tests
-└── ...              # Additional modules if added
+├── popup.rs         # Popup UI components (help, metrics)
+├── scroll.rs        # Scroll state management
+├── models.rs        # Data models
+└── terminal.rs     # Terminal handling
 ```
 
 ## Development Workflow
@@ -154,14 +157,16 @@ src/
 3. Run `cargo fmt` to format code
 4. Run `cargo clippy --tests -- -D warnings` to check for issues
 5. Run `cargo nextest run --profile ci` to run tests
-6. Run `actionlint` to check GitHub Actions workflows if modified
-7. Test the application manually with `cargo run`
-8. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
-9. Commit only when all checks pass
-10. After committing, push to the repository and create a pull request if applicable
-11. After the pull request is created, add a comment `@coderabbitai review`
-12. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
-13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+6. Run `cargo build --release` to build release version
+7. Run `cargo clippy --release -- -D warnings` to ensure no warnings in release
+8. Run `actionlint` to check GitHub Actions workflows if modified
+  9. Test the application manually with `cargo run`
+10. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
+11. Commit only when all checks pass
+12. After committing, push to the repository and create a pull request if applicable
+13. After the pull request is created, add a comment `@coderabbitai review`
+14. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
+15. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 
@@ -189,10 +194,11 @@ The manpage should contain only essential usage information without excessive de
 
 - **Never** use `unsafe` code - this will cause CI to fail
 - **Always** format code before committing
-- **Always** run clippy and fix warnings
+- **Always** run clippy and fix warnings (both debug and release)
 - **Don't** add dependencies without updating Cargo.toml properly
 - **Don't** break the async patterns used throughout the codebase
 - **Don't** ignore test failures - all tests must pass
+- **Don't** have warnings in release builds - run `cargo clippy --release` before committing
 
 ## Specific Notes for This Project
 
