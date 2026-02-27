@@ -160,13 +160,13 @@ src/
 6. Run `cargo build --release` to build release version
 7. Run `cargo clippy --release -- -D warnings` to ensure no warnings in release
 8. Run `actionlint` to check GitHub Actions workflows if modified
-9. Test the application manually with `cargo run`
+  9. Test the application manually with `cargo run`
 10. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
 11. Commit only when all checks pass
-10. After committing, push to the repository and create a pull request if applicable
-11. After the pull request is created, add a comment `@coderabbitai review`
-12. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
-13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+12. After committing, push to the repository and create a pull request if applicable
+13. After the pull request is created, add a comment `@coderabbitai review`
+14. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
+15. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 

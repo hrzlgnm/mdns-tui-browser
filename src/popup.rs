@@ -19,6 +19,7 @@ use crate::scroll::ScrollState;
 pub struct HelpPopup {
     pub active: bool,
     pub scroll: ScrollState,
+    cached_help_lines: usize,
 }
 
 impl HelpPopup {
@@ -26,6 +27,13 @@ impl HelpPopup {
         Self {
             active: false,
             scroll: ScrollState::new(),
+            cached_help_lines: 0,
+        }
+    }
+
+    fn ensure_cache_valid(&mut self) {
+        if self.cached_help_lines == 0 {
+            self.cached_help_lines = generate_help_content().len();
         }
     }
 
@@ -40,6 +48,8 @@ impl HelpPopup {
     pub fn handle_key_event(&mut self, key: KeyEvent, terminal_area: Rect) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
+                self.ensure_cache_valid();
+
                 let popup_area = create_centered_popup(terminal_area, 60, 70);
                 let inner_area = Rect::new(
                     popup_area.x + 1,
@@ -49,15 +59,12 @@ impl HelpPopup {
                 );
                 let max_visible_lines = inner_area.height as usize;
 
-                let help_content = generate_help_content();
-                let total_help_lines = help_content.len();
-
                 self.scroll.visible_items = max_visible_lines;
 
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
-                    total_help_lines,
+                    self.cached_help_lines,
                     max_visible_lines,
                 );
                 true
@@ -87,6 +94,7 @@ impl Default for HelpPopup {
 pub struct MetricsPopup {
     pub active: bool,
     pub scroll: ScrollState,
+    cached_metrics_lines: usize,
 }
 
 impl MetricsPopup {
@@ -94,6 +102,13 @@ impl MetricsPopup {
         Self {
             active: false,
             scroll: ScrollState::new(),
+            cached_metrics_lines: 0,
+        }
+    }
+
+    fn ensure_cache_valid(&mut self, metrics: &BTreeMap<String, u64>) {
+        if self.cached_metrics_lines == 0 {
+            self.cached_metrics_lines = generate_metrics_content(metrics).len();
         }
     }
 
@@ -113,6 +128,8 @@ impl MetricsPopup {
     ) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
+                self.ensure_cache_valid(metrics);
+
                 let popup_area = create_centered_popup(terminal_area, 60, 70);
                 let inner_area = Rect::new(
                     popup_area.x + 1,
@@ -122,15 +139,12 @@ impl MetricsPopup {
                 );
                 let max_visible_lines = inner_area.height as usize;
 
-                let metrics_content = generate_metrics_content(metrics);
-                let total_metrics_lines = metrics_content.len();
-
                 self.scroll.visible_items = max_visible_lines;
 
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
-                    total_metrics_lines,
+                    self.cached_metrics_lines,
                     max_visible_lines,
                 );
                 true
@@ -156,6 +170,7 @@ impl Default for MetricsPopup {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct PopupState {
     pub help_popup: HelpPopup,
     pub metrics_popup: MetricsPopup,
@@ -204,15 +219,6 @@ impl PopupState {
 impl Default for PopupState {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl Clone for PopupState {
-    fn clone(&self) -> Self {
-        Self {
-            help_popup: self.help_popup.clone(),
-            metrics_popup: self.metrics_popup.clone(),
-        }
     }
 }
 
