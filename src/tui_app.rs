@@ -6670,7 +6670,7 @@ mod tests {
     #[tokio::test]
     async fn test_interfaces_round_trip() {
         let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
-        let mut state = create_test_app_state(user_types.clone(), true, false, false);
+        let mut state = create_test_app_state_with_user_service_types(user_types.clone());
 
         state.add_service_type("_http._tcp.local.");
         state
@@ -6701,7 +6701,7 @@ mod tests {
         // Verify round-trip: deserialize and load
         let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
 
-        let mut loaded_state = AppState::new(HashSet::new(), false, false, false, None);
+        let mut loaded_state = create_test_app_state();
         loaded_state.load_from_state_dump(state_dump);
 
         // Verify interfaces was restored
