@@ -86,14 +86,16 @@ impl TuiTerminal {
             }
 
             if let Err(e) = disable_raw_mode()
-                && first_error.is_none() {
-                    first_error = Some(e.into());
-                }
+                && first_error.is_none()
+            {
+                first_error = Some(e.into());
+            }
 
             if let Err(e) = self.terminal.show_cursor()
-                && first_error.is_none() {
-                    first_error = Some(e.into());
-                }
+                && first_error.is_none()
+            {
+                first_error = Some(e.into());
+            }
 
             if let Some(e) = first_error {
                 return Err(e);
