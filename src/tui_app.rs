@@ -2892,6 +2892,23 @@ mod tests {
         AppState::new(user_types_set, false, false, false, None)
     }
 
+    /// Helper to create AppState for testing
+    fn create_test_app_state(
+        user_service_types: HashSet<String>,
+        no_debounce: bool,
+        disable_ipv4: bool,
+        disable_ipv6: bool,
+        interfaces: Option<Vec<String>>,
+    ) -> AppState {
+        AppState::new(
+            user_service_types,
+            no_debounce,
+            disable_ipv4,
+            disable_ipv6,
+            interfaces,
+        )
+    }
+
     // Common assertion helper functions
 
     /// Assert navigation state (service and type selection)
