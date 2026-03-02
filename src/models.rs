@@ -15,8 +15,9 @@ pub struct ServiceSession {
     pub end_time: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SortField {
+    #[default]
     Host,
     ServiceType,
     Fullname,
@@ -25,8 +26,9 @@ pub enum SortField {
     Timestamp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SortDirection {
+    #[default]
     Ascending,
     Descending,
 }
@@ -350,7 +352,7 @@ pub struct SerializableServiceSession {
     pub end_time: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     pub dump_timestamp: String,
@@ -358,25 +360,39 @@ pub struct Metadata {
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StateDump {
     pub metadata: Metadata,
     pub services: Vec<SerializableServiceEntry>,
     pub service_types: Vec<String>,
     pub metrics: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub options: AppOptions,
+    #[serde(default)]
     pub filters: FilterInfo,
     pub sorting: SortInfo,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FilterInfo {
     pub query: String,
-    pub active_service_types: Vec<String>,
+    #[serde(default)]
+    pub active_service_types: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AppOptions {
+    pub service_types: Vec<String>,
+    pub disable_ipv4: bool,
+    pub disable_ipv6: bool,
+    pub no_debounce: bool,
+    pub interfaces: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SortInfo {
     pub field: SortField,
