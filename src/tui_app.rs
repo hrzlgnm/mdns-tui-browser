@@ -6607,7 +6607,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_json_state_dump() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
+        let mut state = create_test_app_state(user_types.clone(), true, true, false);
 
         // Add some test data
         state.add_service_type("_http._tcp.local.");
@@ -6639,8 +6640,53 @@ mod tests {
             "Should have service types"
         );
         assert!(parsed.get("metrics").is_some(), "Should have metrics");
+        assert!(parsed.get("options").is_some(), "Should have options");
         assert!(parsed.get("filters").is_some(), "Should have filters");
         assert!(parsed.get("sorting").is_some(), "Should have sorting");
+
+        // Check options fields
+        let options = &parsed["options"];
+        assert!(
+            options.get("serviceTypes").is_some(),
+            "options should have serviceTypes"
+        );
+        assert!(
+            options.get("disableIpv4").is_some(),
+            "options should have disableIpv4"
+        );
+        assert!(
+            options.get("disableIpv6").is_some(),
+            "options should have disableIpv6"
+        );
+        assert!(
+            options.get("noDebounce").is_some(),
+            "options should have noDebounce"
+        );
+        assert!(
+            options.get("interfaces").is_some(),
+            "options should have interfaces"
+        );
+
+        // Verify option values match state
+        if let serde_json::Value::Array(service_types) = &options["serviceTypes"] {
+            let expected: Vec<String> = user_types.iter().cloned().collect();
+            assert_eq!(service_types.len(), expected.len());
+            for (i, expected_type) in expected.iter().enumerate() {
+                assert_eq!(service_types[i], *expected_type);
+            }
+        } else {
+            panic!("options.serviceTypes should be an array");
+        }
+
+        assert_eq!(options["disableIpv4"], true, "disableIpv4 should be true");
+        assert_eq!(options["disableIpv6"], false, "disableIpv6 should be false");
+        assert_eq!(options["noDebounce"], true, "noDebounce should be true");
+
+        // interfaces should be null when not set
+        assert!(
+            options["interfaces"].is_null(),
+            "interfaces should be null when not set"
+        );
 
         // Check services array
         if let serde_json::Value::Array(services) = &parsed["services"] {
@@ -6660,7 +6706,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_json_dump_file_creation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let user_types: HashSet<String> = ["_test._tcp.local.".to_string()].into_iter().collect();
+        let mut state = create_test_app_state(user_types.clone(), true, false, true);
 
         // Add minimal test data
         state.add_service_type("_test._tcp.local.");
@@ -6691,9 +6738,22 @@ mod tests {
 
         assert!(!content.is_empty(), "File should not be empty");
 
-        // Verify content is valid JSON
-        let _parsed: serde_json::Value =
+        // Verify content is valid JSON and has options
+        let parsed: serde_json::Value =
             serde_json::from_str(&content).expect("File content should be valid JSON");
+
+        assert!(parsed.get("options").is_some(), "Should have options");
+
+        // Verify options values
+        let options = &parsed["options"];
+        assert!(
+            options.get("serviceTypes").is_some(),
+            "options should have serviceTypes"
+        );
+        assert_eq!(options["disableIpv4"], false, "disableIpv4 should be false");
+        assert_eq!(options["disableIpv6"], true, "disableIpv6 should be true");
+        assert_eq!(options["noDebounce"], true, "noDebounce should be true");
+        assert!(options["interfaces"].is_null(), "interfaces should be null");
 
         // Clean up
         tokio::fs::remove_file(&filename).await.ok();
@@ -6701,7 +6761,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_state_from_json() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
+        let mut state = create_test_app_state(user_types.clone(), true, true, false);
 
         state.add_service_type("_http._tcp.local.");
         state
@@ -6709,6 +6770,19 @@ mod tests {
             .push(create_test_service("test", "_http._tcp.local.", 8080));
 
         let json_str = state.dump_state_to_json().unwrap();
+
+        // Verify options are present in JSON
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Should be valid JSON");
+        let options = &parsed["options"];
+        assert!(
+            options.get("serviceTypes").is_some(),
+            "options should have serviceTypes"
+        );
+        assert_eq!(options["disableIpv4"], true, "disableIpv4 should be true");
+        assert_eq!(options["disableIpv6"], false, "disableIpv6 should be false");
+        assert_eq!(options["noDebounce"], true, "noDebounce should be true");
+        assert!(options["interfaces"].is_null(), "interfaces should be null");
 
         let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
 
@@ -6719,6 +6793,12 @@ mod tests {
         assert_eq!(loaded_state.service_types.len(), 1);
         assert!(loaded_state.loaded_from_file);
         assert_eq!(loaded_state.filter_query, "");
+
+        // Verify options were restored
+        assert_eq!(loaded_state.disable_ipv4, true);
+        assert_eq!(loaded_state.disable_ipv6, false);
+        assert_eq!(loaded_state.no_debounce, true);
+        assert!(loaded_state.interfaces.is_none());
     }
 
     // Tests for unused helper functions
