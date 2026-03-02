@@ -164,7 +164,7 @@ impl ServiceEntry {
     pub fn is_flapping_service(&self) -> bool {
         const FLAPPING_SESSION_THRESHOLD: usize = 3;
         const MIN_COMPLETED_SESSIONS: usize = 3;
-        const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000;
+        const SHORT_SESSION_DURATION_MICROS: u64 = 300_000_000;
 
         if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
             return false;
@@ -386,9 +386,10 @@ pub struct FilterInfo {
 #[serde(rename_all = "camelCase")]
 pub struct AppOptions {
     pub service_types: Vec<String>,
+    #[serde(default)]
     pub disable_ipv4: bool,
+    #[serde(default)]
     pub disable_ipv6: bool,
-    pub no_debounce: bool,
     pub interfaces: Option<Vec<String>>,
 }
 

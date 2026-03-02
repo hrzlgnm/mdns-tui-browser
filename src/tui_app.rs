@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -35,10 +35,6 @@ const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
 const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
 const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
-
-// Service debouncing constants
-const DEBOUNCE_DURATION_MICROS: u64 = 1_000_000;
-const CLEANUP_INTERVAL_MS: u64 = 250;
 
 #[cfg(unix)]
 async fn handle_suspend(
@@ -178,8 +174,6 @@ struct AppState {
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
-    pending_removals: HashMap<String, u64>,
-    no_debounce: bool,
     disable_ipv4: bool,
     disable_ipv6: bool,
     interfaces: Option<Vec<String>>,
@@ -208,8 +202,6 @@ impl Clone for AppState {
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
             status_message: self.status_message.clone(),
-            pending_removals: self.pending_removals.clone(),
-            no_debounce: self.no_debounce,
             disable_ipv4: self.disable_ipv4,
             disable_ipv6: self.disable_ipv6,
             interfaces: self.interfaces.clone(),
@@ -221,7 +213,6 @@ impl Clone for AppState {
 impl AppState {
     fn new(
         user_service_types: HashSet<String>,
-        no_debounce: bool,
         disable_ipv4: bool,
         disable_ipv6: bool,
         interfaces: Option<Vec<String>>,
@@ -246,8 +237,6 @@ impl AppState {
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
-            pending_removals: HashMap::new(),
-            no_debounce,
             disable_ipv4,
             disable_ipv6,
             interfaces,
@@ -501,7 +490,6 @@ impl AppState {
                 service_types: self.user_service_types.iter().cloned().collect(),
                 disable_ipv4: self.disable_ipv4,
                 disable_ipv6: self.disable_ipv6,
-                no_debounce: self.no_debounce,
                 interfaces: self.interfaces.clone(),
             },
             filters: FilterInfo {
@@ -548,7 +536,6 @@ impl AppState {
             self.user_service_types = dump.options.service_types.into_iter().collect();
             self.disable_ipv4 = dump.options.disable_ipv4;
             self.disable_ipv6 = dump.options.disable_ipv6;
-            self.no_debounce = dump.options.no_debounce;
             self.interfaces = dump.options.interfaces;
         }
 
@@ -987,7 +974,6 @@ impl AppState {
     }
 
     fn add_or_update_service(&mut self, service_entry: ServiceEntry) -> bool {
-        self.cancel_pending_removal(&service_entry.fullname);
         if let Some(existing) = self
             .services
             .iter_mut()
@@ -1043,11 +1029,6 @@ impl AppState {
     }
 
     fn mark_service_offline(&mut self, fullname: &str) -> bool {
-        // Don't mark offline if service is pending removal (debounce window)
-        if self.pending_removals.contains_key(fullname) {
-            return false;
-        }
-
         let service_idx = self.services.iter().position(|s| s.fullname == fullname);
 
         if let Some(idx) = service_idx {
@@ -1063,57 +1044,6 @@ impl AppState {
         } else {
             false
         }
-    }
-
-    // Debouncing methods for handling flapping services
-    fn schedule_service_removal(&mut self, fullname: &str) {
-        let current_time = current_timestamp_micros();
-        self.pending_removals
-            .insert(fullname.to_string(), current_time);
-        *self
-            .metrics
-            .entry("pending_removals_active".to_string())
-            .or_insert(0) = self.pending_removals.len() as u64;
-    }
-
-    fn cancel_pending_removal(&mut self, fullname: &str) -> bool {
-        if self.pending_removals.remove(fullname).is_some() {
-            // Service was scheduled for removal and came back online within debounce window
-            self.update_metric("flapping_services_detected");
-            *self
-                .metrics
-                .entry("pending_removals_active".to_string())
-                .or_insert(0) = self.pending_removals.len() as u64;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn process_expired_removals(&mut self) {
-        let current_time = current_timestamp_micros();
-        let mut expired_services = Vec::new();
-
-        // Find expired services
-        self.pending_removals.retain(|fullname, scheduled_time| {
-            if current_time.saturating_sub(*scheduled_time) >= DEBOUNCE_DURATION_MICROS {
-                expired_services.push(fullname.clone());
-                false // Remove from pending
-            } else {
-                true // Keep in pending
-            }
-        });
-
-        // Mark expired services as offline
-        for fullname in expired_services {
-            self.mark_service_offline(&fullname);
-        }
-
-        // Update pending removals count metric
-        *self
-            .metrics
-            .entry("pending_removals_active".to_string())
-            .or_insert(0) = self.pending_removals.len() as u64;
     }
 
     fn navigate_services_up(&mut self) {
@@ -1573,12 +1503,8 @@ fn start_browsing_service_type(
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
-                    if state.no_debounce {
-                        if state.mark_service_offline(&fullname) {
-                            let _ = notification_sender_inner.send(Notification::ServiceChanged);
-                        }
-                    } else {
-                        state.schedule_service_removal(&fullname);
+                    if state.mark_service_offline(&fullname) {
+                        let _ = notification_sender_inner.send(Notification::ServiceChanged);
                     }
                 }
                 ServiceEvent::ServiceResolved(resolved_service) => {
@@ -2476,7 +2402,6 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 /// ```
 pub async fn run_tui(
     user_service_types: HashSet<String>,
-    no_debounce: bool,
     interfaces: Option<Vec<String>>,
     available_interfaces: Option<Vec<String>>,
     disable_ipv4: bool,
@@ -2546,7 +2471,6 @@ pub async fn run_tui(
     // Initialize app state
     let state = Arc::new(RwLock::new(AppState::new(
         user_service_types.clone(),
-        no_debounce,
         disable_ipv4,
         disable_ipv6,
         interfaces.clone(),
@@ -2632,51 +2556,6 @@ pub async fn run_tui(
                 }
             }
         });
-    }
-
-    // Start global cleanup task to handle expired service removals (skip in view-only mode)
-    if !is_view_only {
-        let state_for_cleanup = Arc::clone(&state);
-        let notification_sender_for_cleanup = notification_sender.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(CLEANUP_INTERVAL_MS));
-            loop {
-                interval.tick().await;
-
-                let ui_should_update = {
-                    let mut state = state_for_cleanup.write().await;
-
-                    // Only process expired removals if debouncing is enabled
-                    if !state.no_debounce {
-                        // Capture state before processing expired removals
-                        let before_count = state.pending_removals.len();
-
-                        // Process expired removals
-                        state.process_expired_removals();
-
-                        // Update pending removals count metric
-                        let pending_count = state.pending_removals.len() as u64;
-                        *state
-                            .metrics
-                            .entry("pending_removals_active".to_string())
-                            .or_insert(0) = pending_count;
-
-                        // Check if any services actually changed (removed or marked offline)
-                        (before_count as u64) != pending_count
-                    } else {
-                        false
-                    }
-                };
-
-                // Notify UI if state changed
-                if ui_should_update {
-                    let _ = notification_sender_for_cleanup.send(Notification::ServiceChanged);
-                }
-
-                // This task runs indefinitely
-            }
-        });
-
         if state.read().await.user_service_types.is_empty() {
             // Browse for all service types
             if let Some(ref mdns_ref) = mdns {
@@ -2840,11 +2719,20 @@ mod tests {
     use crate::models::ServiceSession;
     use crate::models::tests::{create_test_service, create_test_service_with_sessions};
 
-    // Enhanced test helper functions to reduce duplication
+    /// Helper to create AppState for testing
+    fn create_test_app_state() -> AppState {
+        AppState::new(HashSet::new(), false, false, None)
+    }
+
+    fn create_test_app_state_with_user_service_types(
+        user_service_types: HashSet<String>,
+    ) -> AppState {
+        AppState::new(user_service_types, false, false, None)
+    }
 
     /// Quick state setup with specified number of services
     fn setup_test_state(service_count: usize) -> AppState {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         for i in 0..service_count {
@@ -2860,7 +2748,7 @@ mod tests {
 
     /// Setup state with custom service types
     fn setup_test_state_with_types(types: Vec<&str>) -> AppState {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         for service_type in types {
             state.add_service_type(service_type);
@@ -2871,7 +2759,7 @@ mod tests {
 
     /// Setup state with pre-populated services
     fn setup_test_state_with_services(services: Vec<ServiceEntry>) -> AppState {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         for service in &services {
             state.add_service_type(&service.service_type);
@@ -2885,23 +2773,7 @@ mod tests {
     fn setup_test_state_with_user_types(user_types: Vec<&str>) -> AppState {
         let user_types_set: HashSet<String> =
             user_types.into_iter().map(|s| s.to_string()).collect();
-        AppState::new(user_types_set, false, false, false, None)
-    }
-
-    /// Helper to create AppState for testing
-    fn create_test_app_state(
-        user_service_types: HashSet<String>,
-        no_debounce: bool,
-        disable_ipv4: bool,
-        disable_ipv6: bool,
-    ) -> AppState {
-        AppState::new(
-            user_service_types,
-            no_debounce,
-            disable_ipv4,
-            disable_ipv6,
-            None,
-        )
+        AppState::new(user_types_set, false, false, None)
     }
 
     // Common assertion helper functions
@@ -3696,7 +3568,7 @@ mod tests {
 
     #[test]
     fn test_sort_stability_with_equal_values() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         // Create services with same port but different names
@@ -3725,7 +3597,7 @@ mod tests {
 
     #[test]
     fn test_sort_field_cycling() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Test forward cycling
         assert_eq!(state.sort_field, SortField::Host);
@@ -3753,7 +3625,7 @@ mod tests {
 
     #[test]
     fn test_sort_direction_toggle() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         assert_eq!(state.sort_direction, SortDirection::Ascending);
         state.toggle_sort_direction();
@@ -3764,7 +3636,7 @@ mod tests {
 
     #[test]
     fn test_sort_key_event_handling() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let original_field = state.sort_field;
         let _original_direction = state.sort_direction;
 
@@ -3811,7 +3683,7 @@ mod tests {
 
     #[test]
     fn test_sort_with_filtering_combined() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
@@ -3843,7 +3715,7 @@ mod tests {
 
     #[test]
     fn test_sort_type_ordering() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_ssh._tcp.local.");
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_printer._tcp.local.");
@@ -4013,7 +3885,7 @@ mod tests {
         ];
 
         for test_case in test_cases {
-            let mut state = create_test_app_state(HashSet::new(), false, false, false);
+            let mut state = create_test_app_state();
             state.popup_state.metrics_popup.active = true;
             state.popup_state.metrics_popup.scroll.offset = test_case.initial_offset;
             (test_case.setup_metrics)(&mut state);
@@ -4164,7 +4036,7 @@ mod tests {
         ];
 
         for test_case in test_cases {
-            let mut state = create_test_app_state(HashSet::new(), false, false, false);
+            let mut state = create_test_app_state();
             (test_case.setup_state)(&mut state);
 
             for (i, service) in test_case.services.iter().enumerate() {
@@ -4184,7 +4056,7 @@ mod tests {
     // AppState initialization tests
     #[test]
     fn test_appstate_new() {
-        let state = AppState::new(HashSet::new(), false, false, false, None);
+        let state = AppState::new(HashSet::new(), false, false, None);
         assert_eq!(state.services.len(), 0);
         assert_eq!(state.service_types.len(), 0);
         assert_eq!(state.selected_service, 0);
@@ -4206,7 +4078,7 @@ mod tests {
         ];
         let user_requested_types_set: HashSet<String> =
             user_requested_types.clone().into_iter().collect();
-        let state = create_test_app_state(user_requested_types_set.clone(), false, false, false);
+        let state = create_test_app_state_with_user_service_types(user_requested_types_set.clone());
 
         assert_eq!(state.user_service_types, user_requested_types_set);
         assert_eq!(state.services.len(), 0);
@@ -4218,7 +4090,7 @@ mod tests {
     #[test]
     fn test_appstate_new_with_empty_user_service_types() {
         let user_requested_types = HashSet::new();
-        let state = AppState::new(user_requested_types, false, false, false, None);
+        let state = create_test_app_state_with_user_service_types(user_requested_types);
 
         assert_eq!(state.services.len(), 0);
         assert_eq!(state.service_types.len(), 0);
@@ -4229,7 +4101,7 @@ mod tests {
     fn test_appstate_new_with_single_user_service_type() {
         let user_requested_types = vec!["_printer._tcp.local.".to_string()];
         let user_requested_types_set: HashSet<String> = user_requested_types.into_iter().collect();
-        let state = create_test_app_state(user_requested_types_set.clone(), false, false, false);
+        let state = create_test_app_state_with_user_service_types(user_requested_types_set.clone());
 
         assert_eq!(state.user_service_types.len(), 1);
         assert!(state.user_service_types.contains("_printer._tcp.local."));
@@ -4239,7 +4111,7 @@ mod tests {
     fn test_user_service_types_immutability() {
         let user_requested_types = vec!["_http._tcp.local.".to_string()];
         let user_requested_types_set: HashSet<String> = user_requested_types.into_iter().collect();
-        let state = create_test_app_state(user_requested_types_set.clone(), false, false, false);
+        let state = create_test_app_state_with_user_service_types(user_requested_types_set.clone());
 
         // The user_service_types field should remain unchanged throughout the app lifecycle
         let original_types = state.user_service_types.clone();
@@ -4476,7 +4348,7 @@ mod tests {
     // Service type management tests
     #[test]
     fn test_add_service_type() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         assert!(state.add_service_type("_http._tcp.local."));
         assert_eq!(state.service_types.len(), 1);
         assert_eq!(state.service_types[0], "_http._tcp.local.");
@@ -4488,7 +4360,7 @@ mod tests {
 
     #[test]
     fn test_add_service_type_maintains_sort_order() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_ssh._tcp.local.");
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_printer._tcp.local.");
@@ -4500,7 +4372,7 @@ mod tests {
 
     #[test]
     fn test_add_service_type_preserves_selection() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_ssh._tcp.local.");
         state.add_service_type("_http._tcp.local.");
         state.selected_type = Some(1); // _ssh._tcp.local.
@@ -4512,7 +4384,7 @@ mod tests {
 
     #[test]
     fn test_remove_service_type() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
@@ -4531,7 +4403,7 @@ mod tests {
 
     #[test]
     fn test_remove_service_type_adjusts_selection() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_printer._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
@@ -4546,7 +4418,7 @@ mod tests {
     // Remove offline services tests
     #[test]
     fn test_remove_offline_services() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
@@ -4566,7 +4438,7 @@ mod tests {
 
     #[test]
     fn test_remove_offline_services_removes_empty_types() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
@@ -4585,7 +4457,7 @@ mod tests {
 
     #[test]
     fn test_remove_offline_services_adjusts_selection() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
@@ -4607,7 +4479,7 @@ mod tests {
     // Key handling tests
     #[test]
     fn test_handle_key_event_toggle_help() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         assert!(!state.popup_state.help_popup.active);
 
         let key = KeyEvent::from(KeyCode::Char('?'));
@@ -4620,7 +4492,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_event_toggle_metrics() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         assert!(!state.popup_state.metrics_popup.active);
 
         let key = KeyEvent::from(KeyCode::Char('m'));
@@ -4633,7 +4505,7 @@ mod tests {
 
     #[test]
     fn test_handle_metrics_popup_key() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
 
         // Add some metrics to ensure there's content to scroll through
@@ -4676,7 +4548,7 @@ mod tests {
 
     #[test]
     fn test_handle_help_popup_key() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.help_popup.active = true;
 
         // Test scrolling down when at max scroll offset
@@ -4706,7 +4578,7 @@ mod tests {
     // Metrics tests
     #[test]
     fn test_update_metric() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.update_metric("test_metric");
         assert_eq!(state.metrics.get("test_metric"), Some(&1));
 
@@ -4716,7 +4588,7 @@ mod tests {
 
     #[test]
     fn test_update_daemon_metrics() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let mut daemon_metrics = std::collections::HashMap::new();
         daemon_metrics.insert("queries-sent".to_string(), 10);
         daemon_metrics.insert("responses-recv".to_string(), 5);
@@ -4739,7 +4611,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_basic() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add some metrics content first
         for i in 1..=10 {
@@ -4777,7 +4649,7 @@ mod tests {
     #[test]
     fn test_metrics_scroll_with_popup() {
         // Test that scrolling only works when popup is shown
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = false;
         state.popup_state.metrics_popup.scroll.offset = 5;
         let key_event = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
@@ -4797,7 +4669,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_reset_on_close() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
         state.popup_state.metrics_popup.scroll.offset = 10;
 
@@ -4829,7 +4701,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_return_value() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
 
         // Test that all key events return true (continue running)
@@ -4844,7 +4716,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_with_modifiers() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
 
         // Add some metrics to ensure there's content to scroll through
@@ -4867,7 +4739,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_multiple_operations() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
         state.popup_state.metrics_popup.scroll.offset = 5;
 
@@ -4900,7 +4772,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_page_navigation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
 
         // Test PageUp key (should behave like Up in current implementation)
@@ -4937,7 +4809,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_function_key_navigation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
         state.popup_state.metrics_popup.scroll.offset = 3;
 
@@ -4958,7 +4830,7 @@ mod tests {
 
     #[test]
     fn test_metrics_scroll_edge_cases() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
 
         // Test with very large scroll offset (should be clamped)
@@ -4979,7 +4851,7 @@ mod tests {
     // Cache tests
     #[test]
     fn test_filter_cache_invalidation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state
             .services
@@ -5002,7 +4874,7 @@ mod tests {
 
     #[test]
     fn test_validate_selected_type() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
         state.selected_type = Some(1);
@@ -5358,7 +5230,7 @@ mod tests {
     // Edge case tests
     #[test]
     fn test_empty_service_list_navigation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         state.navigate_services_up();
         assert_eq!(state.selected_service, 0);
@@ -5375,7 +5247,7 @@ mod tests {
 
     #[test]
     fn test_empty_service_types_navigation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         state.navigate_service_types_up();
         assert_eq!(state.selected_type, None);
@@ -5386,7 +5258,7 @@ mod tests {
 
     #[test]
     fn test_filter_with_no_matching_services() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
         state.selected_type = Some(1); // Select _ssh._tcp.local.
@@ -5402,7 +5274,7 @@ mod tests {
 
     #[test]
     fn test_scroll_offset_boundary_conditions() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         for i in 0..3 {
             state.services.push(create_test_service(
                 &format!("test{}", i),
@@ -5422,7 +5294,7 @@ mod tests {
 
     #[test]
     fn test_update_service_type_selection_resets_scroll() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
@@ -5563,7 +5435,7 @@ mod tests {
 
     #[test]
     fn test_cycle_sort_field_forward() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         assert_eq!(state.sort_field, SortField::Host);
 
         state.cycle_sort_field(true);
@@ -5588,7 +5460,7 @@ mod tests {
 
     #[test]
     fn test_cycle_sort_field_backward() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         assert_eq!(state.sort_field, SortField::Host);
 
         state.cycle_sort_field(false);
@@ -5614,7 +5486,7 @@ mod tests {
 
     #[test]
     fn test_clear_filter() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "test".to_string();
         state.filter_input_mode = true;
         state.selected_service = 5;
@@ -5630,7 +5502,7 @@ mod tests {
 
     #[test]
     fn test_apply_filter() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "test".to_string();
         state.filter_input_mode = true;
         state.selected_service = 5;
@@ -5646,7 +5518,7 @@ mod tests {
 
     #[test]
     fn test_add_to_filter() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_to_filter('a');
         state.add_to_filter('b');
         state.add_to_filter('c');
@@ -5655,7 +5527,7 @@ mod tests {
 
     #[test]
     fn test_add_to_filter_invalidates_cache() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state
             .services
@@ -5672,7 +5544,7 @@ mod tests {
 
     #[test]
     fn test_remove_from_filter() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "abc".to_string();
         state.remove_from_filter();
         assert_eq!(state.filter_query, "ab");
@@ -5686,7 +5558,7 @@ mod tests {
 
     #[test]
     fn test_remove_from_filter_invalidates_cache() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state
             .services
@@ -5704,7 +5576,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_with_text_query() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "test".to_string();
 
         let matching_service = create_test_service("test", "_http._tcp.local.", 80);
@@ -5716,7 +5588,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_case_insensitive() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "TEST".to_string();
 
         let service = create_test_service("test", "_http._tcp.local.", 80);
@@ -5725,7 +5597,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_searches_all_fields() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Test fullname search
         state.filter_query = "MyService".to_string();
@@ -5766,7 +5638,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_online_keyword_only() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "online".to_string();
 
         let online_service = create_test_service("test", "_http._tcp.local.", 80);
@@ -5779,7 +5651,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_offline_keyword_only() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "offline".to_string();
 
         let online_service = create_test_service("test", "_http._tcp.local.", 80);
@@ -5792,7 +5664,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_both_keywords_with_additional_terms() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "online offline printer".to_string();
 
         // Online HTTP service with "printer" in name should match
@@ -5817,7 +5689,7 @@ mod tests {
 
     #[test]
     fn test_filter_service_non_keyword_queries_unchanged() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Test that regular queries still work as before
         state.filter_query = "http".to_string();
@@ -5835,7 +5707,7 @@ mod tests {
 
     #[test]
     fn test_handle_filter_input_key_enter() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_input_mode = true;
         state.filter_query = "test".to_string();
 
@@ -5849,7 +5721,7 @@ mod tests {
 
     #[test]
     fn test_handle_filter_input_key_escape() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_input_mode = true;
         state.filter_query = "test".to_string();
 
@@ -5863,7 +5735,7 @@ mod tests {
 
     #[test]
     fn test_handle_filter_input_key_char() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_input_mode = true;
 
         let key = KeyEvent::from(KeyCode::Char('a'));
@@ -5876,7 +5748,7 @@ mod tests {
 
     #[test]
     fn test_handle_normal_mode_key_slash() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         let key = KeyEvent::from(KeyCode::Char('/'));
         let should_continue = state.handle_key_event(key);
@@ -5888,7 +5760,7 @@ mod tests {
 
     #[test]
     fn test_handle_normal_mode_key_n() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "test".to_string();
         // Note: not in filter_input_mode so 'n' is handled by normal mode
         state.selected_service = 5;
@@ -5906,7 +5778,7 @@ mod tests {
 
     #[test]
     fn test_filter_empty_query_shows_all() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = String::new(); // Empty query
         state.selected_type = Some(0); // Specific type selected
         state.add_service_type("_http._tcp.local.");
@@ -5917,7 +5789,7 @@ mod tests {
 
     #[test]
     fn test_filter_with_special_characters() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "key=value".to_string();
 
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
@@ -5928,7 +5800,7 @@ mod tests {
     // Test for the filter clear bug fix (regression test)
     #[test]
     fn test_clear_filter_when_empty_doesnt_reset_selection() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         // Add multiple services
@@ -5953,7 +5825,7 @@ mod tests {
 
     #[test]
     fn test_clear_filter_when_not_empty_resets_selection() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         // Add multiple services
@@ -5981,7 +5853,7 @@ mod tests {
     // Test add_or_update_service edge cases
     #[test]
     fn test_add_or_update_service_returns_false_for_new_service() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service = create_test_service("test1", "_http._tcp.local.", 80);
 
         let was_updated = state.add_or_update_service(service);
@@ -5993,7 +5865,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_returns_true_for_existing_service() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
 
         // Add initial service
@@ -6013,7 +5885,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_only_updates_on_significant_changes() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
 
         state.add_or_update_service(service1.clone());
@@ -6029,7 +5901,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_detects_online_status_change() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
 
         state.add_or_update_service(service1.clone());
@@ -6048,7 +5920,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_detects_address_change() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
 
         state.add_or_update_service(service1.clone());
@@ -6067,7 +5939,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_detects_txt_change() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
 
         state.add_or_update_service(service1.clone());
@@ -6086,7 +5958,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_detects_subtype_change() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         let service1 = create_test_service("test1", "_http._tcp.local.", 80);
 
         state.add_or_update_service(service1.clone());
@@ -6105,7 +5977,7 @@ mod tests {
 
     #[test]
     fn test_add_or_update_service_ensures_service_type_exists() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Start with no service types
         assert_eq!(state.service_types.len(), 0);
@@ -6147,7 +6019,7 @@ mod tests {
     // Test cache invalidation scenarios
     #[test]
     fn test_cache_invalidation_on_service_removal() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state
             .services
@@ -6165,7 +6037,7 @@ mod tests {
 
     #[test]
     fn test_cache_invalidation_on_add_service_type() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state
             .services
             .push(create_test_service("test1", "_http._tcp.local.", 80));
@@ -6181,7 +6053,7 @@ mod tests {
 
     #[test]
     fn test_cache_invalidation_on_remove_service_type() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.add_service_type("_ssh._tcp.local.");
 
@@ -6196,7 +6068,7 @@ mod tests {
 
     #[test]
     fn test_cache_sorted_flag_on_sort_field_change() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state
             .services
@@ -6215,7 +6087,7 @@ mod tests {
 
     #[test]
     fn test_remove_offline_services_with_all_offline() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
@@ -6234,7 +6106,7 @@ mod tests {
 
     #[test]
     fn test_remove_offline_services_updates_metrics() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
@@ -6255,7 +6127,7 @@ mod tests {
 
     #[test]
     fn test_update_metric_by() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         state.update_metric_by("test_metric", 5);
         assert_eq!(state.metrics.get("test_metric"), Some(&5));
@@ -6266,7 +6138,7 @@ mod tests {
 
     #[test]
     fn test_filter_query_with_multiple_words() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "192.168".to_string();
 
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
@@ -6277,7 +6149,7 @@ mod tests {
 
     #[test]
     fn test_filter_query_partial_match() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "http".to_string();
 
         let service = create_test_service("test", "_http._tcp.local.", 80);
@@ -6287,7 +6159,7 @@ mod tests {
 
     #[test]
     fn test_filter_with_port_as_string() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "8080".to_string();
 
         let service = create_test_service("test", "_http._tcp.local.", 8080);
@@ -6297,7 +6169,7 @@ mod tests {
 
     #[test]
     fn test_scroll_offset_updates_correctly_on_navigation() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         for i in 0..10 {
             state.services.push(create_test_service(
                 &format!("test{}", i),
@@ -6323,7 +6195,7 @@ mod tests {
 
     #[test]
     fn test_validate_selected_type_with_invalid_index() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
         state.selected_type = Some(10); // Invalid index
 
@@ -6347,7 +6219,7 @@ mod tests {
 
     #[test]
     fn test_key_event_ctrl_c() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         let mut key = KeyEvent::from(KeyCode::Char('c'));
         key.modifiers = KeyModifiers::CONTROL;
@@ -6359,7 +6231,7 @@ mod tests {
 
     #[test]
     fn test_key_event_remove_offline() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.add_service_type("_http._tcp.local.");
 
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
@@ -6374,7 +6246,7 @@ mod tests {
 
     #[test]
     fn test_key_event_clear_stale_service_types() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add multiple service types but only services for some
         state.add_service_type("_http._tcp.local.");
@@ -6412,7 +6284,7 @@ mod tests {
 
     #[test]
     fn test_multiple_filter_operations() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Start filter
         state.start_filter_input();
@@ -6437,7 +6309,7 @@ mod tests {
 
     #[test]
     fn test_empty_services_with_filter() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
         state.filter_query = "nonexistent".to_string();
 
         let filtered = state.get_filtered_services();
@@ -6448,7 +6320,7 @@ mod tests {
     // Tests for service removal metric fix
     #[test]
     fn test_remove_service_only_counts_online_services() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add an online service
         let online_service = create_test_service("test-service", "_http._tcp.local.", 8080);
@@ -6477,7 +6349,7 @@ mod tests {
 
     #[test]
     fn test_remove_service_prevents_double_counting() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add an online service
         let service = create_test_service("duplicate-service", "_http._tcp.local.", 8080);
@@ -6497,7 +6369,7 @@ mod tests {
 
     #[test]
     fn test_remove_service_nonexistent_service() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Try to remove a service that doesn't exist
         let removed = state.mark_service_offline("nonexistent._http._tcp.local.");
@@ -6507,7 +6379,7 @@ mod tests {
 
     #[test]
     fn test_remove_service_updates_timestamp() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         let service = create_test_service("timestamp-service", "_http._tcp.local.", 8080);
         let original_timestamp = service.updated_at_micros;
@@ -6526,7 +6398,7 @@ mod tests {
 
     #[test]
     fn test_clear_stale_service_types() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add multiple service types
         state.add_service_type("_http._tcp.local.");
@@ -6569,7 +6441,7 @@ mod tests {
 
     #[test]
     fn test_clear_stale_service_types_empty() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add a service type but no services
         state.add_service_type("_test._tcp.local.");
@@ -6584,7 +6456,7 @@ mod tests {
 
     #[test]
     fn test_clear_stale_service_types_no_stale() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
+        let mut state = create_test_app_state();
 
         // Add service types and services for all
         state.add_service_type("_http._tcp.local.");
@@ -6608,7 +6480,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_state_dump() {
         let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
-        let mut state = create_test_app_state(user_types.clone(), true, true, false);
+        let mut state = AppState::new(user_types.clone(), true, false, None);
 
         // Add some test data
         state.add_service_type("_http._tcp.local.");
@@ -6659,10 +6531,6 @@ mod tests {
             "options should have disableIpv6"
         );
         assert!(
-            options.get("noDebounce").is_some(),
-            "options should have noDebounce"
-        );
-        assert!(
             options.get("interfaces").is_some(),
             "options should have interfaces"
         );
@@ -6680,7 +6548,6 @@ mod tests {
 
         assert_eq!(options["disableIpv4"], true, "disableIpv4 should be true");
         assert_eq!(options["disableIpv6"], false, "disableIpv6 should be false");
-        assert_eq!(options["noDebounce"], true, "noDebounce should be true");
 
         // interfaces should be null when not set
         assert!(
@@ -6707,7 +6574,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_dump_file_creation() {
         let user_types: HashSet<String> = ["_test._tcp.local.".to_string()].into_iter().collect();
-        let mut state = create_test_app_state(user_types.clone(), true, false, true);
+        let mut state = AppState::new(user_types.clone(), false, true, None);
 
         // Add minimal test data
         state.add_service_type("_test._tcp.local.");
@@ -6752,7 +6619,6 @@ mod tests {
         );
         assert_eq!(options["disableIpv4"], false, "disableIpv4 should be false");
         assert_eq!(options["disableIpv6"], true, "disableIpv6 should be true");
-        assert_eq!(options["noDebounce"], true, "noDebounce should be true");
         assert!(options["interfaces"].is_null(), "interfaces should be null");
 
         // Clean up
@@ -6762,7 +6628,7 @@ mod tests {
     #[tokio::test]
     async fn test_load_state_from_json() {
         let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
-        let mut state = create_test_app_state(user_types.clone(), true, true, false);
+        let mut state = AppState::new(user_types.clone(), true, false, None);
 
         state.add_service_type("_http._tcp.local.");
         state
@@ -6781,12 +6647,11 @@ mod tests {
         );
         assert_eq!(options["disableIpv4"], true, "disableIpv4 should be true");
         assert_eq!(options["disableIpv6"], false, "disableIpv6 should be false");
-        assert_eq!(options["noDebounce"], true, "noDebounce should be true");
         assert!(options["interfaces"].is_null(), "interfaces should be null");
 
         let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
 
-        let mut loaded_state = AppState::new(HashSet::new(), false, false, false, None);
+        let mut loaded_state = AppState::new(HashSet::new(), false, false, None);
         loaded_state.load_from_state_dump(state_dump);
 
         assert_eq!(loaded_state.services.len(), 1);
@@ -6797,7 +6662,6 @@ mod tests {
         // Verify options were restored
         assert!(loaded_state.disable_ipv4);
         assert!(!loaded_state.disable_ipv6);
-        assert!(loaded_state.no_debounce);
         assert!(loaded_state.interfaces.is_none());
     }
 
@@ -7099,223 +6963,6 @@ mod tests {
         let user_types_state =
             setup_test_state_with_user_types(vec!["_http._tcp.local.", "_ssh._tcp.local."]);
         assert_service_type_count(&user_types_state, 0); // User types are added to user_service_types, not service_types
-    }
-
-    // Tests for service debouncing functionality
-    #[test]
-    fn test_schedule_service_removal() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        let fullname = "test-service._http._tcp.local.";
-        state.schedule_service_removal(fullname);
-
-        assert!(state.pending_removals.contains_key(fullname));
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
-    }
-
-    #[test]
-    fn test_cancel_pending_removal() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        let fullname = "test-service._http._tcp.local.";
-        state.schedule_service_removal(fullname);
-
-        // Cancel should remove from pending and increment metrics
-        let was_cancelled = state.cancel_pending_removal(fullname);
-        assert!(was_cancelled);
-        assert!(!state.pending_removals.contains_key(fullname));
-        assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
-    }
-
-    #[test]
-    fn test_cancel_pending_removal_nonexistent() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        let fullname = "nonexistent-service._http._tcp.local.";
-        let was_cancelled = state.cancel_pending_removal(fullname);
-
-        assert!(!was_cancelled);
-        assert_eq!(state.metrics.get("flapping_services_detected"), None);
-    }
-
-    #[test]
-    fn test_process_expired_removals() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        // Add a service to be marked offline
-        let service = create_test_service("test", "_http._tcp.local.", 8080);
-        state.services.push(service);
-
-        let fullname = "test._http._tcp.local.";
-
-        // Schedule removal with old timestamp (expired)
-        let old_timestamp =
-            current_timestamp_micros().saturating_sub(DEBOUNCE_DURATION_MICROS + 1000);
-        state
-            .pending_removals
-            .insert(fullname.to_string(), old_timestamp);
-
-        // Process expired removals
-        state.process_expired_removals();
-
-        // Service should be marked offline
-        assert!(!state.services[0].online);
-        assert_eq!(state.metrics.get("services_marked_offline"), Some(&1)); // Should increment after processing expired removal
-    }
-
-    #[test]
-    fn test_process_expired_removals_not_expired() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        let fullname = "test-service._http._tcp.local.";
-
-        // Schedule removal with current timestamp (not expired)
-        let current_timestamp = current_timestamp_micros();
-        state
-            .pending_removals
-            .insert(fullname.to_string(), current_timestamp);
-
-        // Process expired removals
-        state.process_expired_removals();
-
-        // Should still be in pending removals
-        assert!(state.pending_removals.contains_key(fullname));
-    }
-
-    #[test]
-    fn test_mark_service_offline_respects_pending() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        // Add a service
-        let service = create_test_service("test", "_http._tcp.local.", 8080);
-        state.services.push(service);
-
-        let fullname = "test-service._http._tcp.local.";
-
-        // Schedule removal for the service
-        state.schedule_service_removal(fullname);
-
-        // Try to mark service offline - should not work due to pending
-        let marked_offline = state.mark_service_offline(fullname);
-        assert!(!marked_offline);
-
-        // Service should still be online
-        assert!(state.services[0].online);
-    }
-
-    #[test]
-    fn test_flapping_service_scenario() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        // Add a service
-        let service = create_test_service("test", "_http._tcp.local.", 8080);
-        state.services.push(service);
-
-        let fullname = "test-service._http._tcp.local.";
-
-        // Simulate service removal
-        state.schedule_service_removal(fullname);
-        assert!(state.pending_removals.contains_key(fullname));
-
-        // Simulate service coming back quickly (flapping)
-        let was_flapping = state.cancel_pending_removal(fullname);
-        assert!(was_flapping);
-        assert_eq!(state.metrics.get("flapping_services_detected"), Some(&1));
-
-        // Service should remain online
-        assert!(state.services[0].online);
-    }
-
-    #[test]
-    fn test_multiple_pending_removals() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        // Schedule multiple services for removal
-        state.schedule_service_removal("service1._http._tcp.local.");
-        state.schedule_service_removal("service2._http._tcp.local.");
-        state.schedule_service_removal("service3._http._tcp.local.");
-
-        assert_eq!(state.pending_removals.len(), 3);
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&3));
-
-        // Cancel one
-        state.cancel_pending_removal("service2._http._tcp.local.");
-        assert_eq!(state.pending_removals.len(), 2);
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2)); // Updated immediately
-
-        // Process to update metric
-        state.process_expired_removals();
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2));
-    }
-
-    #[test]
-    fn test_pending_removals_metric_tracking() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        // Initially no pending removals
-        assert_eq!(state.metrics.get("pending_removals_active"), None);
-
-        // Add pending removal
-        state.schedule_service_removal("test._http._tcp.local.");
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
-
-        // Add another
-        state.schedule_service_removal("test2._http._tcp.local.");
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&2));
-
-        // Cancel one
-        state.cancel_pending_removal("test._http._tcp.local.");
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1)); // Updated immediately
-
-        // Process to update metric
-        state.process_expired_removals();
-        assert_eq!(state.metrics.get("pending_removals_active"), Some(&1));
-    }
-
-    // Tests for no_debounce functionality
-    #[test]
-    fn test_no_debounce_flag_initialization() {
-        let state = create_test_app_state(HashSet::new(), true, false, false);
-        assert!(state.no_debounce);
-        assert!(state.pending_removals.is_empty());
-    }
-
-    #[test]
-    fn test_no_debounce_flag_disabled_by_default() {
-        let state = create_test_app_state(HashSet::new(), false, false, false);
-        assert!(!state.no_debounce);
-    }
-
-    #[test]
-    fn test_no_debounce_state_clone() {
-        let state = create_test_app_state(HashSet::new(), true, false, false);
-        let cloned_state = state.clone();
-        assert_eq!(state.no_debounce, cloned_state.no_debounce);
-    }
-
-    #[test]
-    fn test_no_debounce_prevents_pending_removals() {
-        let state = create_test_app_state(HashSet::new(), true, false, false);
-
-        // When no_debounce is true, scheduling should be bypassed
-        // This test ensures the flag is properly set
-        assert!(state.no_debounce);
-        assert!(state.pending_removals.is_empty());
-
-        // The actual service removal logic is tested at integration level
-        // This test ensures the state is properly initialized
-    }
-
-    #[test]
-    fn test_debounce_enabled_by_default_in_tests() {
-        let mut state = create_test_app_state(HashSet::new(), false, false, false);
-
-        // With debounce enabled (default), pending_removals should work normally
-        let fullname = "test._http._tcp.local.";
-        state.schedule_service_removal(fullname);
-
-        assert!(!state.no_debounce);
-        assert!(state.pending_removals.contains_key(fullname));
     }
 
     #[test]
