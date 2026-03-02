@@ -6795,9 +6795,9 @@ mod tests {
         assert_eq!(loaded_state.filter_query, "");
 
         // Verify options were restored
-        assert_eq!(loaded_state.disable_ipv4, true);
-        assert_eq!(loaded_state.disable_ipv6, false);
-        assert_eq!(loaded_state.no_debounce, true);
+        assert!(loaded_state.disable_ipv4);
+        assert!(!loaded_state.disable_ipv6);
+        assert!(loaded_state.no_debounce);
         assert!(loaded_state.interfaces.is_none());
     }
 
