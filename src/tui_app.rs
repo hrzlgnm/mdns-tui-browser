@@ -2369,7 +2369,6 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///
 /// # Arguments
 /// * `user_service_types` - Service types to browse for
-/// * `no_debounce` - Whether to disable debouncing of flapping services
 /// * `interfaces` - Optional list of network interface names to bind to.
 ///   If `Some`, only the specified interfaces will be used.
 ///   If `None`, all available interfaces will be used (default behavior).
@@ -2389,12 +2388,11 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     let service_types = HashSet::new();
 ///
 ///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), false, None, None, false, false, None).await;
+///     run_tui(service_types.clone(), None, None, false, false, None).await;
 ///
 ///     // Use specific interfaces
 ///     run_tui(
 ///         service_types,
-///         false,
 ///         Some(vec!["eth0".into()]),
 ///         Some(vec!["eth0".into(), "lo".into()]),
 ///         false,
