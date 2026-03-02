@@ -535,11 +535,7 @@ impl AppState {
         self.metrics = dump.metrics;
         self.filter_query = dump.filters.query;
 
-        let is_old_format = dump.options.service_types.is_empty()
-            && !dump.options.disable_ipv4
-            && !dump.options.disable_ipv6
-            && !dump.options.no_debounce
-            && dump.options.interfaces.is_none();
+        let is_old_format = dump.filters.active_service_types.is_some();
 
         if is_old_format {
             self.user_service_types = dump
