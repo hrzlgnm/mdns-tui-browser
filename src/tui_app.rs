@@ -498,7 +498,11 @@ impl AppState {
             service_types: self.service_types.clone(),
             metrics: self.metrics.clone(),
             options: AppOptions {
-                service_types: self.user_service_types.iter().cloned().collect(),
+                service_types: {
+                    let mut vec: Vec<String> = self.user_service_types.iter().cloned().collect();
+                    vec.sort_unstable();
+                    vec
+                },
                 disable_ipv4: self.disable_ipv4,
                 disable_ipv6: self.disable_ipv6,
                 no_debounce: self.no_debounce,
@@ -6799,6 +6803,51 @@ mod tests {
         assert!(!loaded_state.disable_ipv6);
         assert!(loaded_state.no_debounce);
         assert!(loaded_state.interfaces.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_interfaces_round_trip() {
+        let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
+        let mut state = create_test_app_state(user_types.clone(), true, false, false);
+
+        state.add_service_type("_http._tcp.local.");
+        state
+            .services
+            .push(create_test_service("test", "_http._tcp.local.", 8080));
+
+        // Set non-null interfaces
+        state.interfaces = Some(vec!["eth0".to_string()]);
+
+        let json_str = state.dump_state_to_json().unwrap();
+
+        // Verify interfaces is an array in JSON (not null)
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Should be valid JSON");
+        let options = &parsed["options"];
+
+        assert!(
+            options["interfaces"].is_array(),
+            "interfaces should be an array, not null"
+        );
+        if let serde_json::Value::Array(interfaces) = &options["interfaces"] {
+            assert_eq!(interfaces.len(), 1, "Should have 1 interface");
+            assert_eq!(interfaces[0], "eth0", "Interface should be eth0");
+        } else {
+            panic!("interfaces should be an array");
+        }
+
+        // Verify round-trip: deserialize and load
+        let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
+
+        let mut loaded_state = AppState::new(HashSet::new(), false, false, false, None);
+        loaded_state.load_from_state_dump(state_dump);
+
+        // Verify interfaces was restored
+        assert_eq!(
+            loaded_state.interfaces,
+            Some(vec!["eth0".to_string()]),
+            "interfaces should be restored after round-trip"
+        );
     }
 
     // Tests for unused helper functions
