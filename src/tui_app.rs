@@ -523,6 +523,9 @@ impl AppState {
 
     fn load_from_state_dump(&mut self, dump: StateDump) {
         self.services = dump.services.iter().map(|s| s.into()).collect();
+        self.services
+            .iter_mut()
+            .for_each(|s| s.update_flapping_status());
         self.service_types = dump.service_types;
         self.metrics = dump.metrics;
         self.filter_query = dump.filters.query;
