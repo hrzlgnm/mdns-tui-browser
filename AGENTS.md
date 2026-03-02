@@ -199,6 +199,28 @@ The manpage should contain only essential usage information without excessive de
 - **Don't** break the async patterns used throughout the codebase
 - **Don't** ignore test failures - all tests must pass
 - **Don't** have warnings in release builds - run `cargo clippy --release` before committing
+- **Don't** add new CLI options without including them in the JSON state dump - see [State Dump Management](#state-dump-management)
+
+## State Dump Management
+
+When adding new CLI options, ensure they are included in the JSON state dump for full state restoration:
+
+1. **Add to `AppOptions`** in `src/models.rs`:
+   - Add the field to the `AppOptions` struct
+   - Ensure it has proper `Serialize`/`Deserialize` derive
+
+2. **Update `AppState`** in `src/tui_app.rs`:
+   - Add the field to the `AppState` struct
+   - Update the `Clone` impl
+   - Pass through `AppState::new()` constructor
+
+3. **Update state dump functions** in `src/tui_app.rs`:
+   - Update `create_state_dump()` to include the new option
+   - Update `load_from_state_dump()` to restore the new option
+
+4. **Maintain backward compatibility**:
+   - Use `#[serde(default)]` on fields in `AppOptions`
+   - Test loading old state dumps without the new field
 
 ## Specific Notes for This Project
 
