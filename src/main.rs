@@ -30,13 +30,6 @@ struct Cli {
     )]
     service_types: Option<Vec<String>>,
 
-    /// Disable debouncing of flapping services
-    #[arg(
-        long,
-        help = "Disable automatic debouncing of flapping services for debugging"
-    )]
-    no_debounce: bool,
-
     /// Network interfaces to use for mDNS discovery
     #[arg(
         long,
@@ -123,7 +116,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(tui_app::run_tui(
         user_requested_service_types,
-        cli.no_debounce,
         interfaces,
         available_interfaces,
         disable_ipv4,

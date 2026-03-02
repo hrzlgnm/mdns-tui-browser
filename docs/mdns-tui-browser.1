@@ -22,9 +22,6 @@ Display version information and exit.
 Service types to browse for (e.g., http, _http._tcp, printer)
 Auto-completes (_)service, (_)sub, .(_)[tc|ud]p and .local. suffix
 .TP
-.B \-\-no-debounce
-Disable automatic debouncing of flapping services for debugging
-.TP
 .B \-i, \-\-interfaces \fIINTERFACES\fR
 Network interfaces to use for mDNS discovery (e.g., en0, eth0)
 Can be specified multiple times or comma-separated
@@ -199,10 +196,6 @@ Browse with shortened service types:
 Browse with shortened service types, specified multiple times:
 .br
 .B mdns-tui-browser \-s http \-s ssh
-.IP \(bu
-Browse without debouncing (for debugging flapping services):
-.br
-.B mdns-tui-browser \-\-no-debounce
 .IP \(bu
 Browse using a specific network interface:
 .br

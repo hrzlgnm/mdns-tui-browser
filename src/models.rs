@@ -160,11 +160,11 @@ impl ServiceEntry {
     /// Determines if the service is flapping based on session history.
     ///
     /// Returns `true` if the service has at least 3 sessions with at least 3 completed,
-    /// and at least half of the completed sessions are shorter than 10 seconds.
+    /// and at least half of the completed sessions are shorter than 5 minutes.
     pub fn is_flapping_service(&self) -> bool {
         const FLAPPING_SESSION_THRESHOLD: usize = 3;
         const MIN_COMPLETED_SESSIONS: usize = 3;
-        const SHORT_SESSION_DURATION_MICROS: u64 = 10_000_000;
+        const SHORT_SESSION_DURATION_MICROS: u64 = 300_000_000;
 
         if self.session_history.len() < FLAPPING_SESSION_THRESHOLD {
             return false;
@@ -386,9 +386,10 @@ pub struct FilterInfo {
 #[serde(rename_all = "camelCase")]
 pub struct AppOptions {
     pub service_types: Vec<String>,
+    #[serde(default)]
     pub disable_ipv4: bool,
+    #[serde(default)]
     pub disable_ipv6: bool,
-    pub no_debounce: bool,
     pub interfaces: Option<Vec<String>>,
 }
 
@@ -548,22 +549,26 @@ pub mod tests {
         assert!(service.is_flapping);
     }
 
+    fn micros_from(hours: u32, minutes: u32, seconds: u32) -> u64 {
+        (hours as u64 * 3600 + minutes as u64 * 60 + seconds as u64) * 1_000_000
+    }
+
     #[test]
     fn test_flapping_service_with_long_sessions() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
 
         service.session_history = vec![
             ServiceSession {
-                start_time: 1000,
-                end_time: Some(11000000), // 11 seconds
+                start_time: 1_000,
+                end_time: Some(1_000 + micros_from(0, 5, 1)),
             },
             ServiceSession {
-                start_time: 12000000,
-                end_time: Some(23000000), // 11 seconds
+                start_time: 12_000_000,
+                end_time: Some(1_200_000 + micros_from(0, 5, 1)),
             },
             ServiceSession {
-                start_time: 24000000,
-                end_time: Some(35000000), // 11 seconds
+                start_time: 24_000_000,
+                end_time: Some(24_000_000 + micros_from(0, 5, 1)), // 11 seconds
             },
         ];
 
