@@ -171,6 +171,9 @@ struct AppState {
     sort_direction: SortDirection,
     filter_query: String,
     filter_input_mode: bool,
+    service_type_input_mode: bool,
+    service_type_input: String,
+    apply_service_type: bool,
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
@@ -199,6 +202,9 @@ impl Clone for AppState {
             sort_direction: self.sort_direction,
             filter_query: self.filter_query.clone(),
             filter_input_mode: self.filter_input_mode,
+            service_type_input_mode: self.service_type_input_mode,
+            service_type_input: self.service_type_input.clone(),
+            apply_service_type: self.apply_service_type,
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
             status_message: self.status_message.clone(),
@@ -234,6 +240,9 @@ impl AppState {
             sort_direction: SortDirection::Ascending,
             filter_query: String::new(),
             filter_input_mode: false,
+            service_type_input_mode: false,
+            service_type_input: String::new(),
+            apply_service_type: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
@@ -720,7 +729,7 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.validate_selected_type();
 
-        let layout = if self.filter_input_mode {
+        let layout = if self.filter_input_mode || self.service_type_input_mode {
             create_filter_input_layout(terminal_area)
         } else {
             create_main_layout(terminal_area, !self.filter_query.is_empty())
@@ -755,6 +764,13 @@ impl AppState {
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
             self.popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics)
+        } else if self.service_type_input_mode {
+            if key.code == KeyCode::Enter {
+                self.apply_service_type = true;
+                true
+            } else {
+                self.handle_service_type_input_key(key)
+            }
         } else if self.filter_input_mode {
             self.handle_filter_input_key(key)
         } else {
@@ -784,6 +800,24 @@ impl AppState {
         }
     }
 
+    fn handle_service_type_input_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Esc => {
+                self.clear_service_type_input();
+                true
+            }
+            KeyCode::Backspace => {
+                self.remove_from_service_type_input();
+                true
+            }
+            KeyCode::Char(ch) => {
+                self.add_to_service_type_input(ch);
+                true
+            }
+            _ => true,
+        }
+    }
+
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
             // Quit actions
@@ -803,6 +837,18 @@ impl AppState {
             // Metrics toggle
             KeyCode::Char('m') => {
                 self.toggle_metrics();
+                true
+            }
+
+            // Add new service type
+            KeyCode::Char('a') => {
+                self.start_service_type_input();
+                true
+            }
+
+            // Clear current filter
+            KeyCode::Char('n') => {
+                self.clear_filter();
                 true
             }
 
@@ -935,11 +981,6 @@ impl AppState {
             // Filter controls
             KeyCode::Char('/') => {
                 self.start_filter_input();
-                true
-            }
-
-            KeyCode::Char('n') => {
-                self.clear_filter();
                 true
             }
 
@@ -1311,6 +1352,24 @@ impl AppState {
         self.invalidate_cache_and_validate();
     }
 
+    fn start_service_type_input(&mut self) {
+        self.service_type_input_mode = true;
+        self.service_type_input.clear();
+    }
+
+    fn clear_service_type_input(&mut self) {
+        self.service_type_input_mode = false;
+        self.service_type_input.clear();
+    }
+
+    fn add_to_service_type_input(&mut self, ch: char) {
+        self.service_type_input.push(ch);
+    }
+
+    fn remove_from_service_type_input(&mut self) {
+        self.service_type_input.pop();
+    }
+
     fn scroll_details_up(&mut self) {
         if self.details_scroll.offset > 0 {
             self.details_scroll.offset -= 1;
@@ -1396,6 +1455,9 @@ pub fn normalize_service_type(service_type: &str) -> String {
     }
 
     let parts: Vec<&str> = trimmed.split('.').collect();
+    if parts.iter().any(|p| p.is_empty()) {
+        return String::new();
+    }
 
     match parts.len() {
         1 => {
@@ -1544,7 +1606,7 @@ fn handle_browse_failure(
 }
 
 fn ui(f: &mut Frame, app_state: &AppState) {
-    let layout = if app_state.filter_input_mode {
+    let layout = if app_state.filter_input_mode || app_state.service_type_input_mode {
         create_filter_input_layout(f.area())
     } else {
         create_main_layout(f.area(), !app_state.filter_query.is_empty())
@@ -1556,6 +1618,11 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         render_services_list(f, app_state, layout.services_area, visible_counts.services);
         render_service_details(f, app_state, layout.details_area);
         render_filter_input(f, app_state, f.area());
+    } else if app_state.service_type_input_mode {
+        render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
+        render_services_list(f, app_state, layout.services_area, visible_counts.services);
+        render_service_details(f, app_state, layout.details_area);
+        render_service_type_input(f, app_state, f.area());
     } else {
         render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
         render_services_list(f, app_state, layout.services_area, visible_counts.services);
@@ -1932,8 +1999,31 @@ fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layou
     f.render_widget(filter_input, filter_area);
 }
 
+fn render_service_type_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
+    let input_area = ratatui::layout::Rect::new(
+        area.x,
+        area.y + area.height.saturating_sub(3),
+        area.width,
+        3,
+    );
+
+    let input_text = format!("{} ", app_state.service_type_input);
+    let border_style = get_border_style(app_state.loaded_from_file);
+
+    let service_type_input = Paragraph::new(input_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .title("Add Service Type (Enter to add, Esc to cancel)"),
+        )
+        .style(Style::default().fg(UI_CONTROLS_COLOR));
+
+    f.render_widget(service_type_input, input_area);
+}
+
 fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
-    let status_text = format!("Filter: '{}' (Press 'n' to clear)", app_state.filter_query);
+    let status_text = format!("Filter: '{}'", app_state.filter_query);
     let border_style = get_border_style(app_state.loaded_from_file);
 
     let status = Paragraph::new(status_text)
@@ -2628,6 +2718,8 @@ pub async fn run_tui(
         }
     }
 
+    let state_for_input = Arc::clone(&state);
+
     let result = loop {
         tokio::select! {
             // Handle user input events
@@ -2671,8 +2763,56 @@ pub async fn run_tui(
                             }
 
                             let mut state = state.write().await;
+                            let state_arc = Arc::clone(&state_for_input);
                             let should_continue = state.handle_key_event(key);
                             if should_continue {
+                                // Handle apply service type if flagged
+                                if state.apply_service_type {
+                                    let input = state.service_type_input.clone();
+                                    state.apply_service_type = false;
+                                    state.service_type_input_mode = false;
+                                    state.service_type_input.clear();
+
+                                    let normalized = normalize_service_type(&input);
+                                    if normalized.is_empty() {
+                                        let msg = "Invalid empty service type".to_string();
+                                        *state.status_message.lock().await = msg;
+                                    } else if state.user_service_types.contains(&normalized) {
+                                        // Already user-tracked: no-op
+                                    } else if state.service_types.iter().any(|t| t == &normalized) {
+                                        // Already preseent from discovery, persist as user choice
+                                        if state.user_service_types.insert(normalized.clone()) {
+                                            state.update_metric("user_service_types_added");
+                                        }
+                                        let _ = notification_sender.send(Notification::ServiceChanged);
+                                    } else if let Some(ref mdns_ref) = mdns {
+                                        match start_browsing_service_type(
+                                            mdns_ref,
+                                            &normalized,
+                                            state_arc,
+                                            notification_sender.clone(),
+                                        ) {
+                                            Ok(_) => {
+                                                state.add_service_type(&normalized);
+                                                if state.user_service_types.insert(normalized.clone()) {
+                                                    state.update_metric("user_service_types_added");
+                                                }
+                                                let _ = notification_sender.send(Notification::ServiceChanged);
+                                            }
+                                            Err(e) => {
+                                                handle_browse_failure(
+                                                    &normalized,
+                                                    &mut state,
+                                                    notification_sender.clone(),
+                                                    "user_requested_service_browse_failures",
+                                                );
+                                                let msg =
+                                                    format!("Failed to browse {}: {}", normalized, e);
+                                                *state.status_message.lock().await = msg;
+                                            }
+                                        }
+                                    }
+                                }
                                 let _ = notification_sender.send(Notification::UserInput);
                             } else {
                                 break Ok(());
@@ -5767,21 +5907,18 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_normal_mode_key_n() {
+    fn test_handle_normal_mode_key_a() {
         let mut state = create_test_app_state();
-        state.filter_query = "test".to_string();
-        // Note: not in filter_input_mode so 'n' is handled by normal mode
+        // Note: not in filter_input_mode so 'a' is handled by normal mode
         state.selected_service = 5;
         state.services_scroll.offset = 2;
 
-        let key = KeyEvent::from(KeyCode::Char('n'));
+        let key = KeyEvent::from(KeyCode::Char('a'));
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
-        assert_eq!(state.filter_query, "");
-        assert!(!state.filter_input_mode);
-        assert_eq!(state.selected_service, 0);
-        assert_eq!(state.services_scroll.offset, 0);
+        assert!(state.service_type_input_mode);
+        assert_eq!(state.service_type_input, "");
     }
 
     #[test]
