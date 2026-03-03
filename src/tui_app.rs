@@ -2777,6 +2777,14 @@ pub async fn run_tui(
                                     if normalized.is_empty() {
                                         let msg = "Invalid empty service type".to_string();
                                         *state.status_message.lock().await = msg;
+                                    } else if state.user_service_types.contains(&normalized) {
+                                        // Alread user-tracked: no-op
+                                    } else if state.service_types.iter().any(|t| t == &normalized) {
+                                        // Already preseent from discovery, persist as user choice
+                                        if state.user_service_types.insert(normalized.clone()) {
+                                            state.update_metric("user_service_types_added");
+                                        }
+                                        let _ = notification_sender.send(Notification::ServiceChanged);
                                     } else if let Some(ref mdns_ref) = mdns {
                                         match start_browsing_service_type(
                                             mdns_ref,
@@ -2786,8 +2794,9 @@ pub async fn run_tui(
                                         ) {
                                             Ok(_) => {
                                                 state.add_service_type(&normalized);
-                                                state.user_service_types.insert(normalized.clone());
-                                                state.update_metric("user_service_types_added");
+                                                if state.user_service_types.insert(normalized.clone()) {
+                                                    state.update_metric("user_service_types_added");
+                                                }
                                                 let _ = notification_sender.send(Notification::ServiceChanged);
                                             }
                                             Err(e) => {
