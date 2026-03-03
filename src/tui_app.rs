@@ -2778,7 +2778,7 @@ pub async fn run_tui(
                                         let msg = "Invalid empty service type".to_string();
                                         *state.status_message.lock().await = msg;
                                     } else if state.user_service_types.contains(&normalized) {
-                                        // Alread user-tracked: no-op
+                                        // Already user-tracked: no-op
                                     } else if state.service_types.iter().any(|t| t == &normalized) {
                                         // Already preseent from discovery, persist as user choice
                                         if state.user_service_types.insert(normalized.clone()) {
