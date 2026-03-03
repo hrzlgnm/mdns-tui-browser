@@ -729,7 +729,7 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.validate_selected_type();
 
-        let layout = if self.filter_input_mode {
+        let layout = if self.filter_input_mode || self.service_type_input_mode {
             create_filter_input_layout(terminal_area)
         } else {
             create_main_layout(terminal_area, !self.filter_query.is_empty())
