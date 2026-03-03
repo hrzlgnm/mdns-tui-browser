@@ -45,11 +45,8 @@ jobs:
         with:
           args: "update hrzlgnm.mdns-tui-browser --version $VERSION --urls $URL --submit --token=${{ secrets.WINGET_TOKEN }}"
 
-  cleanup:
-    name: 🧹 branches
-    runs-on: ubuntu-latest
-    steps:
       - name: 🧹 Cleanup merged branches
+        if: always()
         uses: michidk/run-komac@9b27eadc6e9235c252444a437d246c139da2f57f # v2.1.0
         with:
           args: "cleanup --only-merged --token=${{ secrets.WINGET_TOKEN }}"
