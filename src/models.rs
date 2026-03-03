@@ -61,7 +61,27 @@ pub struct SerializableServiceEntry {
 fn is_zero_u16(v: &u16) -> bool {
     *v == 0
 }
-fn micros_to_iso_timestamp(micros: u64) -> String {
+/// Converts a timestamp from microseconds since the Unix epoch to an ISO 8601 formatted UTC string.
+///
+/// # Arguments
+/// * `micros` - Number of microseconds since the Unix epoch (1970-01-01T00:00:00Z)
+///
+/// # Returns
+/// An ISO 8601 formatted UTC timestamp string in the format `YYYY-MM-DDTHH:MM:SS.ffffffZ`
+///
+/// # Behavior Notes
+/// - Input is in microseconds since the Unix epoch
+/// - Output is in UTC (no timezone offset applied)
+/// - Sub-microsecond precision is truncated (nanos are derived from subsec_micros * 1000)
+/// - For timestamps before the Unix epoch or other invalid values, returns the Unix epoch as fallback
+///
+/// # Example
+/// ```
+/// let micros = 1_000_000; // 1 second after epoch
+/// let timestamp = crate::models::micros_to_iso_timestamp(micros);
+/// assert_eq!(timestamp, "1970-01-01T00:00:01.000000Z");
+/// ```
+pub fn micros_to_iso_timestamp(micros: u64) -> String {
     let duration = Duration::from_micros(micros);
     let secs = duration.as_secs() as i64;
     let nanos = duration.subsec_micros() * 1000;
@@ -410,6 +430,8 @@ pub fn current_timestamp_micros() -> u64 {
 
 #[cfg(test)]
 pub mod tests {
+    //! Unit tests for the models module.
+
     use super::*;
 
     pub fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
@@ -549,7 +571,22 @@ pub mod tests {
         assert!(service.is_flapping);
     }
 
-    fn micros_from(hours: u32, minutes: u32, seconds: u32) -> u64 {
+    /// Converts hours, minutes, and seconds to microseconds since the Unix epoch.
+    ///
+    /// # Arguments
+    /// * `hours` - Number of hours
+    /// * `minutes` - Number of minutes
+    /// * `seconds` - Number of seconds
+    ///
+    /// # Returns
+    /// The total number of microseconds (hours * 3600 + minutes * 60 + seconds) * 1_000_000
+    ///
+    /// # Example
+    /// ```
+    /// let micros = micros_from(0, 0, 1); // 1 second = 1,000,000 microseconds
+    /// assert_eq!(micros, 1_000_000);
+    /// ```
+    pub fn micros_from(hours: u32, minutes: u32, seconds: u32) -> u64 {
         (hours as u64 * 3600 + minutes as u64 * 60 + seconds as u64) * 1_000_000
     }
 
