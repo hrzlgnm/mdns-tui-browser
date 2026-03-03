@@ -5907,7 +5907,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_normal_mode_key_n() {
+    fn test_handle_normal_mode_key_a() {
         let mut state = create_test_app_state();
         // Note: not in filter_input_mode so 'a' is handled by normal mode
         state.selected_service = 5;
