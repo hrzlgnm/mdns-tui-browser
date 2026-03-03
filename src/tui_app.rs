@@ -850,6 +850,12 @@ impl AppState {
                 true
             }
 
+            // Clear current filter
+            KeyCode::Char('n') => {
+                self.clear_filter();
+                true
+            }
+
             // Service Details scrolling with Shift+Up/Down and J/K (handled first to avoid conflicts)
             KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.scroll_details_up();
@@ -1453,6 +1459,9 @@ pub fn normalize_service_type(service_type: &str) -> String {
     }
 
     let parts: Vec<&str> = trimmed.split('.').collect();
+    if parts.iter().any(|p| p.is_empty()) {
+        return String::new();
+    }
 
     match parts.len() {
         1 => {
@@ -2772,29 +2781,29 @@ pub async fn run_tui(
                                     if normalized.is_empty() {
                                         let msg = "Invalid empty service type".to_string();
                                         *state.status_message.lock().await = msg;
-                                    } else if state.add_service_type(&normalized) {
-                                        state.user_service_types.insert(normalized.clone());
-                                        state.update_metric("user_service_types_added");
-                                        let _ = notification_sender.send(Notification::ServiceChanged);
-                                        if let Some(ref mdns_ref) = mdns {
-                                            match start_browsing_service_type(
-                                                mdns_ref,
-                                                &normalized,
-                                                state_arc,
-                                                notification_sender.clone(),
-                                            ) {
-                                                Ok(_) => {}
-                                                Err(e) => {
-                                                    handle_browse_failure(
-                                                        &normalized,
-                                                        &mut state,
-                                                        notification_sender.clone(),
-                                                        "user_requested_service_browse_failures",
-                                                    );
-                                                    let msg =
-                                                        format!("Failed to browse {}: {}", normalized, e);
-                                                    *state.status_message.lock().await = msg;
-                                                }
+                                    } else if let Some(ref mdns_ref) = mdns {
+                                        match start_browsing_service_type(
+                                            mdns_ref,
+                                            &normalized,
+                                            state_arc,
+                                            notification_sender.clone(),
+                                        ) {
+                                            Ok(_) => {
+                                                state.add_service_type(&normalized);
+                                                state.user_service_types.insert(normalized.clone());
+                                                state.update_metric("user_service_types_added");
+                                                let _ = notification_sender.send(Notification::ServiceChanged);
+                                            }
+                                            Err(e) => {
+                                                handle_browse_failure(
+                                                    &normalized,
+                                                    &mut state,
+                                                    notification_sender.clone(),
+                                                    "user_requested_service_browse_failures",
+                                                );
+                                                let msg =
+                                                    format!("Failed to browse {}: {}", normalized, e);
+                                                *state.status_message.lock().await = msg;
                                             }
                                         }
                                     }
@@ -2847,7 +2856,10 @@ pub async fn run_tui(
 mod tests {
     use super::*;
 
+    use crate::models::SerializableServiceEntry;
+    use crate::models::SerializableServiceSession;
     use crate::models::ServiceSession;
+    use crate::models::micros_to_iso_timestamp;
     use crate::models::tests::{create_test_service, create_test_service_with_sessions};
 
     /// Helper to create AppState for testing
@@ -7213,6 +7225,83 @@ mod tests {
             not_selected_style
                 .add_modifier
                 .contains(Modifier::UNDERLINED)
+        );
+    }
+
+    #[test]
+    fn test_flapping_status_recomputed_after_load() {
+        use crate::models::tests::micros_from;
+
+        let t1 = micros_from(0, 0, 1);
+        let t2 = micros_from(0, 0, 2);
+        let t3 = micros_from(0, 0, 3);
+        let t4 = micros_from(0, 0, 4);
+        let t5 = micros_from(0, 0, 5);
+        let t6 = micros_from(0, 0, 6);
+
+        let session_history = vec![
+            SerializableServiceSession {
+                start_time: Some(micros_to_iso_timestamp(t1)),
+                end_time: Some(micros_to_iso_timestamp(t2)),
+            },
+            SerializableServiceSession {
+                start_time: Some(micros_to_iso_timestamp(t3)),
+                end_time: Some(micros_to_iso_timestamp(t4)),
+            },
+            SerializableServiceSession {
+                start_time: Some(micros_to_iso_timestamp(t5)),
+                end_time: Some(micros_to_iso_timestamp(t6)),
+            },
+        ];
+
+        let serializable_service = SerializableServiceEntry {
+            fullname: "test._http._tcp.local.".to_string(),
+            host: "test.local.".to_string(),
+            service_type: "_http._tcp.local.".to_string(),
+            subtype: None,
+            addresses: vec!["192.168.1.1".to_string()],
+            port: 8080,
+            txt_records: vec![],
+            is_online: true,
+            is_flapping: false,
+            created_at: micros_to_iso_timestamp(t1),
+            updated_at: Some(micros_to_iso_timestamp(t6)),
+            last_online_at: Some(micros_to_iso_timestamp(t6)),
+            last_offline_at: None,
+            session_history,
+        };
+
+        let state_dump = StateDump {
+            metadata: Metadata {
+                dump_timestamp: micros_to_iso_timestamp(t6),
+                application_name: "mdns-tui-browser".to_string(),
+                version: "0.1.0".to_string(),
+            },
+            services: vec![serializable_service],
+            service_types: vec!["_http._tcp.local.".to_string()],
+            metrics: BTreeMap::new(),
+            options: AppOptions {
+                service_types: vec![],
+                disable_ipv4: false,
+                disable_ipv6: false,
+                interfaces: None,
+            },
+            filters: FilterInfo {
+                query: String::new(),
+                active_service_types: None,
+            },
+            sorting: SortInfo {
+                field: SortField::Host,
+                direction: SortDirection::Ascending,
+            },
+        };
+
+        let mut state = create_test_app_state();
+        state.load_from_state_dump(state_dump);
+
+        assert!(
+            state.services[0].is_flapping,
+            "Flapping status should be recomputed after loading state dump"
         );
     }
 }

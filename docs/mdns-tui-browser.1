@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-03-03" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-02-21" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -62,18 +62,124 @@ Common service types:
 .IP \(bu
 \fBairplay\fR - Apple AirPlay devices
 .IP \(bu
+\fBraop\fR - AirPlay audio devices
+.RE
+
+.SH CONTROLS
+.TP
+.B Navigation
+.br
+↑/↓ or j/k             - Navigate services list
+.br
+←/→ or h/l             - Switch between service types
+.br
+H/L                    - Page through service types
+.br
+Ctrl+Home/End          - Jump to first/last service type
+.br
+PageUp/PageDown or b/f or Space - Scroll services list by page
+.br
+Home/End               - Jump to first/last service
+.br
+Shift+↑/↓ or J/K       - Scroll service details
+.TP
+.B Sorting
+.br
+s                      - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
+.br
+S                      - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
+.br
+o                      - Toggle sort direction (↑/↓)
+.TP
+.B Filtering
+.br
+/                      - Enter quick filter mode (search across all service fields)
+.br
+n                      - Clear current filter
+.br
+d                      - Remove offline services
+.br
+D                      - Clear stale service types (service types with no services)
+.TP
+.B Other
+.br
+m                      - Show service metrics
+.br
+Ctrl+J                 - Dump current state to JSON file
+.br
+Ctrl+Z                 - Suspend the application (Unix only)
+.br
+?                      - Toggle help popup
+.br
+q or Ctrl+c            - Quit the application
+.PP
+\fBNote:\fR When loading a state file with \fB\-\-load-state\fR, the application runs in view-only mode (no browsing). The border color changes to a darker color to indicate this mode.
+
+.SH QUICK FILTER
+The quickfilter feature allows searching across all service fields using text patterns and special keywords.
+.PP
+To activate quickfilter mode, press \fB/\fR. Then type your search query and press \fBEnter\fR to apply or \fBEsc\fR to cancel.
+.PP
+The quickfilter searches across these service fields:
+.RS
+.IP \(bu
+Service fullname and name
+.IP \(bu
+Host address
+.IP \(bu
+Service type and subtype
+.IP \(bu
+IP addresses
+.IP \(bu
+Port number
+.IP \(bu
+TXT record contents
+.RE
+.PP
+The quickfilter supports special keywords for filtering by service status:
+.RS
+.IP \(bu
+\fBonline\fR - Shows online services AND services containing "online" in any field (fullname, host, service type, TXT records, etc.)
+.IP \(bu
+\fBoffline\fR - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
+.IP \(bu
+Case-insensitive: \fBONLINE\fR, \fBOnline\fR, \fBoffline\fR, \fBOFFLINE\fR all work
+.IP \(bu
+Hybrid mode: Keywords match both by status AND text content
+.IP \(bu
+Combined queries: \fBonline http\fR shows online services with "http" in text fields
+.RE
+.PP
+Examples:
+.RS
+.IP \(bu
+\fBonline\fR - Show online services + services with "online" in text
+.IP \(bu
+\fBoffline\fR - Show offline services + services with "offline" in text  
+.IP \(bu
+\fBonline http\fR - Show online HTTP services
+.IP \(bu
+\fBoffline printer\fR - Show offline printer services
+.IP \(bu
 \fBONLINE\fR - Case-insensitive works
+.IP \(bu
+\fBonline offline\fR - Shows all services (both keywords present)
+.RE
+.PP
+Quick filter mode controls:
+.RS
+.IP \(bu
+\fBEnter\fR - Apply filter
+.IP \(bu
+\fBEsc\fR - Cancel filter input
+.IP \(bu
+\fBBackspace\fR - Delete last character
+.IP \(bu
+Any other key - Type search text (case-insensitive)
 .RE
 
 .SH ADD SERVICE TYPE
 To add a new service type while the application is running, press \fBa\fR. Then type the service type name and press \fBEnter\fR to add and start browsing, or \fBEsc\fR to cancel.
-.PP
-The service type is automatically normalized (e.g., \fBhttp\fR becomes \fB_http._tcp.local.\fR).
-.PP
-If browsing fails (e.g., invalid format), an error message is displayed.
-.PP
-If the service type is already being browsed, no error is shown - the application simply continues.
-
 .SH EXAMPLES
 .RS
 .IP \(bu

@@ -199,6 +199,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>o</kbd> - Toggle sort direction (↑/↓)
 - <kbd>/</kbd> - Enter quick filter mode (search across all service fields)
 - <kbd>a</kbd> - Add new service type to browse
+- <kbd>n</kbd> - Clear current filter
 - <kbd>d</kbd> - Remove offline services
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show service metrics
