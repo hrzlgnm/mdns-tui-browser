@@ -198,7 +198,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>S</kbd> - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
 - <kbd>o</kbd> - Toggle sort direction (↑/↓)
 - <kbd>/</kbd> - Enter quick filter mode (search across all service fields)
-- <kbd>n</kbd> - Clear current filter
+- <kbd>a</kbd> - Add new service type to browse
 - <kbd>d</kbd> - Remove offline services
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show service metrics
@@ -241,6 +241,15 @@ offline printer     # Show offline printer services
 ONLINE              # Case-insensitive works
 online offline      # Shows all services (both keywords present)
 ```
+
+### Add Service Type Mode
+When in add service type mode (activated with <kbd>a</kbd>):
+- <kbd>Enter</kbd> - Add the service type and start browsing
+- <kbd>Esc</kbd> - Cancel input
+- <kbd>Backspace</kbd> - Delete last character
+- Any other key - Type service type name
+
+The service type is automatically normalized (e.g., `http` becomes `_http._tcp.local.`).
 
 ## Architecture
 
