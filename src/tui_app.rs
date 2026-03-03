@@ -802,10 +802,6 @@ impl AppState {
 
     fn handle_service_type_input_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Enter => {
-                // Apply will be handled by caller with mdns and notification_sender
-                true
-            }
             KeyCode::Esc => {
                 self.clear_service_type_input();
                 true
