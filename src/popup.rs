@@ -15,11 +15,28 @@ use ratatui::{
 
 use crate::scroll::ScrollState;
 
+fn calculate_wrapped_line_count(lines: &[Line], width: u16) -> usize {
+    if width == 0 || lines.is_empty() {
+        return 0;
+    }
+    let width = width as usize;
+    lines
+        .iter()
+        .map(|line| {
+            let line_width = line.width();
+            if line_width == 0 {
+                1
+            } else {
+                line_width.div_ceil(width)
+            }
+        })
+        .sum()
+}
+
 #[derive(Debug, Clone)]
 pub struct HelpPopup {
     pub active: bool,
     pub scroll: ScrollState,
-    cached_help_lines: usize,
 }
 
 impl HelpPopup {
@@ -27,13 +44,6 @@ impl HelpPopup {
         Self {
             active: false,
             scroll: ScrollState::new(),
-            cached_help_lines: 0,
-        }
-    }
-
-    fn ensure_cache_valid(&mut self) {
-        if self.cached_help_lines == 0 {
-            self.cached_help_lines = generate_help_content().len();
         }
     }
 
@@ -48,8 +58,6 @@ impl HelpPopup {
     pub fn handle_key_event(&mut self, key: KeyEvent, terminal_area: Rect) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                self.ensure_cache_valid();
-
                 let popup_area = create_centered_popup(terminal_area, 60, 70);
                 let inner_area = Rect::new(
                     popup_area.x + 1,
@@ -61,10 +69,14 @@ impl HelpPopup {
 
                 self.scroll.visible_items = max_visible_lines;
 
+                let help_content = generate_help_content();
+                let total_wrapped_lines =
+                    calculate_wrapped_line_count(&help_content, inner_area.width) + 1;
+
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
-                    self.cached_help_lines,
+                    total_wrapped_lines,
                     max_visible_lines,
                 );
                 true
@@ -94,7 +106,6 @@ impl Default for HelpPopup {
 pub struct MetricsPopup {
     pub active: bool,
     pub scroll: ScrollState,
-    cached_metrics_lines: usize,
 }
 
 impl MetricsPopup {
@@ -102,13 +113,6 @@ impl MetricsPopup {
         Self {
             active: false,
             scroll: ScrollState::new(),
-            cached_metrics_lines: 0,
-        }
-    }
-
-    fn ensure_cache_valid(&mut self, metrics: &BTreeMap<String, u64>) {
-        if self.cached_metrics_lines == 0 {
-            self.cached_metrics_lines = generate_metrics_content(metrics).len();
         }
     }
 
@@ -128,8 +132,6 @@ impl MetricsPopup {
     ) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                self.ensure_cache_valid(metrics);
-
                 let popup_area = create_centered_popup(terminal_area, 60, 70);
                 let inner_area = Rect::new(
                     popup_area.x + 1,
@@ -141,10 +143,14 @@ impl MetricsPopup {
 
                 self.scroll.visible_items = max_visible_lines;
 
+                let metrics_content = generate_metrics_content(metrics);
+                let total_wrapped_lines =
+                    calculate_wrapped_line_count(&metrics_content, inner_area.width) + 1;
+
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
-                    self.cached_metrics_lines,
+                    total_wrapped_lines,
                     max_visible_lines,
                 );
                 true
@@ -263,16 +269,10 @@ pub fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
         popup_area.height.saturating_sub(2),
     );
 
-    let clamped_offset = if help_content.is_empty() {
-        0
-    } else {
-        help_scroll_offset.min(help_content.len().saturating_sub(1))
-    };
-    let visible_help_content: Vec<Line> = help_content.into_iter().skip(clamped_offset).collect();
-
-    let help_paragraph = Paragraph::new(visible_help_content)
+    let help_paragraph = Paragraph::new(help_content)
         .style(ratatui::style::Style::default().fg(Color::White))
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: false })
+        .scroll((help_scroll_offset as u16, 0));
 
     f.render_widget(help_paragraph, inner_area);
 
@@ -306,15 +306,10 @@ pub fn render_metrics_popup(
         popup_area.height.saturating_sub(2),
     );
 
-    let visible_lines = inner_area.height as usize;
-    let max_offset = metrics_content.len().saturating_sub(visible_lines);
-    let clamped_offset = metrics_scroll_offset.min(max_offset);
-    let visible_metrics_content: Vec<Line> =
-        metrics_content.into_iter().skip(clamped_offset).collect();
-
-    let metrics_paragraph = Paragraph::new(visible_metrics_content)
+    let metrics_paragraph = Paragraph::new(metrics_content)
         .style(ratatui::style::Style::default().fg(Color::White))
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: false })
+        .scroll((metrics_scroll_offset as u16, 0));
 
     f.render_widget(metrics_paragraph, inner_area);
 
@@ -463,6 +458,55 @@ pub fn create_centered_popup(parent_area: Rect, width_percent: u16, height_perce
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_calculate_wrapped_line_count_empty_slice() {
+        let lines: Vec<Line> = vec![];
+        let count = calculate_wrapped_line_count(&lines, 80);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_calculate_wrapped_line_count_width_zero() {
+        let lines = vec![Line::from("test")];
+        let count = calculate_wrapped_line_count(&lines, 0);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_calculate_wrapped_line_count_no_wrapping() {
+        let lines = vec![Line::from("short")];
+        let count = calculate_wrapped_line_count(&lines, 80);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_calculate_wrapped_line_count_with_wrapping() {
+        let lines = vec![Line::from(
+            "this is a very long line that will definitely wrap",
+        )];
+        let count = calculate_wrapped_line_count(&lines, 20);
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_calculate_wrapped_line_count_mixed_lines() {
+        let lines = vec![
+            Line::from(""),
+            Line::from("short"),
+            Line::from("this is a longer line that will wrap"),
+            Line::from("a"),
+        ];
+        let count = calculate_wrapped_line_count(&lines, 15);
+        assert_eq!(count, 6);
+    }
+
+    #[test]
+    fn test_calculate_wrapped_line_count_exact_width() {
+        let lines = vec![Line::from("123456789012345")];
+        let count = calculate_wrapped_line_count(&lines, 15);
+        assert_eq!(count, 1);
+    }
 
     #[test]
     fn test_help_popup_new() {
