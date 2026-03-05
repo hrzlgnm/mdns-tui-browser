@@ -127,8 +127,10 @@ jobs:
     secrets: inherit
 
   cache-tools:
+    needs:
+      - build
     name: "📦 Cache tools"
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     uses: ./.github/workflows/cache-tools-reusable.yml
 
   all-required-green: # This job does nothing and is only used for the branch protection
