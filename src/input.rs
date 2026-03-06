@@ -10,46 +10,37 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-/// Represents the current input mode for user text input.
-///
-/// Different modes affect how input is processed and displayed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InputMode {
-    /// No active input mode - regular navigation
-    None,
-    /// Quick filter mode - filters services by text query
-    Filter,
-    /// Service type input mode - add new service types
-    ServiceType,
-}
-
 #[derive(Clone, Debug)]
 pub struct InputState {
+    active: bool,
     text: String,
-    mode: InputMode,
+    title: String,
 }
 
 impl InputState {
-    #[must_use]
-    pub fn new() -> Self {
+    pub fn new(title: &str) -> Self {
         Self {
+            active: false,
             text: String::new(),
-            mode: InputMode::None,
+            title: title.into(),
         }
     }
 
-    pub fn start(&mut self, mode: InputMode) {
-        self.mode = mode;
-        self.text.clear();
+    pub fn activate(&mut self) {
+        self.active = true;
+    }
+
+    pub fn deactivate(&mut self) {
+        self.active = false;
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.active
     }
 
     pub fn clear(&mut self) {
-        self.mode = InputMode::None;
+        self.active = false;
         self.text.clear();
-    }
-
-    pub fn apply(&mut self) {
-        self.mode = InputMode::None;
     }
 
     pub fn add_char(&mut self, ch: char) {
@@ -60,40 +51,20 @@ impl InputState {
         self.text.pop();
     }
 
-    pub fn is_active(&self) -> bool {
-        self.mode != InputMode::None
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
     }
 
-    #[must_use]
+    pub fn set_text(&mut self, text: &str) {
+        self.text = text.into();
+    }
+
     pub fn text(&self) -> &str {
         &self.text
     }
 
-    #[must_use]
-    pub fn mode(&self) -> InputMode {
-        self.mode
-    }
-
-    pub fn filter_title() -> &'static str {
-        "Quick Filter (Enter to apply, Esc to cancel)"
-    }
-
-    pub fn service_type_title() -> &'static str {
-        "Add Service Type (Enter to add, Esc to cancel)"
-    }
-
-    pub fn input_prefix(&self) -> char {
-        match self.mode {
-            InputMode::Filter => '/',
-            InputMode::ServiceType => ' ',
-            InputMode::None => ' ',
-        }
-    }
-}
-
-impl Default for InputState {
-    fn default() -> Self {
-        Self::new()
+    pub fn title(&self) -> &str {
+        &self.title
     }
 }
 
@@ -104,29 +75,22 @@ pub fn render_input(
     border_style: Style,
     fg_color: Color,
 ) {
-    let h = area.height.min(3);
+    let height = area.height.min(3);
     let input_area = Rect::new(
         area.x,
-        area.y + area.height.saturating_sub(h),
+        area.y + area.height.saturating_sub(height),
         area.width,
-        h,
+        height,
     );
 
-    let title = match input_state.mode() {
-        InputMode::Filter => InputState::filter_title(),
-        InputMode::ServiceType => InputState::service_type_title(),
-        InputMode::None => return,
-    };
-
-    let prefix = input_state.input_prefix();
-    let input_text = format!("{}{}_", prefix, input_state.text());
+    let input_text = format!("{}_", input_state.text());
 
     let input_widget = Paragraph::new(input_text)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(border_style)
-                .title(title),
+                .title(input_state.title()),
         )
         .style(Style::default().fg(fg_color));
 
