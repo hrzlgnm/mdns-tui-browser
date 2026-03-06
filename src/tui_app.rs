@@ -200,7 +200,7 @@ impl Clone for AppState {
             sort_field: self.sort_field,
             sort_direction: self.sort_direction,
             filter_input: self.filter_input.clone(),
-            service_type_input: self.filter_input.clone(),
+            service_type_input: self.service_type_input.clone(),
             apply_service_type: self.apply_service_type,
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
