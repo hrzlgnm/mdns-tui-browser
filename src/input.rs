@@ -3,11 +3,11 @@
 #![forbid(unsafe_code)]
 
 use ratatui::{
+    Frame,
     layout::Rect,
     style::Color,
     style::Style,
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 /// Represents the current input mode for user text input.
