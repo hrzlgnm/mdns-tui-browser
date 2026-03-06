@@ -785,6 +785,7 @@ impl AppState {
             }
             KeyCode::Esc => {
                 if mode == InputMode::Filter {
+                    self.filter_query.clear();
                     self.invalidate_cache_and_validate();
                 }
                 self.input_state.clear();
@@ -793,6 +794,7 @@ impl AppState {
             KeyCode::Backspace => {
                 self.input_state.remove_char();
                 if mode == InputMode::Filter {
+                    self.filter_query = self.input_state.text().to_string();
                     self.invalidate_cache_and_validate();
                 }
                 true
@@ -800,6 +802,7 @@ impl AppState {
             KeyCode::Char(ch) => {
                 self.input_state.add_char(ch);
                 if mode == InputMode::Filter {
+                    self.filter_query = self.input_state.text().to_string();
                     self.invalidate_cache_and_validate();
                 }
                 true
