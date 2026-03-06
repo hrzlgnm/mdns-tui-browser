@@ -1625,7 +1625,7 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         render_service_details(f, app_state, layout.details_area);
         crate::input::render_input(
             f,
-            &app_state.active_input().unwrap(), // Safe to unwrap since
+            app_state.active_input().unwrap(), // Safe to unwrap since
             // is_input_active() is true
             f.area(),
             border_style,
