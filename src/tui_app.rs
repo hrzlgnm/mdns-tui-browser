@@ -769,18 +769,10 @@ impl AppState {
             msg.clear();
             return true;
         }
-
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
             self.popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics)
-        } else if self.service_type_input.is_active() {
-            if key.code == KeyCode::Enter {
-                self.apply_service_type = true;
-                true
-            } else {
-                self.handle_input_key(key)
-            }
-        } else if self.filter_input.is_active() {
+        } else if self.is_input_active() {
             self.handle_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
@@ -789,11 +781,8 @@ impl AppState {
 
     fn apply_active_input(&mut self) {
         if self.service_type_input.is_active() {
-            let input = self.service_type_input.text().to_string();
-            if !input.is_empty() {
-                self.add_service_type(&input);
-            }
-            self.service_type_input.clear();
+            self.service_type_input.deactivate();
+            self.apply_service_type = true;
         } else if self.filter_input.is_active() {
             self.filter_input.deactivate();
             self.selected_service = 0;
