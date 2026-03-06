@@ -759,14 +759,14 @@ impl AppState {
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
             self.popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics)
-        } else if self.input_state.mode == InputMode::ServiceType {
+        } else if self.input_state.mode() == InputMode::ServiceType {
             if key.code == KeyCode::Enter {
                 self.apply_service_type = true;
                 true
             } else {
                 self.handle_input_key(key)
             }
-        } else if self.input_state.mode == InputMode::Filter {
+        } else if self.input_state.mode() == InputMode::Filter {
             self.handle_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
@@ -774,7 +774,7 @@ impl AppState {
     }
 
     fn handle_input_key(&mut self, key: KeyEvent) -> bool {
-        let mode = self.input_state.mode;
+        let mode = self.input_state.mode();
         match key.code {
             KeyCode::Enter => {
                 if mode == InputMode::Filter {
@@ -785,7 +785,6 @@ impl AppState {
             }
             KeyCode::Esc => {
                 if mode == InputMode::Filter {
-                    self.filter_query.clear();
                     self.invalidate_cache_and_validate();
                 }
                 self.input_state.clear();
@@ -794,7 +793,6 @@ impl AppState {
             KeyCode::Backspace => {
                 self.input_state.remove_char();
                 if mode == InputMode::Filter {
-                    self.filter_query.pop();
                     self.invalidate_cache_and_validate();
                 }
                 true
@@ -802,7 +800,6 @@ impl AppState {
             KeyCode::Char(ch) => {
                 self.input_state.add_char(ch);
                 if mode == InputMode::Filter {
-                    self.filter_query.push(ch);
                     self.invalidate_cache_and_validate();
                 }
                 true
@@ -1309,12 +1306,13 @@ impl AppState {
     fn start_filter_input(&mut self) {
         self.input_state.start(InputMode::Filter);
         self.filter_query.clear();
+        self.invalidate_cache_and_validate();
     }
 
     fn clear_filter(&mut self) {
         let had_filter = !self.filter_query.is_empty();
-        self.filter_query.clear();
         self.input_state.clear();
+        self.filter_query.clear();
         // Only reset selection and scroll when there was actually a filter
         if had_filter {
             self.selected_service = 0;
@@ -1325,6 +1323,7 @@ impl AppState {
     }
 
     fn apply_filter(&mut self) {
+        self.filter_query = self.input_state.text().to_string();
         self.input_state.apply();
         // Reset selection and scroll when exiting filter mode
         self.selected_service = 0;
@@ -1342,7 +1341,7 @@ impl AppState {
     }
 
     fn get_service_type_input(&self) -> &str {
-        &self.input_state.text
+        self.input_state.text()
     }
 
     fn scroll_details_up(&mut self) {
@@ -5581,8 +5580,11 @@ mod tests {
     #[test]
     fn test_apply_filter() {
         let mut state = create_test_app_state();
-        state.filter_query = "test".to_string();
         state.input_state.start(InputMode::Filter);
+        state.input_state.add_char('t');
+        state.input_state.add_char('e');
+        state.input_state.add_char('s');
+        state.input_state.add_char('t');
         state.selected_service = 5;
         state.services_scroll.offset = 2;
 
@@ -5603,7 +5605,8 @@ mod tests {
         state.handle_key_event(KeyEvent::from(KeyCode::Char('b')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('c')));
 
-        assert_eq!(state.filter_query, "abc");
+        // filter_query is only updated when filter is applied
+        assert_eq!(state.input_state.text(), "abc");
     }
 
     #[test]
@@ -5633,17 +5636,17 @@ mod tests {
         state.handle_key_event(KeyEvent::from(KeyCode::Char('a')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('b')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('c')));
-        assert_eq!(state.filter_query, "abc");
+        assert_eq!(state.input_state.text(), "abc");
 
         // Remove characters
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(state.filter_query, "ab");
+        assert_eq!(state.input_state.text(), "ab");
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(state.filter_query, "a");
+        assert_eq!(state.input_state.text(), "a");
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(state.filter_query, "");
+        assert_eq!(state.input_state.text(), "");
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace)); // Removing from empty string should be safe
-        assert_eq!(state.filter_query, "");
+        assert_eq!(state.input_state.text(), "");
     }
 
     #[test]
@@ -5810,7 +5813,10 @@ mod tests {
     fn test_handle_filter_input_key_enter() {
         let mut state = create_test_app_state();
         state.input_state.start(InputMode::Filter);
-        state.filter_query = "test".to_string();
+        state.input_state.add_char('t');
+        state.input_state.add_char('e');
+        state.input_state.add_char('s');
+        state.input_state.add_char('t');
 
         let key = KeyEvent::from(KeyCode::Enter);
         let should_continue = state.handle_key_event(key);
@@ -5824,13 +5830,17 @@ mod tests {
     fn test_handle_filter_input_key_escape() {
         let mut state = create_test_app_state();
         state.input_state.start(InputMode::Filter);
-        state.filter_query = "test".to_string();
+        state.input_state.add_char('t');
+        state.input_state.add_char('e');
+        state.input_state.add_char('s');
+        state.input_state.add_char('t');
 
         let key = KeyEvent::from(KeyCode::Esc);
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
         assert!(!state.input_state.is_active());
+        // filter_query is not updated on escape, it remains unchanged
         assert_eq!(state.filter_query, "");
     }
 
@@ -5844,7 +5854,8 @@ mod tests {
 
         assert!(should_continue);
         assert!(state.input_state.is_active());
-        assert_eq!(state.filter_query, "a");
+        // filter_query is only updated when filter is applied
+        assert_eq!(state.input_state.text(), "a");
     }
 
     #[test]
@@ -6393,11 +6404,11 @@ mod tests {
         state.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('s')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
-        assert_eq!(state.filter_query, "test");
+        assert_eq!(state.input_state.text(), "test");
 
         // Remove one character via key event
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(state.filter_query, "tes");
+        assert_eq!(state.input_state.text(), "tes");
 
         // Apply filter
         state.apply_filter();

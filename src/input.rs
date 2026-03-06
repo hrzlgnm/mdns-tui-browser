@@ -25,8 +25,8 @@ pub enum InputMode {
 
 #[derive(Clone, Debug)]
 pub struct InputState {
-    pub text: String,
-    pub mode: InputMode,
+    text: String,
+    mode: InputMode,
 }
 
 impl InputState {
@@ -64,6 +64,16 @@ impl InputState {
         self.mode != InputMode::None
     }
 
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    #[must_use]
+    pub fn mode(&self) -> InputMode {
+        self.mode
+    }
+
     pub fn filter_title() -> &'static str {
         "Quick Filter (Enter to apply, Esc to cancel)"
     }
@@ -94,21 +104,22 @@ pub fn render_input(
     border_style: Style,
     fg_color: Color,
 ) {
+    let h = area.height.min(3);
     let input_area = Rect::new(
         area.x,
-        area.y + area.height.saturating_sub(3),
+        area.y + area.height.saturating_sub(h),
         area.width,
-        3,
+        h,
     );
 
-    let title = match input_state.mode {
+    let title = match input_state.mode() {
         InputMode::Filter => InputState::filter_title(),
         InputMode::ServiceType => InputState::service_type_title(),
         InputMode::None => return,
     };
 
     let prefix = input_state.input_prefix();
-    let input_text = format!("{}{}_", prefix, input_state.text);
+    let input_text = format!("{}{}_", prefix, input_state.text());
 
     let input_widget = Paragraph::new(input_text)
         .block(
