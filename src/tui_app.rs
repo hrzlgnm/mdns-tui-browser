@@ -772,7 +772,7 @@ impl AppState {
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
             self.popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics)
-        } else if self.is_input_active() && key.modifiers.is_empty() {
+        } else if self.is_input_active() && !key.modifiers.contains(KeyModifiers::CONTROL) {
             self.handle_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
