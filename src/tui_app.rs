@@ -18,6 +18,7 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
+use crate::input::{InputMode, InputState};
 use crate::models::{
     AppOptions, FilterInfo, Metadata, ServiceEntry, SortDirection, SortField, SortInfo, StateDump,
     current_timestamp_micros,
@@ -28,7 +29,7 @@ use crate::terminal::TuiTerminal;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
-const UI_CONTROLS_COLOR: Color = Color::Cyan;
+pub(crate) const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 
 // Flapping service colors (color-blind friendly)
@@ -170,9 +171,7 @@ struct AppState {
     sort_field: SortField,
     sort_direction: SortDirection,
     filter_query: String,
-    filter_input_mode: bool,
-    service_type_input_mode: bool,
-    service_type_input: String,
+    input_state: InputState,
     apply_service_type: bool,
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
@@ -201,9 +200,7 @@ impl Clone for AppState {
             sort_field: self.sort_field,
             sort_direction: self.sort_direction,
             filter_query: self.filter_query.clone(),
-            filter_input_mode: self.filter_input_mode,
-            service_type_input_mode: self.service_type_input_mode,
-            service_type_input: self.service_type_input.clone(),
+            input_state: self.input_state.clone(),
             apply_service_type: self.apply_service_type,
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
@@ -239,9 +236,7 @@ impl AppState {
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
             filter_query: String::new(),
-            filter_input_mode: false,
-            service_type_input_mode: false,
-            service_type_input: String::new(),
+            input_state: InputState::new(),
             apply_service_type: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
@@ -729,7 +724,7 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.validate_selected_type();
 
-        let layout = if self.filter_input_mode || self.service_type_input_mode {
+        let layout = if self.input_state.is_active() {
             create_filter_input_layout(terminal_area)
         } else {
             create_main_layout(terminal_area, !self.filter_query.is_empty())
@@ -764,54 +759,52 @@ impl AppState {
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
             self.popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics)
-        } else if self.service_type_input_mode {
+        } else if self.input_state.mode == InputMode::ServiceType {
             if key.code == KeyCode::Enter {
                 self.apply_service_type = true;
                 true
             } else {
-                self.handle_service_type_input_key(key)
+                self.handle_input_key(key)
             }
-        } else if self.filter_input_mode {
-            self.handle_filter_input_key(key)
+        } else if self.input_state.mode == InputMode::Filter {
+            self.handle_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
         }
     }
 
-    fn handle_filter_input_key(&mut self, key: KeyEvent) -> bool {
+    fn handle_input_key(&mut self, key: KeyEvent) -> bool {
+        let mode = self.input_state.mode;
         match key.code {
             KeyCode::Enter => {
-                self.apply_filter();
+                if mode == InputMode::Filter {
+                    self.apply_filter();
+                }
+                self.input_state.apply();
                 true
             }
             KeyCode::Esc => {
-                self.clear_filter();
+                if mode == InputMode::Filter {
+                    self.filter_query.clear();
+                    self.invalidate_cache_and_validate();
+                }
+                self.input_state.clear();
                 true
             }
             KeyCode::Backspace => {
-                self.remove_from_filter();
+                self.input_state.remove_char();
+                if mode == InputMode::Filter {
+                    self.filter_query.pop();
+                    self.invalidate_cache_and_validate();
+                }
                 true
             }
             KeyCode::Char(ch) => {
-                self.add_to_filter(ch);
-                true
-            }
-            _ => true,
-        }
-    }
-
-    fn handle_service_type_input_key(&mut self, key: KeyEvent) -> bool {
-        match key.code {
-            KeyCode::Esc => {
-                self.clear_service_type_input();
-                true
-            }
-            KeyCode::Backspace => {
-                self.remove_from_service_type_input();
-                true
-            }
-            KeyCode::Char(ch) => {
-                self.add_to_service_type_input(ch);
+                self.input_state.add_char(ch);
+                if mode == InputMode::Filter {
+                    self.filter_query.push(ch);
+                    self.invalidate_cache_and_validate();
+                }
                 true
             }
             _ => true,
@@ -1314,14 +1307,14 @@ impl AppState {
 
     // Filter methods
     fn start_filter_input(&mut self) {
-        self.filter_input_mode = true;
+        self.input_state.start(InputMode::Filter);
         self.filter_query.clear();
     }
 
     fn clear_filter(&mut self) {
         let had_filter = !self.filter_query.is_empty();
         self.filter_query.clear();
-        self.filter_input_mode = false;
+        self.input_state.clear();
         // Only reset selection and scroll when there was actually a filter
         if had_filter {
             self.selected_service = 0;
@@ -1332,7 +1325,7 @@ impl AppState {
     }
 
     fn apply_filter(&mut self) {
-        self.filter_input_mode = false;
+        self.input_state.apply();
         // Reset selection and scroll when exiting filter mode
         self.selected_service = 0;
         self.services_scroll.reset();
@@ -1340,34 +1333,16 @@ impl AppState {
         self.invalidate_cache_and_validate();
     }
 
-    fn add_to_filter(&mut self, ch: char) {
-        self.filter_query.push(ch);
-        // Invalidate cache to trigger real-time filtering
-        self.invalidate_cache_and_validate();
-    }
-
-    fn remove_from_filter(&mut self) {
-        self.filter_query.pop();
-        // Invalidate cache to trigger real-time filtering
-        self.invalidate_cache_and_validate();
-    }
-
     fn start_service_type_input(&mut self) {
-        self.service_type_input_mode = true;
-        self.service_type_input.clear();
+        self.input_state.start(InputMode::ServiceType);
     }
 
     fn clear_service_type_input(&mut self) {
-        self.service_type_input_mode = false;
-        self.service_type_input.clear();
+        self.input_state.clear();
     }
 
-    fn add_to_service_type_input(&mut self, ch: char) {
-        self.service_type_input.push(ch);
-    }
-
-    fn remove_from_service_type_input(&mut self) {
-        self.service_type_input.pop();
+    fn get_service_type_input(&self) -> &str {
+        &self.input_state.text
     }
 
     fn scroll_details_up(&mut self) {
@@ -1606,23 +1581,25 @@ fn handle_browse_failure(
 }
 
 fn ui(f: &mut Frame, app_state: &AppState) {
-    let layout = if app_state.filter_input_mode || app_state.service_type_input_mode {
+    let layout = if app_state.input_state.is_active() {
         create_filter_input_layout(f.area())
     } else {
         create_main_layout(f.area(), !app_state.filter_query.is_empty())
     };
     let visible_counts = calculate_visible_counts(&layout);
 
-    if app_state.filter_input_mode {
+    if app_state.input_state.is_active() {
+        let border_style = get_border_style(app_state.loaded_from_file);
         render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
         render_services_list(f, app_state, layout.services_area, visible_counts.services);
         render_service_details(f, app_state, layout.details_area);
-        render_filter_input(f, app_state, f.area());
-    } else if app_state.service_type_input_mode {
-        render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
-        render_services_list(f, app_state, layout.services_area, visible_counts.services);
-        render_service_details(f, app_state, layout.details_area);
-        render_service_type_input(f, app_state, f.area());
+        crate::input::render_input(
+            f,
+            &app_state.input_state,
+            f.area(),
+            border_style,
+            UI_CONTROLS_COLOR,
+        );
     } else {
         render_service_types_list(f, app_state, layout.left_panel, visible_counts.types);
         render_services_list(f, app_state, layout.services_area, visible_counts.services);
@@ -1974,52 +1951,6 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
         );
         f.render_widget(details, area);
     }
-}
-
-fn render_filter_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
-    let filter_area = ratatui::layout::Rect::new(
-        area.x,
-        area.y + area.height.saturating_sub(3),
-        area.width,
-        3,
-    );
-
-    let input_text = format!("/{}_", app_state.filter_query);
-    let border_style = get_border_style(app_state.loaded_from_file);
-
-    let filter_input = Paragraph::new(input_text)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(border_style)
-                .title("Quick Filter (Enter to apply, Esc to cancel)"),
-        )
-        .style(Style::default().fg(UI_CONTROLS_COLOR));
-
-    f.render_widget(filter_input, filter_area);
-}
-
-fn render_service_type_input(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
-    let input_area = ratatui::layout::Rect::new(
-        area.x,
-        area.y + area.height.saturating_sub(3),
-        area.width,
-        3,
-    );
-
-    let input_text = format!("{} ", app_state.service_type_input);
-    let border_style = get_border_style(app_state.loaded_from_file);
-
-    let service_type_input = Paragraph::new(input_text)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(border_style)
-                .title("Add Service Type (Enter to add, Esc to cancel)"),
-        )
-        .style(Style::default().fg(UI_CONTROLS_COLOR));
-
-    f.render_widget(service_type_input, input_area);
 }
 
 fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
@@ -2768,10 +2699,9 @@ pub async fn run_tui(
                             if should_continue {
                                 // Handle apply service type if flagged
                                 if state.apply_service_type {
-                                    let input = state.service_type_input.clone();
+                                    let input = state.get_service_type_input().to_string();
                                     state.apply_service_type = false;
-                                    state.service_type_input_mode = false;
-                                    state.service_type_input.clear();
+                                    state.clear_service_type_input();
 
                                     let normalized = normalize_service_type(&input);
                                     if normalized.is_empty() {
@@ -5636,14 +5566,14 @@ mod tests {
     fn test_clear_filter() {
         let mut state = create_test_app_state();
         state.filter_query = "test".to_string();
-        state.filter_input_mode = true;
+        state.input_state.start(InputMode::Filter);
         state.selected_service = 5;
         state.services_scroll.offset = 2;
 
         state.clear_filter();
 
         assert_eq!(state.filter_query, "");
-        assert!(!state.filter_input_mode);
+        assert!(!state.input_state.is_active());
         assert_eq!(state.selected_service, 0);
         assert_eq!(state.services_scroll.offset, 0);
     }
@@ -5652,14 +5582,14 @@ mod tests {
     fn test_apply_filter() {
         let mut state = create_test_app_state();
         state.filter_query = "test".to_string();
-        state.filter_input_mode = true;
+        state.input_state.start(InputMode::Filter);
         state.selected_service = 5;
         state.services_scroll.offset = 2;
 
         state.apply_filter();
 
         assert_eq!(state.filter_query, "test");
-        assert!(!state.filter_input_mode);
+        assert!(!state.input_state.is_active());
         assert_eq!(state.selected_service, 0);
         assert_eq!(state.services_scroll.offset, 0);
     }
@@ -5667,9 +5597,12 @@ mod tests {
     #[test]
     fn test_add_to_filter() {
         let mut state = create_test_app_state();
-        state.add_to_filter('a');
-        state.add_to_filter('b');
-        state.add_to_filter('c');
+        state.input_state.start(InputMode::Filter);
+        
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('a')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('b')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('c')));
+        
         assert_eq!(state.filter_query, "abc");
     }
 
@@ -5686,21 +5619,30 @@ mod tests {
         assert!(!state.cache_dirty);
 
         // Adding to filter should invalidate cache
-        state.add_to_filter('t');
+        state.input_state.start(InputMode::Filter);
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
         assert!(state.cache_dirty);
     }
 
     #[test]
     fn test_remove_from_filter() {
         let mut state = create_test_app_state();
-        state.filter_query = "abc".to_string();
-        state.remove_from_filter();
+        state.input_state.start(InputMode::Filter);
+        
+        // Add some characters first
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('a')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('b')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('c')));
+        assert_eq!(state.filter_query, "abc");
+        
+        // Remove characters
+        state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert_eq!(state.filter_query, "ab");
-        state.remove_from_filter();
+        state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert_eq!(state.filter_query, "a");
-        state.remove_from_filter();
+        state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert_eq!(state.filter_query, "");
-        state.remove_from_filter(); // Removing from empty string should be safe
+        state.handle_key_event(KeyEvent::from(KeyCode::Backspace)); // Removing from empty string should be safe
         assert_eq!(state.filter_query, "");
     }
 
@@ -5716,9 +5658,20 @@ mod tests {
         let _ = state.get_filtered_services();
         assert!(!state.cache_dirty);
 
-        // Removing from filter should invalidate cache
-        state.filter_query = "test".to_string();
-        state.remove_from_filter();
+        // Add filter text then remove should invalidate cache
+        state.input_state.start(InputMode::Filter);
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('s')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
+        assert!(state.cache_dirty);
+        
+        // Reset cache
+        let _ = state.get_filtered_services();
+        assert!(!state.cache_dirty);
+        
+        // Remove should invalidate cache
+        state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert!(state.cache_dirty);
     }
 
@@ -5856,41 +5809,41 @@ mod tests {
     #[test]
     fn test_handle_filter_input_key_enter() {
         let mut state = create_test_app_state();
-        state.filter_input_mode = true;
+        state.input_state.start(InputMode::Filter);
         state.filter_query = "test".to_string();
 
         let key = KeyEvent::from(KeyCode::Enter);
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
-        assert!(!state.filter_input_mode);
+        assert!(!state.input_state.is_active());
         assert_eq!(state.filter_query, "test");
     }
 
     #[test]
     fn test_handle_filter_input_key_escape() {
         let mut state = create_test_app_state();
-        state.filter_input_mode = true;
+        state.input_state.start(InputMode::Filter);
         state.filter_query = "test".to_string();
 
         let key = KeyEvent::from(KeyCode::Esc);
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
-        assert!(!state.filter_input_mode);
+        assert!(!state.input_state.is_active());
         assert_eq!(state.filter_query, "");
     }
 
     #[test]
     fn test_handle_filter_input_key_char() {
         let mut state = create_test_app_state();
-        state.filter_input_mode = true;
+        state.input_state.start(InputMode::Filter);
 
         let key = KeyEvent::from(KeyCode::Char('a'));
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
-        assert!(state.filter_input_mode);
+        assert!(state.input_state.is_active());
         assert_eq!(state.filter_query, "a");
     }
 
@@ -5902,14 +5855,14 @@ mod tests {
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
-        assert!(state.filter_input_mode);
+        assert!(state.input_state.is_active());
         assert_eq!(state.filter_query, "");
     }
 
     #[test]
     fn test_handle_normal_mode_key_a() {
         let mut state = create_test_app_state();
-        // Note: not in filter_input_mode so 'a' is handled by normal mode
+        // Note: not in filter mode so 'a' is handled by normal mode
         state.selected_service = 5;
         state.services_scroll.offset = 2;
 
@@ -5917,8 +5870,8 @@ mod tests {
         let should_continue = state.handle_key_event(key);
 
         assert!(should_continue);
-        assert!(state.service_type_input_mode);
-        assert_eq!(state.service_type_input, "");
+        assert!(state.input_state.is_active());
+        assert_eq!(state.get_service_type_input(), "");
     }
 
     #[test]
@@ -6433,22 +6386,22 @@ mod tests {
 
         // Start filter
         state.start_filter_input();
-        assert!(state.filter_input_mode);
+        assert!(state.input_state.is_active());
 
-        // Add characters
-        state.add_to_filter('t');
-        state.add_to_filter('e');
-        state.add_to_filter('s');
-        state.add_to_filter('t');
+        // Add characters via key events
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('s')));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
         assert_eq!(state.filter_query, "test");
 
-        // Remove one character
-        state.remove_from_filter();
+        // Remove one character via key event
+        state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert_eq!(state.filter_query, "tes");
 
         // Apply filter
         state.apply_filter();
-        assert!(!state.filter_input_mode);
+        assert!(!state.input_state.is_active());
         assert_eq!(state.filter_query, "tes");
     }
 

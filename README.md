@@ -287,6 +287,7 @@ This project follows a **Safe Rust Only** policy:
 src/
 ├── main.rs       # Entry point with CLI argument handling
 ├── tui_app.rs    # Main TUI application logic
+├── input.rs      # User input handling (filter, service type)
 ├── popup.rs      # Popup UI components (help, metrics)
 ├── scroll.rs     # Scroll state management
 ├── models.rs     # Data models
