@@ -29,7 +29,7 @@ use crate::terminal::TuiTerminal;
 
 const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
-pub(crate) const UI_CONTROLS_COLOR: Color = Color::Cyan;
+const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 
 // Flapping service colors (color-blind friendly)
@@ -5598,11 +5598,11 @@ mod tests {
     fn test_add_to_filter() {
         let mut state = create_test_app_state();
         state.input_state.start(InputMode::Filter);
-        
+
         state.handle_key_event(KeyEvent::from(KeyCode::Char('a')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('b')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('c')));
-        
+
         assert_eq!(state.filter_query, "abc");
     }
 
@@ -5628,13 +5628,13 @@ mod tests {
     fn test_remove_from_filter() {
         let mut state = create_test_app_state();
         state.input_state.start(InputMode::Filter);
-        
+
         // Add some characters first
         state.handle_key_event(KeyEvent::from(KeyCode::Char('a')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('b')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('c')));
         assert_eq!(state.filter_query, "abc");
-        
+
         // Remove characters
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert_eq!(state.filter_query, "ab");
@@ -5665,11 +5665,11 @@ mod tests {
         state.handle_key_event(KeyEvent::from(KeyCode::Char('s')));
         state.handle_key_event(KeyEvent::from(KeyCode::Char('t')));
         assert!(state.cache_dirty);
-        
+
         // Reset cache
         let _ = state.get_filtered_services();
         assert!(!state.cache_dirty);
-        
+
         // Remove should invalidate cache
         state.handle_key_event(KeyEvent::from(KeyCode::Backspace));
         assert!(state.cache_dirty);
