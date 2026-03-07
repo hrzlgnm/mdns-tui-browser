@@ -795,8 +795,7 @@ impl AppState {
         if self.service_type_input.is_active() {
             self.service_type_input.clear();
         } else if self.filter_input.is_active() {
-            self.filter_input.clear();
-            self.invalidate_cache_and_validate();
+            self.clear_filter();
         }
     }
 
@@ -806,6 +805,7 @@ impl AppState {
         } else if self.filter_input.is_active() {
             self.filter_input.remove_char();
             self.invalidate_cache_and_validate();
+            self.reanchor_filter_selection();
         }
     }
 
@@ -815,7 +815,17 @@ impl AppState {
         } else if self.filter_input.is_active() {
             self.filter_input.add_char(ch);
             self.invalidate_cache_and_validate();
+            self.reanchor_filter_selection();
         }
+    }
+
+    fn reanchor_filter_selection(&mut self) {
+        let filtered_len = self.cached_filtered_services.len();
+        if filtered_len > 0 {
+            self.selected_service = 0;
+        }
+        self.services_scroll.reset();
+        self.details_scroll.reset();
     }
 
     fn handle_input_key(&mut self, key: KeyEvent) -> bool {
