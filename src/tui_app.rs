@@ -235,7 +235,9 @@ impl AppState {
             metrics: BTreeMap::new(),
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
-            filter_input: InputState::new("Quick Filter (Enter to apply, Esc to cancel)"),
+            filter_input: InputState::new(
+                "Quick Filter (typing updates live, Esc to cancel, Enter to exit)",
+            ),
             service_type_input: InputState::new("Add Service Type (Enter to add, Esc to cancel)"),
             apply_service_type: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
