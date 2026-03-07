@@ -6105,6 +6105,165 @@ mod tests {
     }
 
     #[test]
+    fn test_filter_service_offline_flapping_positive() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("offline flapping");
+
+        let flapping_sessions = vec![
+            ServiceSession {
+                start_time: 0,
+                end_time: Some(100_000_000),
+            },
+            ServiceSession {
+                start_time: 100_000_001,
+                end_time: Some(200_000_000),
+            },
+            ServiceSession {
+                start_time: 200_000_001,
+                end_time: Some(300_000_000),
+            },
+            ServiceSession {
+                start_time: 300_000_001,
+                end_time: None,
+            },
+        ];
+
+        // Create an offline flapping service - should match
+        let mut offline_flapping_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            flapping_sessions.clone(),
+            false,
+            300_000_001,
+            0,
+            Some(100_000_000),
+            Some(300_000_001),
+        );
+        offline_flapping_service.update_flapping_status();
+        assert!(state.filter_service(&offline_flapping_service));
+
+        // Create an online flapping service - should NOT match
+        let mut online_flapping_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            flapping_sessions.clone(),
+            true,
+            300_000_001,
+            0,
+            Some(300_000_001),
+            None,
+        );
+        online_flapping_service.update_flapping_status();
+        assert!(!state.filter_service(&online_flapping_service));
+
+        // Create an offline stable service (non-flapping sessions) - should NOT match
+        let stable_sessions = vec![ServiceSession {
+            start_time: 0,
+            end_time: None,
+        }];
+        let mut offline_stable_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            stable_sessions,
+            false,
+            100_000_000,
+            0,
+            Some(100_000_000),
+            Some(300_000_001),
+        );
+        offline_stable_service.update_flapping_status();
+        assert!(!state.filter_service(&offline_stable_service));
+    }
+
+    #[test]
+    fn test_filter_service_three_keywords_online_offline_flapping() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("online offline flapping");
+
+        let flapping_sessions = vec![
+            ServiceSession {
+                start_time: 0,
+                end_time: Some(100_000_000),
+            },
+            ServiceSession {
+                start_time: 100_000_001,
+                end_time: Some(200_000_000),
+            },
+            ServiceSession {
+                start_time: 200_000_001,
+                end_time: Some(300_000_000),
+            },
+            ServiceSession {
+                start_time: 300_000_001,
+                end_time: None,
+            },
+        ];
+
+        // Create an online+flapping service - should match (has online AND flapping)
+        let mut online_flapping_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            flapping_sessions.clone(),
+            true,
+            300_000_001,
+            0,
+            Some(300_000_001),
+            None,
+        );
+        online_flapping_service.update_flapping_status();
+        assert!(state.filter_service(&online_flapping_service));
+
+        // Create an offline+flapping service - should match (has offline AND flapping)
+        let mut offline_flapping_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            flapping_sessions.clone(),
+            false,
+            300_000_001,
+            0,
+            Some(100_000_000),
+            Some(300_000_001),
+        );
+        offline_flapping_service.update_flapping_status();
+        assert!(state.filter_service(&offline_flapping_service));
+
+        // Create an online stable service - should NOT match
+        let online_stable_service = create_test_service("test", "_http._tcp.local.", 80);
+        assert!(!state.filter_service(&online_stable_service));
+
+        // Create an offline stable service (non-flapping sessions) - should NOT match
+        let stable_sessions = vec![ServiceSession {
+            start_time: 0,
+            end_time: None,
+        }];
+        let mut offline_stable_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            stable_sessions,
+            false,
+            100_000_000,
+            0,
+            Some(100_000_000),
+            Some(300_000_001),
+        );
+        offline_stable_service.update_flapping_status();
+        assert!(!state.filter_service(&offline_stable_service));
+
+        // Test three keywords with additional text term
+        state.filter_input.set_text("online offline flapping http");
+
+        assert!(state.filter_service(&online_flapping_service));
+        assert!(state.filter_service(&offline_flapping_service));
+        assert!(!state.filter_service(&online_stable_service));
+    }
+
+    #[test]
     fn test_handle_filter_input_key_enter() {
         let mut state = create_test_app_state();
         state.filter_input.activate();
