@@ -65,11 +65,16 @@ jobs:
     name: ${{matrix.symbol}}🔨
     runs-on: ${{matrix.os}}
     steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 1
+
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
           targets: ${{ matrix.target }}
-          save-cache: ${{ inputs.branch == 'main' }}
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
 
       - name: 🔧 Install cargo-auditable
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
