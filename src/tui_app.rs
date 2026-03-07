@@ -235,7 +235,7 @@ impl AppState {
             metrics: BTreeMap::new(),
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
-            filter_input: InputState::new("Quick Filter (Enter to activate, Esc to cancel)"),
+            filter_input: InputState::new("Quick Filter (Enter to apply, Esc to cancel)"),
             service_type_input: InputState::new("Add Service Type (Enter to add, Esc to cancel)"),
             apply_service_type: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
@@ -724,6 +724,10 @@ impl AppState {
     }
 
     fn active_input(&self) -> Option<&InputState> {
+        debug_assert!(
+            !(self.filter_input.is_active() && self.service_type_input.is_active()),
+            "Invariant violation: both filter_input and service_type_input are active"
+        );
         if self.filter_input.is_active() {
             Some(&self.filter_input)
         } else if self.service_type_input.is_active() {
@@ -772,7 +776,13 @@ impl AppState {
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
             self.popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics)
-        } else if self.is_input_active() && !key.modifiers.contains(KeyModifiers::CONTROL) {
+        } else if self.is_input_active()
+            && matches!(
+                key.code,
+                KeyCode::Char(_) | KeyCode::Enter | KeyCode::Esc | KeyCode::Backspace
+            )
+            && (key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT)
+        {
             self.handle_input_key(key)
         } else {
             self.handle_normal_mode_key(key)
@@ -1346,6 +1356,7 @@ impl AppState {
 
     // Filter methods
     fn start_filter_input(&mut self) {
+        self.service_type_input.deactivate();
         self.filter_input.activate();
         self.invalidate_cache_and_validate();
     }
@@ -1363,6 +1374,7 @@ impl AppState {
     }
 
     fn start_service_type_input(&mut self) {
+        self.filter_input.deactivate();
         self.service_type_input.activate();
     }
 
