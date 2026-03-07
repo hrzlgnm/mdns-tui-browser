@@ -144,6 +144,7 @@ actionlint
 src/
 ├── main.rs          # Entry point, CLI argument parsing
 ├── tui_app.rs       # Main TUI application logic and tests
+├── input.rs         # User input handling (filter, service type)
 ├── popup.rs         # Popup UI components (help, metrics)
 ├── scroll.rs        # Scroll state management
 ├── models.rs        # Data models

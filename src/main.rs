@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+mod input;
 mod models;
 mod popup;
 mod scroll;
