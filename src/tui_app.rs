@@ -265,10 +265,18 @@ impl AppState {
         if !self.filter_input.text().is_empty() {
             let query = self.filter_input.text().to_lowercase();
 
-            // Check for special keywords: online and offline
-            let has_online_keyword = query.contains("online");
-            let has_offline_keyword = query.contains("offline");
+            // Check for special keywords: online, offline, and flapping
+            let query_terms: Vec<&str> = query.split_whitespace().collect();
+            let has_online_keyword = query_terms.contains(&"online");
+            let has_offline_keyword = query_terms.contains(&"offline");
+            let has_flapping_keyword = query_terms.contains(&"flapping");
 
+            let query_without_keyword = query_terms
+                .iter()
+                .copied()
+                .filter(|term| !matches!(*term, "online" | "offline" | "flapping"))
+                .collect::<Vec<_>>()
+                .join(" ");
             // Search in all service fields case-insensitively
             let search_text = [
                 service.fullname.clone(),
@@ -282,21 +290,34 @@ impl AppState {
             .join(" ")
             .to_lowercase();
 
-            if has_online_keyword || has_offline_keyword {
-                // Special handling for online/offline keywords (hybrid mode)
-                let status_matches = (has_online_keyword && service.online)
-                    || (has_offline_keyword && !service.online);
+            if has_online_keyword || has_offline_keyword || has_flapping_keyword {
+                // Special handling for online/offline/flapping keywords (hybrid mode)
+                let online_status_matches = has_online_keyword && service.online;
+                let offline_status_matches = has_offline_keyword && !service.online;
+                let flapping_status_matches = has_flapping_keyword && service.is_flapping;
+
+                let status_matches = if has_online_keyword && has_offline_keyword {
+                    !has_flapping_keyword || flapping_status_matches
+                } else if has_flapping_keyword && (has_online_keyword || has_offline_keyword) {
+                    // flapping with online/offline - both must match their respective conditions
+                    (!has_online_keyword || online_status_matches)
+                        && (!has_offline_keyword || offline_status_matches)
+                        && flapping_status_matches
+                } else {
+                    // Single keyword or flapping only - use OR logic
+                    online_status_matches || offline_status_matches || flapping_status_matches
+                };
 
                 // Check if the full query appears in text fields
                 let text_matches = search_text.contains(&query);
 
                 // For hybrid mode: match if status matches OR text contains the keywords
                 // But for combined queries, we need to be more precise
-                if has_online_keyword && has_offline_keyword {
-                    // Both keywords present - strip both keywords and check remaining terms
-                    let query_cleaned = query.replace("online", "").replace("offline", "");
-                    let query_without_keyword = query_cleaned.trim();
-
+                let keyword_count = has_online_keyword as u8
+                    + has_offline_keyword as u8
+                    + has_flapping_keyword as u8;
+                if keyword_count >= 2 {
+                    // Two or more keywords present - all share the same logic
                     if query_without_keyword.is_empty() {
                         // Only keywords - treat as match-all (status or text)
                         status_matches || text_matches
@@ -306,14 +327,11 @@ impl AppState {
                             && search_text.contains(&query_without_keyword.to_lowercase()))
                             || text_matches
                     }
-                } else if query == "online" || query == "offline" {
+                } else if query == "online" || query == "offline" || query == "flapping" {
                     // Pure keyword - hybrid mode: match by status OR text containing keyword
                     status_matches || text_matches
                 } else {
                     // Mixed query (keyword + other terms) - match if (status matches AND text contains other terms) OR text contains full query
-                    let query_cleaned = query.replace("online", "").replace("offline", "");
-                    let query_without_keyword = query_cleaned.trim();
-
                     if query_without_keyword.is_empty() {
                         status_matches || text_matches
                     } else {
@@ -2850,6 +2868,53 @@ mod tests {
         user_service_types: HashSet<String>,
     ) -> AppState {
         AppState::new(user_service_types, false, false, None)
+    }
+
+    fn create_flapping_sessions() -> Vec<ServiceSession> {
+        vec![
+            ServiceSession {
+                start_time: 0,
+                end_time: Some(100_000_000),
+            },
+            ServiceSession {
+                start_time: 100_000_001,
+                end_time: Some(200_000_000),
+            },
+            ServiceSession {
+                start_time: 200_000_001,
+                end_time: Some(300_000_000),
+            },
+            ServiceSession {
+                start_time: 300_000_001,
+                end_time: None,
+            },
+        ]
+    }
+
+    fn create_flapping_service(
+        name: &str,
+        service_type: &str,
+        port: u16,
+        online: bool,
+    ) -> ServiceEntry {
+        let flapping_sessions = create_flapping_sessions();
+        let mut service = create_test_service_with_sessions(
+            name,
+            service_type,
+            port,
+            flapping_sessions,
+            online,
+            300_000_001,
+            0,
+            if online {
+                Some(300_000_001)
+            } else {
+                Some(100_000_000)
+            },
+            if online { None } else { Some(300_000_001) },
+        );
+        service.update_flapping_status();
+        service
     }
 
     /// Quick state setup with specified number of services
@@ -5850,6 +5915,156 @@ mod tests {
         state.filter_input.set_text("printer");
         let printer_service = create_test_service("test", "_printer._http._tcp.local.", 80);
         assert!(state.filter_service(&printer_service));
+    }
+
+    #[test]
+    fn test_filter_service_flapping_keyword_only() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("flapping");
+
+        // Create a flapping service
+        let flapping_service = create_flapping_service("test", "_http._tcp.local.", 80, true);
+
+        // Create a stable service (not flapping)
+        let stable_service = create_test_service("test", "_http._tcp.local.", 80);
+
+        assert!(state.filter_service(&flapping_service));
+        assert!(!state.filter_service(&stable_service));
+    }
+
+    #[test]
+    fn test_filter_service_flapping_keyword_case_insensitive() {
+        let mut state = create_test_app_state();
+
+        // Test uppercase
+        state.filter_input.set_text("FLAPPING");
+        let flapping_service = create_flapping_service("test", "_http._tcp.local.", 80, true);
+
+        assert!(state.filter_service(&flapping_service));
+
+        // Test mixed case
+        state.filter_input.set_text("FlApPiNg");
+        assert!(state.filter_service(&flapping_service));
+    }
+
+    #[test]
+    fn test_filter_service_flapping_with_other_terms() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("flapping http");
+
+        // Create a flapping HTTP service - should match (status matches AND text contains "http")
+        let flapping_http_service = create_flapping_service("test", "_http._tcp.local.", 80, true);
+        assert!(state.filter_service(&flapping_http_service));
+
+        // Create a flapping SSH service - should NOT match (status matches but text doesn't contain "http")
+        let flapping_ssh_service = create_flapping_service("test", "_ssh._tcp.local.", 22, true);
+        assert!(!state.filter_service(&flapping_ssh_service));
+
+        // Service with "flapping http" in TXT record should match (text contains full query)
+        let mut txt_service = create_test_service("test", "_http._tcp.local.", 80);
+        txt_service.txt = vec!["flapping http mode".to_string()];
+        assert!(state.filter_service(&txt_service));
+    }
+
+    #[test]
+    fn test_filter_service_online_flapping_combined() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("online flapping");
+
+        // Create an online flapping service - should match
+        let online_flapping_service =
+            create_flapping_service("test", "_http._tcp.local.", 80, true);
+        assert!(state.filter_service(&online_flapping_service));
+
+        // Create an offline flapping service - should NOT match
+        let offline_flapping_service =
+            create_flapping_service("test", "_http._tcp.local.", 80, false);
+        assert!(!state.filter_service(&offline_flapping_service));
+
+        // Create an online stable service - should NOT match
+        let online_stable_service = create_test_service("test", "_http._tcp.local.", 80);
+        assert!(!state.filter_service(&online_stable_service));
+    }
+
+    #[test]
+    fn test_filter_service_offline_flapping_positive() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("offline flapping");
+
+        // Create an offline flapping service - should match
+        let offline_flapping_service =
+            create_flapping_service("test", "_http._tcp.local.", 80, false);
+        assert!(state.filter_service(&offline_flapping_service));
+
+        // Create an online flapping service - should NOT match
+        let online_flapping_service =
+            create_flapping_service("test", "_http._tcp.local.", 80, true);
+        assert!(!state.filter_service(&online_flapping_service));
+
+        // Create an offline stable service (non-flapping sessions) - should NOT match
+        let stable_sessions = vec![ServiceSession {
+            start_time: 0,
+            end_time: None,
+        }];
+        let mut offline_stable_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            stable_sessions,
+            false,
+            100_000_000,
+            0,
+            Some(100_000_000),
+            Some(300_000_001),
+        );
+        offline_stable_service.update_flapping_status();
+        assert!(!state.filter_service(&offline_stable_service));
+    }
+
+    #[test]
+    fn test_filter_service_three_keywords_online_offline_flapping() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("online offline flapping");
+
+        // Create an online+flapping service - should match (has online AND flapping)
+        let online_flapping_service =
+            create_flapping_service("test", "_http._tcp.local.", 80, true);
+        assert!(state.filter_service(&online_flapping_service));
+
+        // Create an offline+flapping service - should match (has offline AND flapping)
+        let offline_flapping_service =
+            create_flapping_service("test", "_http._tcp.local.", 80, false);
+        assert!(state.filter_service(&offline_flapping_service));
+
+        // Create an online stable service - should NOT match
+        let online_stable_service = create_test_service("test", "_http._tcp.local.", 80);
+        assert!(!state.filter_service(&online_stable_service));
+
+        // Create an offline stable service (non-flapping sessions) - should NOT match
+        let stable_sessions = vec![ServiceSession {
+            start_time: 0,
+            end_time: None,
+        }];
+        let mut offline_stable_service = create_test_service_with_sessions(
+            "test",
+            "_http._tcp.local.",
+            80,
+            stable_sessions,
+            false,
+            100_000_000,
+            0,
+            Some(100_000_000),
+            Some(300_000_001),
+        );
+        offline_stable_service.update_flapping_status();
+        assert!(!state.filter_service(&offline_stable_service));
+
+        // Test three keywords with additional text term
+        state.filter_input.set_text("online offline flapping http");
+
+        assert!(state.filter_service(&online_flapping_service));
+        assert!(state.filter_service(&offline_flapping_service));
+        assert!(!state.filter_service(&online_stable_service));
     }
 
     #[test]

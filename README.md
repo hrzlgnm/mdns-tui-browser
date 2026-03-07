@@ -228,7 +228,8 @@ The quickfilter supports special keywords for filtering by service status:
 
 - **`online`** - Shows online services AND services containing "online" in any field (fullname, host, service type, TXT records, etc.)
 - **`offline`** - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
-- **Case-insensitive**: `ONLINE`, `Online`, `offline`, `OFFLINE` all work
+- **`flapping`** - Shows services that are flapping (detected based on session history - at least 3 sessions with at least half shorter than 5 minutes)
+- **Case-insensitive**: `ONLINE`, `Online`, `offline`, `OFFLINE`, `FLAPPING`, `Flapping` all work
 - **Hybrid mode**: Keywords match both by status AND text content
 - **Combined queries**: `online http` shows online services with "http" in text fields
 
@@ -237,9 +238,10 @@ The quickfilter supports special keywords for filtering by service status:
 # Press '/' then type:
 online              # Show online services + services with "online" in text
 offline             # Show offline services + services with "offline" in text
+flapping            # Show flapping services
 online http         # Show online HTTP services
 offline printer     # Show offline printer services
-ONLINE              # Case-insensitive works
+online flapping     # Show services that are both online AND flapping
 online offline      # Shows all services (both keywords present)
 ```
 

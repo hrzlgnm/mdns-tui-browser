@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-02-21" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-03-07" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -143,7 +143,9 @@ The quickfilter supports special keywords for filtering by service status:
 .IP \(bu
 \fBoffline\fR - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
 .IP \(bu
-Case-insensitive: \fBONLINE\fR, \fBOnline\fR, \fBoffline\fR, \fBOFFLINE\fR all work
+\fBflapping\fR - Shows services that are flapping (detected based on session history - at least 3 sessions with at least half shorter than 5 minutes)
+.IP \(bu
+Case-insensitive: \fBONLINE\fR, \fBOnline\fR, \fBoffline\fR, \fBOFFLINE\fR, \fBFLAPPING\fR, \fBFlapping\fR all work
 .IP \(bu
 Hybrid mode: Keywords match both by status AND text content
 .IP \(bu
@@ -157,11 +159,13 @@ Examples:
 .IP \(bu
 \fBoffline\fR - Show offline services + services with "offline" in text  
 .IP \(bu
+\fBflapping\fR - Show flapping services
+.IP \(bu
 \fBonline http\fR - Show online HTTP services
 .IP \(bu
 \fBoffline printer\fR - Show offline printer services
 .IP \(bu
-\fBONLINE\fR - Case-insensitive works
+\fBonline flapping\fR - Show services that are both online AND flapping
 .IP \(bu
 \fBonline offline\fR - Shows all services (both keywords present)
 .RE
