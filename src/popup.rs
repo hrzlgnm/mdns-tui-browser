@@ -375,6 +375,9 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from(
             "     'offline'         - Show offline services + services with 'offline' in text",
         ),
+        Line::from(
+            "     'flapping'        - Show flapping services + services with 'flapping' in text",
+        ),
         Line::from(" "),
         Line::from("   Filter searches all service fields case-insensitively"),
         Line::from(" "),
