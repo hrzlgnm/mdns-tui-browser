@@ -266,10 +266,17 @@ impl AppState {
             let query = self.filter_input.text().to_lowercase();
 
             // Check for special keywords: online, offline, and flapping
-            let has_online_keyword = query.contains("online");
-            let has_offline_keyword = query.contains("offline");
-            let has_flapping_keyword = query.contains("flapping");
+            let query_terms: Vec<&str> = query.split_whitespace().collect();
+            let has_online_keyword = query_terms.contains(&"online");
+            let has_offline_keyword = query_terms.contains(&"offline");
+            let has_flapping_keyword = query_terms.contains(&"flapping");
 
+            let query_without_keyword = query_terms
+                .iter()
+                .copied()
+                .filter(|term| !matches!(*term, "online" | "offline" | "flapping"))
+                .collect::<Vec<_>>()
+                .join(" ");
             // Search in all service fields case-insensitively
             let search_text = [
                 service.fullname.clone(),
@@ -308,11 +315,6 @@ impl AppState {
                 // But for combined queries, we need to be more precise
                 if has_online_keyword && has_offline_keyword && has_flapping_keyword {
                     // All three keywords present - strip all keywords and check remaining terms
-                    let query_cleaned = query
-                        .replace("online", "")
-                        .replace("offline", "")
-                        .replace("flapping", "");
-                    let query_without_keyword = query_cleaned.trim();
 
                     if query_without_keyword.is_empty() {
                         // Only keywords - treat as match-all (status or text)
@@ -324,10 +326,6 @@ impl AppState {
                             || text_matches
                     }
                 } else if has_online_keyword && has_offline_keyword {
-                    // Both keywords present - strip both keywords and check remaining terms
-                    let query_cleaned = query.replace("online", "").replace("offline", "");
-                    let query_without_keyword = query_cleaned.trim();
-
                     if query_without_keyword.is_empty() {
                         // Only keywords - treat as match-all (status or text)
                         status_matches || text_matches
@@ -339,9 +337,6 @@ impl AppState {
                     }
                 } else if has_online_keyword && has_flapping_keyword {
                     // Both keywords present - strip both keywords and check remaining terms
-                    let query_cleaned = query.replace("online", "").replace("flapping", "");
-                    let query_without_keyword = query_cleaned.trim();
-
                     if query_without_keyword.is_empty() {
                         // Only keywords - treat as match-all (status or text)
                         status_matches || text_matches
@@ -352,10 +347,6 @@ impl AppState {
                             || text_matches
                     }
                 } else if has_offline_keyword && has_flapping_keyword {
-                    // Both keywords present - strip both keywords and check remaining terms
-                    let query_cleaned = query.replace("offline", "").replace("flapping", "");
-                    let query_without_keyword = query_cleaned.trim();
-
                     if query_without_keyword.is_empty() {
                         // Only keywords - treat as match-all (status or text)
                         status_matches || text_matches
@@ -370,12 +361,6 @@ impl AppState {
                     status_matches || text_matches
                 } else {
                     // Mixed query (keyword + other terms) - match if (status matches AND text contains other terms) OR text contains full query
-                    let query_cleaned = query
-                        .replace("online", "")
-                        .replace("offline", "")
-                        .replace("flapping", "");
-                    let query_without_keyword = query_cleaned.trim();
-
                     if query_without_keyword.is_empty() {
                         status_matches || text_matches
                     } else {
