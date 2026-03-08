@@ -21,6 +21,11 @@ on:
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 concurrency:
   # On main, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
   group: ${{ github.ref == 'refs/heads/main' && format('ci-main-{0}', github.sha) || format('ci-{0}', github.ref) }}
@@ -91,12 +96,15 @@ jobs:
     uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@292498dae084d4097c6dea750cf8b23f865a83eb # v2.0.4
 
   lint:
+    permissions:
+      contents: read
     needs: changes
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.lint == 'true'
     uses: ./.github/workflows/lint-reusable.yml
 
   tests:
     permissions:
+      contents: read
       checks: write # required for action-junit-report annotation
     needs: changes
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tests == 'true'
@@ -108,6 +116,8 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     uses: ./.github/workflows/build-reusable.yml
     secrets: inherit
     with:
@@ -117,12 +127,16 @@ jobs:
     name: AUR
     needs: changes
     if: needs.changes.outputs.aur == 'true'
+    permissions:
+      packages: read
     uses: ./.github/workflows/aur-reusable.yml
 
   winget:
     name: winget
     needs: changes
     if: needs.changes.outputs.winget == 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/winget-reusable.yml
     secrets: inherit
 
@@ -133,6 +147,8 @@ jobs:
       - tests
     name: "📦 Cache tools"
     if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    permissions:
+      contents: read
     uses: ./.github/workflows/cache-tools-reusable.yml
 
   all-required-green: # This job does nothing and is only used for the branch protection

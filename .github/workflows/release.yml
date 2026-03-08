@@ -33,12 +33,35 @@ jobs:
       version: ${{ steps.version.outputs.semantic-version }}
     env:
       GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
-      RULESET: repos/${{ github.repository }}/rulesets/12155739
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+
+      - name: 🔍 Get default branch protection ruleset
+        id: ruleset
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          result-encoding: string
+          script: |
+            const [owner, repo] = '${{ github.repository }}'.split('/');
+            const response = await github.rest.repos.listRulesetsForRepo({ owner, repo });
+            const ruleset = response.data.find(r => {
+              if (r.source !== 'branch') return false;
+              const conditions = r.conditions?.ref_name;
+              if (!conditions) return false;
+              const include = conditions.include || [];
+              return include.some(item => 
+                item === '~DEFAULT_BRANCH' || 
+                item.endsWith('/main') || 
+                item.includes('main')
+              );
+            });
+            if (!ruleset) {
+              throw new Error('Could not find default branch protection ruleset');
+            }
+            return `repos/${owner}/${repo}/rulesets/${ruleset.id}`;
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
@@ -99,6 +122,7 @@ jobs:
       - name: ⏳ Temporary disable ruleset enforcement
         if: ${{ !inputs.dry-run }}
         run: |
+          RULESET="${{ steps.ruleset.outputs.result }}"
           gh api \
           -H "Accept: application/vnd.github+json" \
           ${RULESET} | jq '.enforcement = "disabled"' | \
@@ -120,6 +144,7 @@ jobs:
       - name: 👮 Re-enable enforcement of rules
         if: ${{ always() && !inputs.dry-run }}
         run: |
+          RULESET="${{ steps.ruleset.outputs.result }}"
           gh api \
           -H "Accept: application/vnd.github+json" \
           ${RULESET} | jq '.enforcement = "active"' | \
@@ -128,6 +153,11 @@ jobs:
           -H "Accept: application/vnd.github+json" \
           ${RULESET} \
           --input -
+
+      - name: 🧹 Cleanup SSH signing key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519_signing
 
       - name: 🗒️ Generate release notes with release-drafter
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
