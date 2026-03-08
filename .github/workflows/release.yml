@@ -21,10 +21,10 @@ on:
         default: false
 
 permissions:
-  actions: write # to trigger other actions and workflow dispatch
-  contents: write # to update version and create tag
-  id-token: write # for sbom association with build
-  attestations: write # to create attestations
+  actions: write # Needed to trigger other workflows and workflow dispatch
+  contents: write # Needed to update version and create tags
+  id-token: write # Needed for SBOM association with build
+  attestations: write # Needed to create attestations
 
 jobs:
   release:
@@ -33,12 +33,18 @@ jobs:
       version: ${{ steps.version.outputs.semantic-version }}
     env:
       GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
-      RULESET: repos/${{ github.repository }}/rulesets/12155739
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+
+      - name: 🔍 Get default branch protection ruleset
+        id: ruleset
+        shell: bash
+        run: |
+          RULESET="repos/${{ github.repository }}/rulesets/${{ secrets.RULESET_ID }}"
+          echo "result=${RULESET}" >> "$GITHUB_OUTPUT"
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
@@ -99,6 +105,7 @@ jobs:
       - name: ⏳ Temporary disable ruleset enforcement
         if: ${{ !inputs.dry-run }}
         run: |
+          RULESET="${{ steps.ruleset.outputs.result }}"
           gh api \
           -H "Accept: application/vnd.github+json" \
           ${RULESET} | jq '.enforcement = "disabled"' | \
@@ -120,6 +127,7 @@ jobs:
       - name: 👮 Re-enable enforcement of rules
         if: ${{ always() && !inputs.dry-run }}
         run: |
+          RULESET="${{ steps.ruleset.outputs.result }}"
           gh api \
           -H "Accept: application/vnd.github+json" \
           ${RULESET} | jq '.enforcement = "active"' | \
@@ -128,6 +136,11 @@ jobs:
           -H "Accept: application/vnd.github+json" \
           ${RULESET} \
           --input -
+
+      - name: 🧹 Cleanup SSH signing key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519_signing
 
       - name: 🗒️ Generate release notes with release-drafter
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}

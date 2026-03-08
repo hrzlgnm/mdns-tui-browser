@@ -21,6 +21,9 @@ on:
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
+permissions:
+  contents: read # Minimal default needed for change detection
+
 concurrency:
   # On main, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
   group: ${{ github.ref == 'refs/heads/main' && format('ci-main-{0}', github.sha) || format('ci-{0}', github.ref) }}
@@ -91,13 +94,16 @@ jobs:
     uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@292498dae084d4097c6dea750cf8b23f865a83eb # v2.0.4
 
   lint:
+    permissions:
+      contents: read
     needs: changes
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.lint == 'true'
     uses: ./.github/workflows/lint-reusable.yml
 
   tests:
     permissions:
-      checks: write # required for action-junit-report annotation
+      contents: read # Needed to checkout code for testing
+      checks: write # Required for action-junit-report annotation
     needs: changes
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tests == 'true'
     uses: ./.github/workflows/test-reusable.yml
@@ -107,7 +113,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     permissions:
-      contents: write
+      contents: read # Needed to run build and pass permissions to reusable workflow
     uses: ./.github/workflows/build-reusable.yml
     secrets: inherit
     with:
@@ -117,12 +123,17 @@ jobs:
     name: AUR
     needs: changes
     if: needs.changes.outputs.aur == 'true'
+    permissions:
+      contents: read # Needed to checkout code and run local scripts for AUR build
+      packages: read # Needed to read container image for AUR build
     uses: ./.github/workflows/aur-reusable.yml
 
   winget:
     name: winget
     needs: changes
     if: needs.changes.outputs.winget == 'true'
+    permissions:
+      contents: read # Needed to download release assets for winget submission
     uses: ./.github/workflows/winget-reusable.yml
     secrets: inherit
 
@@ -133,6 +144,8 @@ jobs:
       - tests
     name: "📦 Cache tools"
     if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    permissions:
+      contents: read # Needed to checkout code for caching tools
     uses: ./.github/workflows/cache-tools-reusable.yml
 
   all-required-green: # This job does nothing and is only used for the branch protection

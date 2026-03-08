@@ -166,8 +166,7 @@ src/
 11. Commit only when all checks pass
 12. After committing, push to the repository and create a pull request if applicable
 13. After the pull request is created, add a comment `@coderabbitai review`
-14. After pushing changes to an existing pull request, add a comment `@coderabbitai review` to trigger a new review
-15. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+14. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 
@@ -195,6 +194,7 @@ The manpage should contain only essential usage information without excessive de
 
 - **Never** use `unsafe` code - this will cause CI to fail
 - **Never** add `#[allow(warnings)]` attributes to suppress warnings - fix the underlying issues instead
+- **Never** amend commits - commits will be squashed in GitHub, just create a new commit instead
 - **Always** format code before committing
 - **Always** run clippy and fix warnings (both debug and release)
 - **Don't** add dependencies without updating Cargo.toml properly
