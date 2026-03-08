@@ -116,8 +116,6 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     permissions:
       contents: write
-      attestations: write
-      id-token: write
     uses: ./.github/workflows/build-reusable.yml
     secrets: inherit
     with:
