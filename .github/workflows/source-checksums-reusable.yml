@@ -61,11 +61,16 @@ jobs:
         run: |
           set -o errexit
 
-          ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
-          if [[ ! " $ALLOWED_ALGORITHMS " =~ $ALGORITHM ]]; then
-            echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
-            exit 1
-          fi
+           ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
+           case "$ALGORITHM" in
+             sha256|sha512|sha1|md5)
+               # Valid algorithm
+               ;;
+             *)
+               echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
+               exit 1
+               ;;
+           esac
 
           CMD="${ALGORITHM}sum"
 
