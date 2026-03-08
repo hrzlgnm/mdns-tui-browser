@@ -126,6 +126,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.aur == 'true'
     permissions:
+      contents: read # Needed to checkout code and run local scripts for AUR build
       packages: read # Needed to read container image for AUR build
     uses: ./.github/workflows/aur-reusable.yml
 
