@@ -43,13 +43,8 @@ jobs:
         id: ruleset
         shell: bash
         run: |
-          RULESET_ID=$(gh ruleset list --repo "${{ github.repository }}" --json name,source,conditions | \
-            jq -r '.[] | select(.source == "branch") | select(.conditions.ref_name.include | if . then any(.[] | contains("main")) else false end) | .id' | head -1)
-          if [ -z "$RULESET_ID" ]; then
-            echo "Could not find default branch protection ruleset" >&2
-            exit 1
-          fi
-          echo "result=repos/${{ github.repository }}/rulesets/${RULESET_ID}" >> "$GITHUB_OUTPUT"
+          RULESET="repos/${{ github.repository }}/rulesets/${{ secrets.RULESET_ID }}"
+          echo "result=${RULESET}" >> "$GITHUB_OUTPUT"
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
