@@ -46,7 +46,7 @@ jobs:
           result-encoding: string
           script: |
             const [owner, repo] = '${{ github.repository }}'.split('/');
-            const response = await github.rest.repos.listRulesetsForRepo({ owner, repo });
+            const response = await github.rest.repos.listRepoRulesets({ owner, repo });
             const ruleset = response.data.find(r => {
               if (r.source !== 'branch') return false;
               const conditions = r.conditions?.ref_name;
