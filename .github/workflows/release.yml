@@ -41,27 +41,15 @@ jobs:
 
       - name: 🔍 Get default branch protection ruleset
         id: ruleset
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        with:
-          result-encoding: string
-          script: |
-            const [owner, repo] = '${{ github.repository }}'.split('/');
-            const response = await github.request('GET /repos/{owner}/{repo}/rulesets', { owner, repo });
-            const ruleset = response.data.find(r => {
-              if (r.source !== 'branch') return false;
-              const conditions = r.conditions?.ref_name;
-              if (!conditions) return false;
-              const include = conditions.include || [];
-              return include.some(item => 
-                item === '~DEFAULT_BRANCH' || 
-                item.endsWith('/main') || 
-                item.includes('main')
-              );
-            });
-            if (!ruleset) {
-              throw new Error('Could not find default branch protection ruleset');
-            }
-            return `repos/${owner}/${repo}/rulesets/${ruleset.id}`;
+        shell: bash
+        run: |
+          RULESET_ID=$(gh ruleset list --repo "${{ github.repository }}" --json name,source,conditions | \
+            jq -r '.[] | select(.source == "branch") | select(.conditions.ref_name.include | if . then any(.[] | contains("main")) else false end) | .id' | head -1)
+          if [ -z "$RULESET_ID" ]; then
+            echo "Could not find default branch protection ruleset" >&2
+            exit 1
+          fi
+          echo "result=repos/${{ github.repository }}/rulesets/${RULESET_ID}" >> "$GITHUB_OUTPUT"
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
