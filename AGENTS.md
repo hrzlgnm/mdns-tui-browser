@@ -195,6 +195,7 @@ The manpage should contain only essential usage information without excessive de
 
 - **Never** use `unsafe` code - this will cause CI to fail
 - **Never** add `#[allow(warnings)]` attributes to suppress warnings - fix the underlying issues instead
+- **Never** amend commits - commits will be squashed in GitHub, just create a new commit instead
 - **Always** format code before committing
 - **Always** run clippy and fix warnings (both debug and release)
 - **Don't** add dependencies without updating Cargo.toml properly
