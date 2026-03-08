@@ -22,9 +22,7 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 permissions:
-  contents: read # Needed for change detection and build
-  pull-requests: write # Needed to update PR status and labels
-  issues: write # Needed to create and update issues
+  contents: read # Minimal default needed for change detection
 
 concurrency:
   # On main, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
@@ -115,7 +113,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     permissions:
-      contents: write # Needed to upload build artifacts
+      contents: read # Needed to run build and pass permissions to reusable workflow
     uses: ./.github/workflows/build-reusable.yml
     secrets: inherit
     with:
