@@ -102,7 +102,7 @@ jobs:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ inputs.tagName }}" ]; then
+          if [ -n "${{ inputs.tagName }}" ]; then
             cargo auditable build --release --target ${{ matrix.target }}
           else
             cargo build --release --target ${{ matrix.target }}
@@ -112,7 +112,7 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
         shell: bash
         run: |
-          if [ "${{ inputs.tagName }}" ]; then
+          if [ -n "${{ inputs.tagName }}" ]; then
             cargo --locked auditable deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
           else
             cargo --locked deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
@@ -144,7 +144,7 @@ jobs:
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.exe" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns_tui_browser.pdb" "$staging/"
             7z a -tzip "$staging.zip" "$staging"
-            echo "ASSET=$staging.zip" >> $GITHUB_ENV
+            echo "ASSET=$staging.zip" >> "$GITHUB_ENV"
           else
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
@@ -155,10 +155,10 @@ jobs:
               cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             fi
             tar czf "$staging.tar.gz" "$staging"
-            echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
+            echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
             # Copy .deb file if it exists (Linux builds only)
-            if ls target/${{ matrix.target }}/debian/*.deb 1> /dev/null 2>&1; then
-              DEB_FILE=$(ls target/${{ matrix.target }}/debian/*.deb)
+            if find "target/${{ matrix.target }}/debian" -name '*.deb' -print -quit 2>/dev/null | grep -q .; then
+              DEB_FILE=$(find "target/${{ matrix.target }}/debian" -name '*.deb' -print -quit)
               cp "$DEB_FILE" .
               DEB_NAME=$(basename "$DEB_FILE")
               echo "DEB_ASSET=$DEB_NAME" >> "$GITHUB_ENV"
@@ -170,8 +170,8 @@ jobs:
                 cd "$TEMP_DIR" || exit 1
                 ar x "$(basename "$DEB_FILE")"
                 # Discover actual archive filenames using pattern matching
-                DATA_TAR=$(ls data.tar.* 2>/dev/null | head -1)
-                CONTROL_TAR=$(ls control.tar.* 2>/dev/null | head -1)
+                DATA_TAR=$(find . -name 'data.tar.*' -print -quit)
+                CONTROL_TAR=$(find . -name 'control.tar.*' -print -quit)
                 tar -xf "$DATA_TAR"
                 tar -xf "$CONTROL_TAR"
                 # Update control file for OpenWrt
@@ -186,14 +186,14 @@ jobs:
                 sed -i 's/libgcc-s1/libgcc1/g' "$TEMP_DIR/control"
                 # Create .ipk package - preserve control.tar.gz metadata
                 mkdir -p "$TEMP_DIR/data"
-                DATA_TAR=$(ls data.tar.* 2>/dev/null | head -1)
+                DATA_TAR=$(find . -name 'data.tar.*' -print -quit)
                 tar -xf "$DATA_TAR" -C "$TEMP_DIR/data"
                 cd "$TEMP_DIR/data" || exit 1
                 tar -czf ../data.tar.gz .
                 cd "$TEMP_DIR" || exit 1
                 # Re-create control.tar.gz from extracted directory to preserve metadata
                 mkdir -p tmp_control
-                CONTROL_TAR=$(ls control.tar.* 2>/dev/null | head -1)
+                CONTROL_TAR=$(find . -name 'control.tar.*' -print -quit)
                 tar -xf "$CONTROL_TAR" -C tmp_control
                 sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" tmp_control/control
                 sed -i 's/libgcc-s1/libgcc1/g' tmp_control/control

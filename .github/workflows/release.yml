@@ -83,16 +83,16 @@ jobs:
                 exit 1
                 ;;
             esac
-            echo "semantic-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "semantic-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
             echo "Dry run: would bump from $CURRENT_VERSION to $NEW_VERSION"
           else
             cargo set-version --bump "$VERSION_BUMP"
             NEW_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-            echo "semantic-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "semantic-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
             echo "Bumped version from $CURRENT_VERSION to $NEW_VERSION"
           fi
 
-      - name: ⚙️Set up SSH signing key
+      - name: ⚙️ Set up SSH signing key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_SIGNING_KEY }}" > ~/.ssh/id_ed25519_signing
@@ -107,13 +107,13 @@ jobs:
         run: |
           RULESET="${{ steps.ruleset.outputs.result }}"
           gh api \
-          -H "Accept: application/vnd.github+json" \
-          ${RULESET} | jq '.enforcement = "disabled"' | \
-          gh api \
-          --method PUT \
-          -H "Accept: application/vnd.github+json" \
-          ${RULESET} \
-          --input -
+            -H "Accept: application/vnd.github+json" \
+            "${RULESET}" | jq '.enforcement = "disabled"' | \
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "${RULESET}" \
+              --input -
 
       - name: 💾🏷️⬆️ Commit, tag and push
         if: ${{ !inputs.dry-run }}
@@ -129,13 +129,13 @@ jobs:
         run: |
           RULESET="${{ steps.ruleset.outputs.result }}"
           gh api \
-          -H "Accept: application/vnd.github+json" \
-          ${RULESET} | jq '.enforcement = "active"' | \
-          gh api \
-          --method PUT \
-          -H "Accept: application/vnd.github+json" \
-          ${RULESET} \
-          --input -
+            -H "Accept: application/vnd.github+json" \
+            "${RULESET}" | jq '.enforcement = "active"' | \
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "${RULESET}" \
+              --input -
 
       - name: 🧹 Cleanup SSH signing key
         if: always()
