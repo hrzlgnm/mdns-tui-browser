@@ -17,7 +17,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: write # Needed to upload checksums and publish release assets
 
 jobs:
   tag:

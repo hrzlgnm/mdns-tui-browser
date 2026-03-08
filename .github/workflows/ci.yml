@@ -22,9 +22,9 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 permissions:
-  contents: read
-  pull-requests: write
-  issues: write
+  contents: read # Needed for change detection and build
+  pull-requests: write # Needed to update PR status and labels
+  issues: write # Needed to create and update issues
 
 concurrency:
   # On main, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
@@ -104,8 +104,8 @@ jobs:
 
   tests:
     permissions:
-      contents: read
-      checks: write # required for action-junit-report annotation
+      contents: read # Needed to checkout code for testing
+      checks: write # Required for action-junit-report annotation
     needs: changes
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tests == 'true'
     uses: ./.github/workflows/test-reusable.yml
@@ -115,7 +115,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     permissions:
-      contents: write
+      contents: write # Needed to upload build artifacts
     uses: ./.github/workflows/build-reusable.yml
     secrets: inherit
     with:
@@ -126,7 +126,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.aur == 'true'
     permissions:
-      packages: read
+      packages: read # Needed to read container image for AUR build
     uses: ./.github/workflows/aur-reusable.yml
 
   winget:
@@ -134,7 +134,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.winget == 'true'
     permissions:
-      contents: read
+      contents: read # Needed to download release assets for winget submission
     uses: ./.github/workflows/winget-reusable.yml
     secrets: inherit
 
@@ -146,7 +146,7 @@ jobs:
     name: "📦 Cache tools"
     if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     permissions:
-      contents: read
+      contents: read # Needed to checkout code for caching tools
     uses: ./.github/workflows/cache-tools-reusable.yml
 
   all-required-green: # This job does nothing and is only used for the branch protection

@@ -21,10 +21,10 @@ on:
         default: false
 
 permissions:
-  actions: write # to trigger other actions and workflow dispatch
-  contents: write # to update version and create tag
-  id-token: write # for sbom association with build
-  attestations: write # to create attestations
+  actions: write # Needed to trigger other workflows and workflow dispatch
+  contents: write # Needed to update version and create tags
+  id-token: write # Needed for SBOM association with build
+  attestations: write # Needed to create attestations
 
 jobs:
   release:
