@@ -35,11 +35,11 @@ jobs:
           INPUT_SEMVER: ${{ inputs.semver }}
         run: |
           if [ -n "$EVENT_NAME" ]; then
-            echo "tag=$EVENT_TAG" >> $GITHUB_OUTPUT
+            echo "tag=$EVENT_TAG" >> "$GITHUB_OUTPUT"
           elif [ -n "$INPUT_TAG" ]; then
-            echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           elif [ -n "$INPUT_SEMVER" ]; then
-            echo "tag=v$INPUT_SEMVER" >> $GITHUB_OUTPUT
+            echo "tag=v$INPUT_SEMVER" >> "$GITHUB_OUTPUT"
           else
             echo "Error: No tag information available"
             exit 1
@@ -60,19 +60,19 @@ jobs:
           ALGORITHM: ${{ matrix.algorithm }}
         run: |
           set -o errexit
-          
+
           ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
-          if [[ ! " $ALLOWED_ALGORITHMS " =~ " $ALGORITHM " ]]; then
+          if [[ ! " $ALLOWED_ALGORITHMS " =~ $ALGORITHM ]]; then
             echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
             exit 1
           fi
-          
+
           CMD="${ALGORITHM}sum"
-          
+
           curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
           curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
           for file in *; do
-            if [ -f "$file" ] && [[ "$file" != *.sha* ]]; then
+            if [ -f "$file" ] && [[ ! "$file" =~ \.sha ]]; then
               "$CMD" "$file" > "$file.$ALGORITHM"
             fi
           done

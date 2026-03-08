@@ -28,9 +28,9 @@ jobs:
           TAG_NAME: ${{ steps.release-info.outputs.tagName }}
           VERSION: ${{ steps.release-info.outputs.version }}
         run: |
-          URL=https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-Windows-x86_64.zip
-          echo "URL=$URL" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-Windows-x86_64.zip"
+          echo "URL=$URL" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Detected latest tag name: $TAG_NAME"
           echo "URL: $URL"
           echo "Version: $VERSION"
@@ -51,15 +51,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          komac  sync-fork
+          komac sync-fork
 
       - name: 🆙 winget package
         env:
           GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           komac update hrzlgnm.mdns-tui-browser \
-            --version $VERSION \
-            --urls $URL \
+            --version "$VERSION" \
+            --urls "$URL" \
             --submit
 
       - name: 🧹 Cleanup merged branches

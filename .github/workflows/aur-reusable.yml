@@ -66,39 +66,40 @@ jobs:
           GENERATE_SCRIPT: ${{ matrix.package.generate_script }}
         shell: bash
         run: |
-          su runner -c '
+          su runner -c "
             set -o errexit
             mkdir -p ~/lint
-            o=$(pwd)
-            "$GENERATE_SCRIPT" "$VERSION" "$SHA256" > ~/lint/PKGBUILD
+            o=\$(pwd)
+            \"\$GENERATE_SCRIPT\" \"\$VERSION\" \"\$SHA256\" > ~/lint/PKGBUILD
             cd ~/lint
             cat PKGBUILD
-            "$o/packaging/aur/makepkg-lint.sh"
-          '
+            \"\$o/packaging/aur/makepkg-lint.sh\"
+          "
+
       - name: 🛠️ Setup Deployment keys
         if: github.event.release.tag_name
         shell: bash
         run: |
           chown -R runner:runner .
-          su runner -c '
+          su runner -c "
             set -o errexit
             mkdir -p ~/.ssh
-            printf '%s\n' "${{ secrets.AUR_DEPLOY_KEY }}" > ~/.ssh/aur
+            printf '%s\n' \"\${{ secrets.AUR_DEPLOY_KEY }}\" > ~/.ssh/aur
             chmod 600 ~/.ssh/aur
-            echo "Host aur.archlinux.org" >> ~/.ssh/config
-            echo "  IdentityFile ~/.ssh/aur" >> ~/.ssh/config
-            echo "  User aur" >> ~/.ssh/config
+            echo \"Host aur.archlinux.org\" >> ~/.ssh/config
+            echo \"  IdentityFile ~/.ssh/aur\" >> ~/.ssh/config
+            echo \"  User aur\" >> ~/.ssh/config
             ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
-          '
+          "
 
       - name: 🔄 Clone AUR Repo
         if: github.event.release.tag_name
         shell: bash
         run: |
-          su runner -c '
+          su runner -c "
             set -o errexit
-            git clone --depth=1 "ssh://aur@aur.archlinux.org/${{ matrix.package.name }}.git" ~/aur
-          '
+            git clone --depth=1 \"ssh://aur@aur.archlinux.org/\${{ matrix.package.name }}.git\" ~/aur
+          "
 
       - name: 🔍 Check version
         if: github.event.release.tag_name
@@ -106,17 +107,17 @@ jobs:
           RELEASE_VERSION: ${{ needs.release-info.outputs.version }}
         shell: bash
         run: |
-          su runner -c '
+          su runner -c "
             set -o errexit
             cd ~/aur
             if [[ -f PKGBUILD ]]; then
-              CURRENT_VERSION=$(source PKGBUILD && echo $pkgver)
-              if [[ "$(printf "%s\n%s" "$CURRENT_VERSION" "$RELEASE_VERSION" | sort -V | head -n1)" != "$CURRENT_VERSION" ]] || [[ "$CURRENT_VERSION" == "$RELEASE_VERSION" ]]; then
-                echo "New version ($RELEASE_VERSION) is not higher than the current version ($CURRENT_VERSION). Exiting."
+              CURRENT_VERSION=\$(source PKGBUILD && echo \$pkgver)
+              if [[ \"\$(printf \"%s\n%s\" \"\$CURRENT_VERSION\" \"\$RELEASE_VERSION\" | sort -V | head -n1)\" != \"\$CURRENT_VERSION\" ]] || [[ \"\$CURRENT_VERSION\" == \"\$RELEASE_VERSION\" ]]; then
+                echo \"New version (\$RELEASE_VERSION) is not higher than the current version (\$CURRENT_VERSION). Exiting.\"
                 exit 1
               fi
             fi
-          '
+          "
 
       - name: 🌀 Generate PKGBUILD update and publish
         if: github.event.release.tag_name
@@ -125,20 +126,20 @@ jobs:
           SHA256: ${{ steps.sha256sums.outputs.sha256 }}
           GENERATE_SCRIPT: ${{ matrix.package.generate_script }}
         run: |
-          su runner -c '
+          su runner -c "
             set -o errexit
-            "$GENERATE_SCRIPT" "$VERSION" "$SHA256" > ~/aur/PKGBUILD
+            \"\$GENERATE_SCRIPT\" \"\$VERSION\" \"\$SHA256\" > ~/aur/PKGBUILD
             cd ~/aur
-            if [[ -z $(git status --porcelain) ]]; then
-              echo "No changes"
+            if [[ -z \$(git status --porcelain) ]]; then
+              echo \"No changes\"
               exit 0
             fi
             makepkg --printsrcinfo > .SRCINFO
             makepkg
             makepkg --install --noconfirm
-            git config user.name "hrzlgnm"
-            git config user.email "hrzlgnm@users.noreply.github.com"
+            git config user.name \"hrzlgnm\"
+            git config user.email \"hrzlgnm@users.noreply.github.com\"
             git add PKGBUILD .SRCINFO
-            git commit -m "New upstream release $VERSION"
+            git commit -m \"New upstream release \$VERSION\"
             git push origin master
-          '
+          "
