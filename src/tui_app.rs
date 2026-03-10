@@ -2451,44 +2451,6 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     lines
 }
 
-/// Runs the TUI application for mDNS service browsing.
-///
-/// # Arguments
-/// * `user_service_types` - Service types to browse for
-/// * `interfaces` - Optional list of network interface names to bind to.
-///   If `Some`, only the specified interfaces will be used.
-///   If `None`, all available interfaces will be used (default behavior).
-///   The expected string format is the interface name (e.g., "eth0", "en0").
-///   An empty vector `Some(vec![])` will result in no interfaces being used.
-///   Used to disable all interfaces before enabling the requested ones.
-/// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
-/// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
-/// * `loaded_state` - Optional JSON string to load state from file (view-only mode)
-///
-/// # Example
-/// ```no_run
-/// use std::collections::HashSet;
-///
-/// async fn demo() -> Result<(), Box<dyn std::error::Error>> {
-///     let service_types = HashSet::new();
-///
-///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), None, None, false, false, None).await;
-///
-///     // Use specific interfaces
-///     run_tui(
-///         service_types,
-///         Some(vec!["eth0".into()]),
-///         false,
-///         false,
-///         None,
-///     )
-///     .await
-/// }
-/// ```
-/// Configures network interfaces for mDNS discovery.
-/// Disables all interfaces first, then enables only the requested ones,
-/// and applies IPv4/IPv6 masks afterward.
 fn configure_interfaces(
     mdns_ref: &ServiceDaemon,
     interfaces: &[String],
@@ -2522,6 +2484,42 @@ fn configure_interfaces(
     Ok(())
 }
 
+/// Runs the TUI application for mDNS service browsing.
+///
+/// # Arguments
+/// * `user_service_types` - Service types to browse for
+/// * `interfaces` - Optional list of network interface names to use for mdns.
+///   If `Some`, only the specified interfaces will be used.
+///   If `None`, all available interfaces will be used (default behavior).
+///   The expected string format is the interface name (e.g., "eth0", "en0").
+/// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
+/// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
+/// * `loaded_state` - Optional JSON string to load state from file (view-only mode)
+///
+/// # Example
+/// ```no_run
+/// use std::collections::HashSet;
+///
+/// async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+///     let service_types = HashSet::new();
+///
+///     // Use default interfaces (all available)
+///     run_tui(service_types.clone(), None, None, false, false, None).await;
+///
+///     // Use specific interfaces
+///     run_tui(
+///         service_types,
+///         Some(vec!["eth0".into()]),
+///         false,
+///         false,
+///         None,
+///     )
+///     .await
+/// }
+/// ```
+/// Configures network interfaces for mDNS discovery.
+/// Disables all interfaces first, then enables only the requested ones,
+/// and applies IPv4/IPv6 masks afterward.
 pub async fn run_tui(
     user_service_types: HashSet<String>,
     interfaces: Option<Vec<String>>,
