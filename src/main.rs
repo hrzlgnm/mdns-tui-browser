@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     // Validate interfaces before starting
-    let (interfaces, available_interfaces) = match cli.interfaces {
+    let interfaces = match cli.interfaces {
         Some(ifs) => {
             let available: HashSet<String> = get_if_addrs()
                 .map_err(|e| format!("Failed to get network interfaces: {}", e))?
@@ -87,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for interface in &ifs {
                 if !available.contains(interface) {
                     return Err(format!(
-                        "Interface '{}' not found. Available interfaces: {}",
+                        "Interface '{}' not found or is down. Available interfaces: {}",
                         interface,
                         sorted
                             .iter()
@@ -98,9 +98,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .into());
                 }
             }
-            (Some(ifs), Some(available.into_iter().collect::<Vec<_>>()))
+            Some(ifs)
         }
-        None => (None, None),
+        None => None,
     };
 
     let disable_ipv4 = cli.no_ipv4;
@@ -118,7 +118,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rt.block_on(tui_app::run_tui(
         user_requested_service_types,
         interfaces,
-        available_interfaces,
         disable_ipv4,
         disable_ipv6,
         loaded_state,
