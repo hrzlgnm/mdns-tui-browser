@@ -2460,7 +2460,6 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///   If `None`, all available interfaces will be used (default behavior).
 ///   The expected string format is the interface name (e.g., "eth0", "en0").
 ///   An empty vector `Some(vec![])` will result in no interfaces being used.
-/// * `available_interfaces` - List of all available network interface names.
 ///   Used to disable all interfaces before enabling the requested ones.
 /// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
 /// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
@@ -2480,7 +2479,6 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     run_tui(
 ///         service_types,
 ///         Some(vec!["eth0".into()]),
-///         Some(vec!["eth0".into(), "lo".into()]),
 ///         false,
 ///         false,
 ///         None,
@@ -2488,10 +2486,45 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     .await
 /// }
 /// ```
+/// Configures network interfaces for mDNS discovery.
+/// Disables all interfaces first, then enables only the requested ones,
+/// and applies IPv4/IPv6 masks afterward.
+fn configure_interfaces(
+    mdns_ref: &ServiceDaemon,
+    interfaces: &[String],
+    disable_ipv4: bool,
+    disable_ipv6: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !interfaces.is_empty() {
+        mdns_ref
+            .disable_interface(IfKind::All)
+            .map_err(|e| format!("Failed to disable all interfaces: {}", e))?;
+
+        for interface in interfaces {
+            mdns_ref
+                .enable_interface(interface)
+                .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
+        }
+    }
+
+    if disable_ipv4 {
+        mdns_ref
+            .disable_interface(IfKind::IPv4)
+            .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
+    }
+
+    if disable_ipv6 {
+        mdns_ref
+            .disable_interface(IfKind::IPv6)
+            .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
+    }
+
+    Ok(())
+}
+
 pub async fn run_tui(
     user_service_types: HashSet<String>,
     interfaces: Option<Vec<String>>,
-    available_interfaces: Option<Vec<String>>,
     disable_ipv4: bool,
     disable_ipv6: bool,
     loaded_state: Option<String>,
@@ -2523,33 +2556,12 @@ pub async fn run_tui(
 
     if let Some(ref mdns_ref) = mdns {
         if let Some(ref ifs) = interfaces {
-            let available = available_interfaces.ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Available interfaces required when --interfaces is set",
-                )
-            })?;
-
-            for interface in &available {
-                mdns_ref
-                    .disable_interface(interface)
-                    .map_err(|e| format!("Failed to disable interface '{}': {}", interface, e))?;
-            }
-
-            for interface in ifs {
-                mdns_ref
-                    .enable_interface(interface)
-                    .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
-            }
-        }
-
-        if disable_ipv4 {
+            configure_interfaces(mdns_ref, ifs, disable_ipv4, disable_ipv6)?;
+        } else if disable_ipv4 {
             mdns_ref
                 .disable_interface(IfKind::IPv4)
                 .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
-        }
-
-        if disable_ipv6 {
+        } else if disable_ipv6 {
             mdns_ref
                 .disable_interface(IfKind::IPv6)
                 .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
