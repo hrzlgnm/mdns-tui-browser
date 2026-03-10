@@ -87,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for interface in &ifs {
                 if !available.contains(interface) {
                     return Err(format!(
-                        "Interface '{}' not found or is down. Available interfaces: {}",
+                        "Interface '{}' not found. Available interfaces: {}",
                         interface,
                         sorted
                             .iter()

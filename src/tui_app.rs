@@ -2486,6 +2486,42 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
 ///     .await
 /// }
 /// ```
+/// Configures network interfaces for mDNS discovery.
+/// Disables all interfaces first, then enables only the requested ones,
+/// and applies IPv4/IPv6 masks afterward.
+fn configure_interfaces(
+    mdns_ref: &ServiceDaemon,
+    interfaces: &[String],
+    disable_ipv4: bool,
+    disable_ipv6: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !interfaces.is_empty() {
+        mdns_ref
+            .disable_interface(IfKind::All)
+            .map_err(|e| format!("Failed to disable all interfaces: {}", e))?;
+
+        for interface in interfaces {
+            mdns_ref
+                .enable_interface(interface)
+                .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
+        }
+    }
+
+    if disable_ipv4 {
+        mdns_ref
+            .disable_interface(IfKind::IPv4)
+            .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
+    }
+
+    if disable_ipv6 {
+        mdns_ref
+            .disable_interface(IfKind::IPv6)
+            .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
+    }
+
+    Ok(())
+}
+
 pub async fn run_tui(
     user_service_types: HashSet<String>,
     interfaces: Option<Vec<String>>,
@@ -2520,24 +2556,12 @@ pub async fn run_tui(
 
     if let Some(ref mdns_ref) = mdns {
         if let Some(ref ifs) = interfaces {
-            mdns_ref
-                .disable_interface(IfKind::All)
-                .map_err(|e| format!("Failed to disable all: {}", e))?;
-
-            for interface in ifs {
-                mdns_ref
-                    .enable_interface(interface)
-                    .map_err(|e| format!("Failed to enable interface '{}': {}", interface, e))?;
-            }
-        }
-
-        if disable_ipv4 {
+            configure_interfaces(mdns_ref, ifs, disable_ipv4, disable_ipv6)?;
+        } else if disable_ipv4 {
             mdns_ref
                 .disable_interface(IfKind::IPv4)
                 .map_err(|e| format!("Failed to disable IPv4: {}", e))?;
-        }
-
-        if disable_ipv6 {
+        } else if disable_ipv6 {
             mdns_ref
                 .disable_interface(IfKind::IPv6)
                 .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
