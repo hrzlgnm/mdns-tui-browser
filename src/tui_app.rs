@@ -2488,12 +2488,10 @@ fn configure_interfaces(
 ///
 /// # Arguments
 /// * `user_service_types` - Service types to browse for
-/// * `interfaces` - Optional list of network interface names to bind to.
+/// * `interfaces` - Optional list of network interface names to use for mdns.
 ///   If `Some`, only the specified interfaces will be used.
 ///   If `None`, all available interfaces will be used (default behavior).
 ///   The expected string format is the interface name (e.g., "eth0", "en0").
-///   An empty vector `Some(vec![])` will result in no interfaces being used.
-///   Used to disable all interfaces before enabling the requested ones.
 /// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
 /// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
 /// * `loaded_state` - Optional JSON string to load state from file (view-only mode)
