@@ -100,7 +100,7 @@ jobs:
         run: |
           su runner -c "
             set -o errexit
-            git clone --depth=1 \"ssh://aur@aur.archlinux.org/\${{ matrix.package.name }}.git\" ~/aur
+            git clone --depth=1 \"ssh://aur@aur.archlinux.org/${{ matrix.package.name }}.git\" ~/aur
           "
 
       - name: 🔍 Check version
