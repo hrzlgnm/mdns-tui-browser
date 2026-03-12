@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
+    Frame,
     layout::Rect,
     style::Color,
     text::Line,
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 
 use crate::scroll::ScrollState;
@@ -713,9 +713,11 @@ mod tests {
     fn test_generate_help_content() {
         let content = generate_help_content();
         assert!(!content.is_empty());
-        assert!(content
-            .iter()
-            .any(|line| line.to_string().contains("Help Popup Controls")));
+        assert!(
+            content
+                .iter()
+                .any(|line| line.to_string().contains("Help Popup Controls"))
+        );
     }
 
     #[test]
@@ -723,9 +725,11 @@ mod tests {
         let metrics: BTreeMap<String, u64> = BTreeMap::new();
         let content = generate_metrics_content(&metrics);
         assert!(!content.is_empty());
-        assert!(content
-            .iter()
-            .any(|line| line.to_string().contains("No metrics collected yet")));
+        assert!(
+            content
+                .iter()
+                .any(|line| line.to_string().contains("No metrics collected yet"))
+        );
     }
 
     #[test]
