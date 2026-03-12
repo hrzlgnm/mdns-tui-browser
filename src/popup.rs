@@ -4,13 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
-    Frame,
     layout::Rect,
     style::Color,
     text::Line,
     widgets::{Block, Borders, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::scroll::ScrollState;
@@ -37,6 +37,7 @@ fn calculate_wrapped_line_count(lines: &[Line], width: u16) -> usize {
 pub struct HelpPopup {
     pub active: bool,
     pub scroll: ScrollState,
+    should_open_release_notes: bool,
 }
 
 impl HelpPopup {
@@ -44,6 +45,7 @@ impl HelpPopup {
         Self {
             active: false,
             scroll: ScrollState::new(),
+            should_open_release_notes: false,
         }
     }
 
@@ -81,6 +83,13 @@ impl HelpPopup {
                 );
                 true
             }
+            KeyCode::Char('r')
+                if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE =>
+            {
+                self.should_open_release_notes = true;
+                self.scroll.reset();
+                true
+            }
             _ => {
                 self.active = false;
                 self.scroll.reset();
@@ -93,6 +102,11 @@ impl HelpPopup {
         if self.active {
             render_help_popup(f, self.scroll.offset);
         }
+    }
+
+    /// Returns and clears the one-shot release-notes action flag.
+    pub fn take_release_notes_flag(&mut self) -> bool {
+        std::mem::take(&mut self.should_open_release_notes)
     }
 }
 
@@ -323,8 +337,9 @@ pub fn render_metrics_popup(
 pub fn generate_help_content() -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(""),
-        Line::from(" Help Controls:"),
+        Line::from(" Help Popup Controls:"),
         Line::from("   ↑/↓               - Scroll this help content"),
+        Line::from("   r                 - Open release notes in browser"),
         Line::from("   Any other key     - Close this help popup"),
         Line::from(" "),
         Line::from(" Navigation:"),
@@ -550,6 +565,56 @@ mod tests {
     }
 
     #[test]
+    fn test_release_notes_flag_lifecycle() {
+        use crossterm::event::KeyEvent;
+
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let mut popup = HelpPopup::new();
+        popup.active = true;
+        popup.scroll.offset = 5;
+
+        assert!(popup.active);
+        assert_eq!(popup.scroll.offset, 5);
+        assert!(!popup.take_release_notes_flag());
+
+        let r_key = KeyEvent::from(crossterm::event::KeyCode::Char('r'));
+        popup.handle_key_event(r_key, terminal_area);
+
+        assert!(popup.active);
+        assert_eq!(popup.scroll.offset, 0);
+        assert!(popup.take_release_notes_flag());
+        assert!(!popup.take_release_notes_flag());
+    }
+
+    #[test]
+    fn test_release_notes_flag_guard_modified_r() {
+        use crossterm::event::{KeyEvent, KeyEventKind, KeyModifiers};
+
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let mut popup = HelpPopup::new();
+        popup.active = true;
+        popup.scroll.offset = 5;
+
+        let r_with_modifier =
+            KeyEvent::new_with_kind(KeyCode::Char('r'), KeyModifiers::SHIFT, KeyEventKind::Press);
+        popup.handle_key_event(r_with_modifier, terminal_area);
+
+        assert!(!popup.take_release_notes_flag());
+
+        popup.active = true;
+        popup.scroll.offset = 5;
+
+        let r_release = KeyEvent::new_with_kind(
+            KeyCode::Char('r'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+        popup.handle_key_event(r_release, terminal_area);
+
+        assert!(!popup.take_release_notes_flag());
+    }
+
+    #[test]
     fn test_popup_state_new() {
         let state = PopupState::new();
         assert!(!state.help_popup.is_active());
@@ -648,11 +713,9 @@ mod tests {
     fn test_generate_help_content() {
         let content = generate_help_content();
         assert!(!content.is_empty());
-        assert!(
-            content
-                .iter()
-                .any(|line| line.to_string().contains("Help Controls"))
-        );
+        assert!(content
+            .iter()
+            .any(|line| line.to_string().contains("Help Popup Controls")));
     }
 
     #[test]
@@ -660,11 +723,9 @@ mod tests {
         let metrics: BTreeMap<String, u64> = BTreeMap::new();
         let content = generate_metrics_content(&metrics);
         assert!(!content.is_empty());
-        assert!(
-            content
-                .iter()
-                .any(|line| line.to_string().contains("No metrics collected yet"))
-        );
+        assert!(content
+            .iter()
+            .any(|line| line.to_string().contains("No metrics collected yet")));
     }
 
     #[test]

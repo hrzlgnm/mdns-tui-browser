@@ -794,8 +794,21 @@ impl AppState {
             return true;
         }
         if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
-            self.popup_state
-                .handle_key_event(key, self.terminal_area, &self.metrics)
+            let result = self
+                .popup_state
+                .handle_key_event(key, self.terminal_area, &self.metrics);
+            if self.popup_state.help_popup.take_release_notes_flag() {
+                let release_url = format!(
+                    "https://github.com/hrzlgnm/mdns-tui-browser/releases/tag/v{}",
+                    env!("CARGO_PKG_VERSION")
+                );
+                if let Err(err) = open::that(&release_url)
+                    && let Ok(mut msg) = self.status_message.try_lock()
+                {
+                    *msg = format!("Failed to open browser: {}", err);
+                }
+            }
+            result
         } else if self.is_input_active()
             && matches!(
                 key.code,
@@ -4769,6 +4782,41 @@ mod tests {
         assert!(result);
         assert!(!state.popup_state.help_popup.active); // Should close
         assert_eq!(state.popup_state.help_popup.scroll.offset, 0); // Should reset
+    }
+
+    #[test]
+    fn test_press_r_flips_release_notes_once() {
+        use crossterm::event::KeyEventKind;
+
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let mut state = create_test_app_state();
+        state.popup_state.help_popup.active = true;
+        state.popup_state.help_popup.scroll.offset = 5;
+
+        let r_key =
+            KeyEvent::new_with_kind(KeyCode::Char('r'), KeyModifiers::NONE, KeyEventKind::Press);
+        let result = state
+            .popup_state
+            .help_popup
+            .handle_key_event(r_key, terminal_area);
+        assert!(result);
+
+        assert!(state.popup_state.help_popup.active);
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 0);
+        assert!(state.popup_state.help_popup.take_release_notes_flag());
+        assert!(!state.popup_state.help_popup.take_release_notes_flag());
+    }
+
+    #[test]
+    fn test_metrics_path_does_not_flip_release_notes() {
+        let mut state = create_test_app_state();
+        state.popup_state.metrics_popup.active = true;
+
+        let key_event = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let result = state.handle_key_event(key_event);
+        assert!(result);
+
+        assert!(!state.popup_state.help_popup.take_release_notes_flag());
     }
 
     // Metrics tests
