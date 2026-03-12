@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -83,11 +83,8 @@ impl HelpPopup {
                 );
                 true
             }
-            KeyCode::Char('r')
-                if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE =>
-            {
+            KeyCode::Char('r') => {
                 self.should_open_release_notes = true;
-                self.scroll.reset();
                 true
             }
             _ => {
@@ -581,36 +578,7 @@ mod tests {
         popup.handle_key_event(r_key, terminal_area);
 
         assert!(popup.active);
-        assert_eq!(popup.scroll.offset, 0);
         assert!(popup.take_release_notes_flag());
-        assert!(!popup.take_release_notes_flag());
-    }
-
-    #[test]
-    fn test_release_notes_flag_guard_modified_r() {
-        use crossterm::event::{KeyEvent, KeyEventKind, KeyModifiers};
-
-        let terminal_area = Rect::new(0, 0, 80, 24);
-        let mut popup = HelpPopup::new();
-        popup.active = true;
-        popup.scroll.offset = 5;
-
-        let r_with_modifier =
-            KeyEvent::new_with_kind(KeyCode::Char('r'), KeyModifiers::SHIFT, KeyEventKind::Press);
-        popup.handle_key_event(r_with_modifier, terminal_area);
-
-        assert!(!popup.take_release_notes_flag());
-
-        popup.active = true;
-        popup.scroll.offset = 5;
-
-        let r_release = KeyEvent::new_with_kind(
-            KeyCode::Char('r'),
-            KeyModifiers::NONE,
-            KeyEventKind::Release,
-        );
-        popup.handle_key_event(r_release, terminal_area);
-
         assert!(!popup.take_release_notes_flag());
     }
 

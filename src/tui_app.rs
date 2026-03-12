@@ -4802,7 +4802,6 @@ mod tests {
         assert!(result);
 
         assert!(state.popup_state.help_popup.active);
-        assert_eq!(state.popup_state.help_popup.scroll.offset, 0);
         assert!(state.popup_state.help_popup.take_release_notes_flag());
         assert!(!state.popup_state.help_popup.take_release_notes_flag());
     }
