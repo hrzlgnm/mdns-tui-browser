@@ -1688,13 +1688,13 @@ fn ui(f: &mut Frame, app_state: &AppState) {
         }
     }
 
-    // Render status message if present
-    render_status_message(f, app_state);
-
     // Render popups if active
     app_state
         .popup_state
         .render(f, app_state.terminal_area, &app_state.metrics);
+
+    // Render status message if present (after popups so errors appear on top)
+    render_status_message(f, app_state);
 }
 
 struct MainLayout {
