@@ -214,6 +214,7 @@ The exported JSON contains comprehensive information about the current applicati
 
 ### Help Popup Controls
 - <kbd>↑</kbd>/<kbd>↓</kbd> - Scroll help content
+- <kbd>r</kbd> - Open release notes in browser
 - Any other key - Close help popup
 
 ### Quick Filter Mode
@@ -270,6 +271,7 @@ The application is built with:
 - **serde_json** - JSON serialization support
 - **if-addrs** - Network interface enumeration
 - **nix** - Unix system calls (signal handling for Ctrl+Z suspend)
+- **open** - Cross-platform library to open URLs in the browser
 
 ### Safety Policy
 

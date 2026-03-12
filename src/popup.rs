@@ -37,6 +37,7 @@ fn calculate_wrapped_line_count(lines: &[Line], width: u16) -> usize {
 pub struct HelpPopup {
     pub active: bool,
     pub scroll: ScrollState,
+    should_open_release_notes: bool,
 }
 
 impl HelpPopup {
@@ -44,6 +45,7 @@ impl HelpPopup {
         Self {
             active: false,
             scroll: ScrollState::new(),
+            should_open_release_notes: false,
         }
     }
 
@@ -81,6 +83,10 @@ impl HelpPopup {
                 );
                 true
             }
+            KeyCode::Char('r') => {
+                self.should_open_release_notes = true;
+                true
+            }
             _ => {
                 self.active = false;
                 self.scroll.reset();
@@ -93,6 +99,11 @@ impl HelpPopup {
         if self.active {
             render_help_popup(f, self.scroll.offset);
         }
+    }
+
+    /// Returns and clears the one-shot release-notes action flag.
+    pub fn take_release_notes_flag(&mut self) -> bool {
+        std::mem::take(&mut self.should_open_release_notes)
     }
 }
 
@@ -323,8 +334,9 @@ pub fn render_metrics_popup(
 pub fn generate_help_content() -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(""),
-        Line::from(" Help Controls:"),
+        Line::from(" Help Popup Controls:"),
         Line::from("   ↑/↓               - Scroll this help content"),
+        Line::from("   r                 - Open release notes in browser"),
         Line::from("   Any other key     - Close this help popup"),
         Line::from(" "),
         Line::from(" Navigation:"),
@@ -550,6 +562,27 @@ mod tests {
     }
 
     #[test]
+    fn test_release_notes_flag_lifecycle() {
+        use crossterm::event::KeyEvent;
+
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let mut popup = HelpPopup::new();
+        popup.active = true;
+        popup.scroll.offset = 5;
+
+        assert!(popup.active);
+        assert_eq!(popup.scroll.offset, 5);
+        assert!(!popup.take_release_notes_flag());
+
+        let r_key = KeyEvent::from(crossterm::event::KeyCode::Char('r'));
+        popup.handle_key_event(r_key, terminal_area);
+
+        assert!(popup.active);
+        assert!(popup.take_release_notes_flag());
+        assert!(!popup.take_release_notes_flag());
+    }
+
+    #[test]
     fn test_popup_state_new() {
         let state = PopupState::new();
         assert!(!state.help_popup.is_active());
@@ -651,7 +684,7 @@ mod tests {
         assert!(
             content
                 .iter()
-                .any(|line| line.to_string().contains("Help Controls"))
+                .any(|line| line.to_string().contains("Help Popup Controls"))
         );
     }
 
