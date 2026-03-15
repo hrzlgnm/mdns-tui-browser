@@ -791,6 +791,13 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.validate_selected_type();
 
+        // Ensure filtered cache is up to date before computing layout
+        let cache_was_rebuilt = self.update_filtered_cache();
+        if cache_was_rebuilt || !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
+        }
+
         let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
 
         // Update state with current visible counts
@@ -799,13 +806,6 @@ impl AppState {
 
         // Update details scroll visible items based on details area
         self.details_scroll.visible_items = layout.details_area.height.saturating_sub(2) as usize;
-
-        // Ensure filtered cache is up to date for rendering
-        let cache_was_rebuilt = self.update_filtered_cache();
-        if cache_was_rebuilt || !self.cached_sorted {
-            self.sort_filtered_services();
-            self.cached_sorted = true;
-        }
 
         // Validate selected service is within bounds after cache rebuild
         self.validate_selected_service();
