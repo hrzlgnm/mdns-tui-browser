@@ -129,6 +129,35 @@ pub struct ServiceEntry {
 }
 
 impl ServiceEntry {
+    /// Returns the URL to open this service if applicable.
+    ///
+    /// Returns `Some(url)` if:
+    /// - The service type contains `_http._tcp`, or
+    /// - The TXT records contain an `internal_url` key
+    pub fn get_url(&self) -> Option<String> {
+        if self.service_type.contains("_http._tcp") {
+            let host = self.host.trim_end_matches('.');
+            let path = self
+                .txt
+                .iter()
+                .filter_map(|txt| txt.split_once('='))
+                .find(|(key, _)| *key == "path")
+                .map(|(_, value)| value)
+                .unwrap_or("/");
+            return Some(format!("http://{}:{}{}", host, self.port, path));
+        }
+
+        for txt in &self.txt {
+            if let Some((key, value)) = txt.split_once('=')
+                && key == "internal_url"
+            {
+                return Some(value.to_string());
+            }
+        }
+
+        None
+    }
+
     /// Marks the service as offline at the given timestamp.
     ///
     /// Updates `online` to `false`, sets `updated_at_micros` and `last_offline_micros`.
