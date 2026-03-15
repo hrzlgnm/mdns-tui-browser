@@ -762,12 +762,19 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.validate_selected_type();
 
+        let left_panel_width = calculate_left_panel_width(&self.service_types, terminal_area.width);
+        let services_count = self.get_filtered_services().len();
         let layout = if self.is_input_active() {
-            create_filter_input_layout(terminal_area)
+            create_filter_input_layout(terminal_area, left_panel_width, services_count)
         } else {
-            create_main_layout(terminal_area, !self.filter_input.is_empty())
+            create_main_layout(
+                terminal_area,
+                !self.filter_input.is_empty(),
+                left_panel_width,
+                services_count,
+            )
         };
-        let visible_counts = calculate_visible_counts(&layout);
+        let visible_counts = calculate_visible_counts(&layout, services_count);
 
         // Update state with current visible counts
         self.types_scroll.visible_items = visible_counts.types;
@@ -1655,12 +1662,19 @@ fn handle_browse_failure(
 }
 
 fn ui(f: &mut Frame, app_state: &AppState) {
+    let left_panel_width = calculate_left_panel_width(&app_state.service_types, f.area().width);
+    let services_count = app_state.get_filtered_services_readonly().len();
     let layout = if app_state.is_input_active() {
-        create_filter_input_layout(f.area())
+        create_filter_input_layout(f.area(), left_panel_width, services_count)
     } else {
-        create_main_layout(f.area(), !app_state.filter_input.is_empty())
+        create_main_layout(
+            f.area(),
+            !app_state.filter_input.is_empty(),
+            left_panel_width,
+            services_count,
+        )
     };
-    let visible_counts = calculate_visible_counts(&layout);
+    let visible_counts = calculate_visible_counts(&layout, services_count);
 
     if app_state.is_input_active() {
         let border_style = get_border_style(app_state.loaded_from_file);
@@ -1717,9 +1731,31 @@ fn get_border_style(loaded_from_file: bool) -> Style {
     }
 }
 
-fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> MainLayout {
+fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 {
+    let all_types_width = "All Types".len() as u16;
+    let max_type_width = service_types
+        .iter()
+        .map(|t| format_service_type_for_display(t).len() as u16)
+        .max()
+        .unwrap_or(0);
+
+    let content_width = all_types_width.max(max_type_width);
+    let padding = 2;
+    let min_width = 10;
+    let max_width = area_width.saturating_sub(30);
+
+    content_width
+        .saturating_add(padding)
+        .clamp(min_width, max_width)
+}
+
+fn create_main_layout(
+    area: ratatui::layout::Rect,
+    has_filter_status: bool,
+    left_panel_width: u16,
+    services_count: usize,
+) -> MainLayout {
     let main_area = if has_filter_status {
-        // Reserve 3 rows at the bottom for filter status
         let remaining_height = area.height.saturating_sub(3);
         ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
     } else {
@@ -1728,12 +1764,13 @@ fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> M
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
+    let services_height = (services_count.min(15) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
         .split(chunks[1]);
 
     let filter_status_area = if has_filter_status {
@@ -1755,29 +1792,32 @@ fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> M
     }
 }
 
-fn calculate_visible_counts(layout: &MainLayout) -> VisibleCounts {
+fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> VisibleCounts {
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
-        services: (layout.services_area.height as usize).saturating_sub(2), // Account for borders
+        services: services_count.min(15), // Max 15, or actual count if fewer
     }
 }
 
-fn create_filter_input_layout(area: ratatui::layout::Rect) -> MainLayout {
-    // Reserve 3 rows at the bottom for filter input
+fn create_filter_input_layout(
+    area: ratatui::layout::Rect,
+    left_panel_width: u16,
+    services_count: usize,
+) -> MainLayout {
     let remaining_height = area.height.saturating_sub(3);
     let main_area = ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height);
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
+    let services_height = (services_count.min(15) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
         .split(chunks[1]);
 
-    // Filter input layout doesn't have a separate filter status area
     MainLayout {
         left_panel: chunks[0],
         services_area: services_chunks[0],
@@ -5416,7 +5456,7 @@ mod tests {
     #[test]
     fn test_create_main_layout() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false);
+        let layout = create_main_layout(area, false, 20, 10);
 
         assert!(layout.left_panel.width > 0);
         assert!(layout.services_area.width > 0);
@@ -5427,13 +5467,51 @@ mod tests {
     }
 
     #[test]
+    fn test_create_main_layout_with_few_services() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let layout = create_main_layout(area, false, 20, 3);
+
+        assert_eq!(layout.services_area.height, 5); // 3 services + 2 for borders
+    }
+
+    #[test]
+    fn test_calculate_left_panel_width() {
+        let service_types = vec![
+            "_http._tcp.local.".to_string(),
+            "_ssh._tcp.local.".to_string(),
+            "printer._tcp.local.".to_string(),
+        ];
+        let width = calculate_left_panel_width(&service_types, 100);
+        assert!(width >= 10);
+        assert!(width <= 70);
+
+        let empty_types: Vec<String> = vec![];
+        let width_empty = calculate_left_panel_width(&empty_types, 100);
+        assert!(width_empty >= 10);
+
+        let long_type = vec!["_very_long_service_name._sub._custom.tcp.local.".to_string()];
+        let width_long = calculate_left_panel_width(&long_type, 100);
+        assert!(width_long > width);
+    }
+
+    #[test]
     fn test_calculate_visible_counts() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false);
-        let counts = calculate_visible_counts(&layout);
+        let layout = create_main_layout(area, false, 20, 10);
+        let counts = calculate_visible_counts(&layout, 10);
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
+        assert_eq!(counts.services, 10);
+    }
+
+    #[test]
+    fn test_calculate_visible_counts_capped() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let layout = create_main_layout(area, false, 20, 20);
+        let counts = calculate_visible_counts(&layout, 20);
+
+        assert_eq!(counts.services, 15);
     }
 
     #[test]
