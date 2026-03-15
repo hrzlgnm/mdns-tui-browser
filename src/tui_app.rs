@@ -809,6 +809,23 @@ impl AppState {
 
         // Validate selected service is within bounds after cache rebuild
         self.validate_selected_service();
+
+        // Adjust scroll offset to ensure selected service is visible
+        let filtered_len = self.cached_filtered_services.len();
+        if filtered_len > 0 && self.services_scroll.visible_items > 0 {
+            // If selected service is beyond visible range, adjust offset
+            if self.selected_service
+                >= self.services_scroll.offset + self.services_scroll.visible_items
+            {
+                self.services_scroll.offset = self
+                    .selected_service
+                    .saturating_sub(self.services_scroll.visible_items - 1);
+            }
+            // Ensure offset doesn't go negative
+            if self.services_scroll.offset > self.selected_service {
+                self.services_scroll.offset = self.selected_service;
+            }
+        }
     }
 
     // Key handling methods
@@ -5546,6 +5563,64 @@ mod tests {
 
         assert!(counts.types > 0);
         assert!(counts.services <= 15);
+    }
+
+    #[test]
+    fn test_services_scroll_offset_after_filter_shrinks_list() {
+        let mut state = create_test_app_state();
+
+        // Add multiple services - some will match filter, some won't
+        for i in 0..20 {
+            let mut service =
+                create_test_service(&format!("service-{}", i), "_http._tcp.local.", 80 + i);
+            // Only services 0-4 will have "match" in their name
+            if i < 5 {
+                service.fullname = format!("match-service-{}", i);
+            }
+            state.add_or_update_service(service);
+        }
+
+        // Initial state: select service at index 15 (well within 20 services)
+        state.selected_service = 15;
+        // Set scroll offset to 12 with 5 visible items - service 15 is not visible (12-16 range)
+        state.services_scroll.offset = 12;
+        state.services_scroll.visible_items = 5;
+
+        // Apply a filter that only matches 5 services
+        state.filter_input.set_text("match");
+        state.cache_dirty = true;
+        state.cached_sorted = false;
+
+        // Call prepare_for_rendering which should:
+        // 1. Rebuild cache (filter to 5 services)
+        // 2. Clamp selected_service to 4 (last valid index)
+        // 3. Adjust scroll offset so selected service is visible
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        state.prepare_for_rendering(area);
+
+        // selected_service should be clamped to 4 (last index of 5 filtered services)
+        assert_eq!(
+            state.selected_service, 4,
+            "selected_service should be clamped to last valid index"
+        );
+
+        // scroll offset should be adjusted so selected_service (4) is visible
+        // With 5 visible items and offset 12, the old selection was not visible
+        // After filtering to 5 items and clamping to 4, offset should be adjusted
+        // to make 4 visible (either offset 0 or adjusted to show 0-4)
+        assert!(
+            state.selected_service >= state.services_scroll.offset,
+            "selected_service ({}) should be >= scroll offset ({})",
+            state.selected_service,
+            state.services_scroll.offset
+        );
+        assert!(
+            state.selected_service
+                < state.services_scroll.offset + state.services_scroll.visible_items,
+            "selected_service ({}) should be < scroll offset + visible items ({})",
+            state.selected_service,
+            state.services_scroll.offset + state.services_scroll.visible_items
+        );
     }
 
     #[test]
