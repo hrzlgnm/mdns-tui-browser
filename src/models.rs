@@ -162,26 +162,6 @@ impl ServiceEntry {
             }
         }
 
-        for txt in &self.txt {
-            if let Some((key, value)) = txt.split_once('=')
-                && key == "base_url"
-                && let Ok(url) = url::Url::parse(value)
-                && (url.scheme() == "http" || url.scheme() == "https")
-            {
-                return Some(url.into());
-            }
-        }
-
-        for txt in &self.txt {
-            if let Some((key, value)) = txt.split_once('=')
-                && key == "path"
-                && let Ok(url) = url::Url::parse(value)
-                && (url.scheme() == "http" || url.scheme() == "https")
-            {
-                return Some(url.into());
-            }
-        }
-
         None
     }
 
