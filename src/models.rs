@@ -137,14 +137,17 @@ impl ServiceEntry {
     pub fn get_url(&self) -> Option<String> {
         if self.service_type.contains("_http._tcp") {
             let host = self.host.trim_end_matches('.');
-            let path = self
-                .txt
-                .iter()
-                .filter_map(|txt| txt.split_once('='))
-                .find(|(key, _)| *key == "path")
-                .map(|(_, value)| value)
-                .unwrap_or("/");
-            return Some(format!("http://{}:{}{}", host, self.port, path));
+            for txt in &self.txt {
+                if let Some((key, value)) = txt.split_once('=')
+                    && key == "path"
+                {
+                    if value.starts_with("http://") || value.starts_with("https://") {
+                        return Some(value.to_string());
+                    }
+                    return Some(format!("http://{}:{}{}", host, self.port, value));
+                }
+            }
+            return Some(format!("http://{}:{}/", host, self.port));
         }
 
         for txt in &self.txt {
