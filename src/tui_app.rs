@@ -846,7 +846,11 @@ impl AppState {
                     "https://github.com/hrzlgnm/mdns-tui-browser/releases/tag/v{}",
                     env!("CARGO_PKG_VERSION")
                 );
-                let _ = open::that_detached(&release_url);
+                std::thread::spawn(move || {
+                    if let Err(err) = open::that_detached(&release_url) {
+                        eprintln!("Failed to open browser: {}", err);
+                    }
+                });
             }
             result
         } else if self.is_input_active()
