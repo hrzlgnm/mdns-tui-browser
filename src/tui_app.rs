@@ -1741,8 +1741,9 @@ fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 
 
     let content_width = all_types_width.max(max_type_width);
     let padding = 2;
-    let min_width = 10;
-    let max_width = area_width.saturating_sub(30);
+    let min_width = 10u16;
+    let max_width_raw = area_width.saturating_sub(30);
+    let max_width = max_width_raw.max(min_width);
 
     content_width
         .saturating_add(padding)
@@ -1793,9 +1794,10 @@ fn create_main_layout(
 }
 
 fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> VisibleCounts {
+    let available_services_height = (layout.services_area.height as usize).saturating_sub(2);
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
-        services: services_count.min(15), // Max 15, or actual count if fewer
+        services: available_services_height.min(services_count).min(15), // Use actual layout height, capped at 15 max
     }
 }
 
@@ -5512,6 +5514,30 @@ mod tests {
         let counts = calculate_visible_counts(&layout, 20);
 
         assert_eq!(counts.services, 15);
+    }
+
+    #[test]
+    fn test_create_main_layout_narrow_width_expected_constraints() {
+        let area = ratatui::layout::Rect::new(0, 0, 15, 50);
+        let layout = create_main_layout(area, false, 10, 5);
+
+        assert!(layout.left_panel.width > 0);
+        assert!(layout.services_area.width > 0);
+
+        let service_types = vec!["_http._tcp.local.".to_string()];
+        let width = calculate_left_panel_width(&service_types, 15);
+        assert!(width >= 10);
+    }
+
+    #[test]
+    fn test_create_main_layout_cramped_height_expected_counts() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 10);
+        let layout = create_main_layout(area, false, 20, 20);
+
+        let counts = calculate_visible_counts(&layout, 20);
+
+        assert!(counts.types > 0);
+        assert!(counts.services <= 15);
     }
 
     #[test]
