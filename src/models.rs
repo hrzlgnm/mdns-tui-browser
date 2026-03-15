@@ -130,10 +130,6 @@ pub struct ServiceEntry {
 
 impl ServiceEntry {
     /// Returns the URL to open this service if applicable.
-    ///
-    /// Returns `Some(url)` if:
-    /// - The service type contains `_http._tcp`, or
-    /// - The TXT records contain an `internal_url` key
     pub fn get_url(&self) -> Option<String> {
         if self.service_type.contains("_http._tcp") {
             let host = self.host.trim_end_matches('.');
@@ -152,7 +148,7 @@ impl ServiceEntry {
 
         for txt in &self.txt {
             if let Some((key, value)) = txt.split_once('=')
-                && key == "internal_url"
+                && (key == "internal_url" || key == "path" || key == "base_url")
             {
                 return Some(value.to_string());
             }
