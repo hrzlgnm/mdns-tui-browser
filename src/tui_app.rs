@@ -382,6 +382,15 @@ impl AppState {
         }
     }
 
+    fn validate_selected_service(&mut self) {
+        let filtered_len = self.cached_filtered_services.len();
+        if filtered_len == 0 {
+            self.selected_service = 0;
+        } else if self.selected_service >= filtered_len {
+            self.selected_service = filtered_len.saturating_sub(1);
+        }
+    }
+
     fn get_filtered_services(&mut self) -> &[usize] {
         // Check if we need to invalidate the cache before processing
         let cache_was_rebuilt = self.update_filtered_cache();
@@ -757,17 +766,39 @@ impl AppState {
         }
     }
 
+    fn prepare_layout_and_counts(
+        app_state: &AppState,
+        area: ratatui::layout::Rect,
+    ) -> (MainLayout, VisibleCounts) {
+        let left_panel_width = calculate_left_panel_width(&app_state.service_types, area.width);
+        let services_count = app_state.get_filtered_services_readonly().len();
+        let layout = if app_state.is_input_active() {
+            create_filter_input_layout(area, left_panel_width, services_count)
+        } else {
+            create_main_layout(
+                area,
+                !app_state.filter_input.is_empty(),
+                left_panel_width,
+                services_count,
+            )
+        };
+        let visible_counts = calculate_visible_counts(&layout, services_count);
+        (layout, visible_counts)
+    }
+
     // Prepare state for rendering - updates UI-related fields based on terminal size
     fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
         self.terminal_area = terminal_area;
         self.validate_selected_type();
 
-        let layout = if self.is_input_active() {
-            create_filter_input_layout(terminal_area)
-        } else {
-            create_main_layout(terminal_area, !self.filter_input.is_empty())
-        };
-        let visible_counts = calculate_visible_counts(&layout);
+        // Ensure filtered cache is up to date before computing layout
+        let cache_was_rebuilt = self.update_filtered_cache();
+        if cache_was_rebuilt || !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
+        }
+
+        let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
 
         // Update state with current visible counts
         self.types_scroll.visible_items = visible_counts.types;
@@ -776,11 +807,24 @@ impl AppState {
         // Update details scroll visible items based on details area
         self.details_scroll.visible_items = layout.details_area.height.saturating_sub(2) as usize;
 
-        // Ensure filtered cache is up to date for rendering
-        let cache_was_rebuilt = self.update_filtered_cache();
-        if cache_was_rebuilt || !self.cached_sorted {
-            self.sort_filtered_services();
-            self.cached_sorted = true;
+        // Validate selected service is within bounds after cache rebuild
+        self.validate_selected_service();
+
+        // Adjust scroll offset to ensure selected service is visible
+        let filtered_len = self.cached_filtered_services.len();
+        if filtered_len > 0 && self.services_scroll.visible_items > 0 {
+            // If selected service is beyond visible range, adjust offset
+            if self.selected_service
+                >= self.services_scroll.offset + self.services_scroll.visible_items
+            {
+                self.services_scroll.offset = self
+                    .selected_service
+                    .saturating_sub(self.services_scroll.visible_items - 1);
+            }
+            // Ensure offset doesn't go negative
+            if self.services_scroll.offset > self.selected_service {
+                self.services_scroll.offset = self.selected_service;
+            }
         }
     }
 
@@ -1655,12 +1699,7 @@ fn handle_browse_failure(
 }
 
 fn ui(f: &mut Frame, app_state: &AppState) {
-    let layout = if app_state.is_input_active() {
-        create_filter_input_layout(f.area())
-    } else {
-        create_main_layout(f.area(), !app_state.filter_input.is_empty())
-    };
-    let visible_counts = calculate_visible_counts(&layout);
+    let (layout, visible_counts) = AppState::prepare_layout_and_counts(app_state, f.area());
 
     if app_state.is_input_active() {
         let border_style = get_border_style(app_state.loaded_from_file);
@@ -1717,9 +1756,32 @@ fn get_border_style(loaded_from_file: bool) -> Style {
     }
 }
 
-fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> MainLayout {
+fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 {
+    let all_types_width = "All Types".len() as u16;
+    let max_type_width = service_types
+        .iter()
+        .map(|t| format_service_type_for_display(t).len() as u16)
+        .max()
+        .unwrap_or(0);
+
+    let content_width = all_types_width.max(max_type_width);
+    let padding = 2;
+    let min_width = 10u16;
+    let max_width_raw = area_width.saturating_sub(30);
+    let max_width = max_width_raw.max(min_width);
+
+    content_width
+        .saturating_add(padding)
+        .clamp(min_width, max_width)
+}
+
+fn create_main_layout(
+    area: ratatui::layout::Rect,
+    has_filter_status: bool,
+    left_panel_width: u16,
+    services_count: usize,
+) -> MainLayout {
     let main_area = if has_filter_status {
-        // Reserve 3 rows at the bottom for filter status
         let remaining_height = area.height.saturating_sub(3);
         ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
     } else {
@@ -1728,12 +1790,13 @@ fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> M
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
+    let services_height = (services_count.min(15) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
         .split(chunks[1]);
 
     let filter_status_area = if has_filter_status {
@@ -1755,29 +1818,33 @@ fn create_main_layout(area: ratatui::layout::Rect, has_filter_status: bool) -> M
     }
 }
 
-fn calculate_visible_counts(layout: &MainLayout) -> VisibleCounts {
+fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> VisibleCounts {
+    let available_services_height = (layout.services_area.height as usize).saturating_sub(2);
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
-        services: (layout.services_area.height as usize).saturating_sub(2), // Account for borders
+        services: available_services_height.min(services_count).min(15), // Use actual layout height, capped at 15 max
     }
 }
 
-fn create_filter_input_layout(area: ratatui::layout::Rect) -> MainLayout {
-    // Reserve 3 rows at the bottom for filter input
+fn create_filter_input_layout(
+    area: ratatui::layout::Rect,
+    left_panel_width: u16,
+    services_count: usize,
+) -> MainLayout {
     let remaining_height = area.height.saturating_sub(3);
     let main_area = ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height);
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
+    let services_height = (services_count.min(15) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
         .split(chunks[1]);
 
-    // Filter input layout doesn't have a separate filter status area
     MainLayout {
         left_panel: chunks[0],
         services_area: services_chunks[0],
@@ -5416,7 +5483,7 @@ mod tests {
     #[test]
     fn test_create_main_layout() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false);
+        let layout = create_main_layout(area, false, 20, 10);
 
         assert!(layout.left_panel.width > 0);
         assert!(layout.services_area.width > 0);
@@ -5427,13 +5494,133 @@ mod tests {
     }
 
     #[test]
+    fn test_create_main_layout_with_few_services() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let layout = create_main_layout(area, false, 20, 3);
+
+        assert_eq!(layout.services_area.height, 5); // 3 services + 2 for borders
+    }
+
+    #[test]
+    fn test_calculate_left_panel_width() {
+        let service_types = vec![
+            "_http._tcp.local.".to_string(),
+            "_ssh._tcp.local.".to_string(),
+            "printer._tcp.local.".to_string(),
+        ];
+        let width = calculate_left_panel_width(&service_types, 100);
+        assert!(width >= 10);
+        assert!(width <= 70);
+
+        let empty_types: Vec<String> = vec![];
+        let width_empty = calculate_left_panel_width(&empty_types, 100);
+        assert!(width_empty >= 10);
+
+        let long_type = vec!["_very_long_service_name._sub._custom.tcp.local.".to_string()];
+        let width_long = calculate_left_panel_width(&long_type, 100);
+        assert!(width_long > width);
+    }
+
+    #[test]
     fn test_calculate_visible_counts() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false);
-        let counts = calculate_visible_counts(&layout);
+        let layout = create_main_layout(area, false, 20, 10);
+        let counts = calculate_visible_counts(&layout, 10);
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
+        assert_eq!(counts.services, 10);
+    }
+
+    #[test]
+    fn test_calculate_visible_counts_capped() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        let layout = create_main_layout(area, false, 20, 20);
+        let counts = calculate_visible_counts(&layout, 20);
+
+        assert_eq!(counts.services, 15);
+    }
+
+    #[test]
+    fn test_create_main_layout_narrow_width_expected_constraints() {
+        let area = ratatui::layout::Rect::new(0, 0, 15, 50);
+        let layout = create_main_layout(area, false, 10, 5);
+
+        assert!(layout.left_panel.width > 0);
+        assert!(layout.services_area.width > 0);
+
+        let service_types = vec!["_http._tcp.local.".to_string()];
+        let width = calculate_left_panel_width(&service_types, 15);
+        assert!(width >= 10);
+    }
+
+    #[test]
+    fn test_create_main_layout_cramped_height_expected_counts() {
+        let area = ratatui::layout::Rect::new(0, 0, 100, 10);
+        let layout = create_main_layout(area, false, 20, 20);
+
+        let counts = calculate_visible_counts(&layout, 20);
+
+        assert!(counts.types > 0);
+        assert!(counts.services <= 15);
+    }
+
+    #[test]
+    fn test_services_scroll_offset_after_filter_shrinks_list() {
+        let mut state = create_test_app_state();
+
+        // Add multiple services - some will match filter, some won't
+        for i in 0..20 {
+            let mut service =
+                create_test_service(&format!("service-{}", i), "_http._tcp.local.", 80 + i);
+            // Only services 0-4 will have "match" in their name
+            if i < 5 {
+                service.fullname = format!("match-service-{}", i);
+            }
+            state.add_or_update_service(service);
+        }
+
+        // Initial state: select service at index 15 (well within 20 services)
+        state.selected_service = 15;
+        // Set scroll offset to 12 with 5 visible items - service 15 is not visible (12-16 range)
+        state.services_scroll.offset = 12;
+        state.services_scroll.visible_items = 5;
+
+        // Apply a filter that only matches 5 services
+        state.filter_input.set_text("match");
+        state.cache_dirty = true;
+        state.cached_sorted = false;
+
+        // Call prepare_for_rendering which should:
+        // 1. Rebuild cache (filter to 5 services)
+        // 2. Clamp selected_service to 4 (last valid index)
+        // 3. Adjust scroll offset so selected service is visible
+        let area = ratatui::layout::Rect::new(0, 0, 100, 50);
+        state.prepare_for_rendering(area);
+
+        // selected_service should be clamped to 4 (last index of 5 filtered services)
+        assert_eq!(
+            state.selected_service, 4,
+            "selected_service should be clamped to last valid index"
+        );
+
+        // scroll offset should be adjusted so selected_service (4) is visible
+        // With 5 visible items and offset 12, the old selection was not visible
+        // After filtering to 5 items and clamping to 4, offset should be adjusted
+        // to make 4 visible (either offset 0 or adjusted to show 0-4)
+        assert!(
+            state.selected_service >= state.services_scroll.offset,
+            "selected_service ({}) should be >= scroll offset ({})",
+            state.selected_service,
+            state.services_scroll.offset
+        );
+        assert!(
+            state.selected_service
+                < state.services_scroll.offset + state.services_scroll.visible_items,
+            "selected_service ({}) should be < scroll offset + visible items ({})",
+            state.selected_service,
+            state.services_scroll.offset + state.services_scroll.visible_items
+        );
     }
 
     #[test]
