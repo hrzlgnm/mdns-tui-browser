@@ -154,7 +154,7 @@ impl ServiceEntry {
         }
 
         for txt in &self.txt {
-            if let Some((key, value)) = txt.split_once('=')
+            if let Some((_key, value)) = txt.split_once('=')
                 && let Ok(url) = url::Url::parse(value)
                 && (url.scheme() == "http" || url.scheme() == "https")
             {
