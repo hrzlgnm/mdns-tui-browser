@@ -757,24 +757,32 @@ impl AppState {
         }
     }
 
-    // Prepare state for rendering - updates UI-related fields based on terminal size
-    fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
-        self.terminal_area = terminal_area;
-        self.validate_selected_type();
-
-        let left_panel_width = calculate_left_panel_width(&self.service_types, terminal_area.width);
-        let services_count = self.get_filtered_services().len();
-        let layout = if self.is_input_active() {
-            create_filter_input_layout(terminal_area, left_panel_width, services_count)
+    fn prepare_layout_and_counts(
+        app_state: &AppState,
+        area: ratatui::layout::Rect,
+    ) -> (MainLayout, VisibleCounts) {
+        let left_panel_width = calculate_left_panel_width(&app_state.service_types, area.width);
+        let services_count = app_state.get_filtered_services_readonly().len();
+        let layout = if app_state.is_input_active() {
+            create_filter_input_layout(area, left_panel_width, services_count)
         } else {
             create_main_layout(
-                terminal_area,
-                !self.filter_input.is_empty(),
+                area,
+                !app_state.filter_input.is_empty(),
                 left_panel_width,
                 services_count,
             )
         };
         let visible_counts = calculate_visible_counts(&layout, services_count);
+        (layout, visible_counts)
+    }
+
+    // Prepare state for rendering - updates UI-related fields based on terminal size
+    fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
+        self.terminal_area = terminal_area;
+        self.validate_selected_type();
+
+        let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
 
         // Update state with current visible counts
         self.types_scroll.visible_items = visible_counts.types;
@@ -1662,19 +1670,7 @@ fn handle_browse_failure(
 }
 
 fn ui(f: &mut Frame, app_state: &AppState) {
-    let left_panel_width = calculate_left_panel_width(&app_state.service_types, f.area().width);
-    let services_count = app_state.get_filtered_services_readonly().len();
-    let layout = if app_state.is_input_active() {
-        create_filter_input_layout(f.area(), left_panel_width, services_count)
-    } else {
-        create_main_layout(
-            f.area(),
-            !app_state.filter_input.is_empty(),
-            left_panel_width,
-            services_count,
-        )
-    };
-    let visible_counts = calculate_visible_counts(&layout, services_count);
+    let (layout, visible_counts) = AppState::prepare_layout_and_counts(app_state, f.area());
 
     if app_state.is_input_active() {
         let border_style = get_border_style(app_state.loaded_from_file);
