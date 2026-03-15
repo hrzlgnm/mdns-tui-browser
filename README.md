@@ -273,6 +273,7 @@ The application is built with:
 - **if-addrs** - Network interface enumeration
 - **nix** - Unix system calls (signal handling for Ctrl+Z suspend)
 - **open** - Cross-platform library to open URLs in the browser
+- **url** - URL parsing and validation for URL extraction from TXT records
 
 ### Safety Policy
 

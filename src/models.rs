@@ -140,7 +140,14 @@ impl ServiceEntry {
                     if value.starts_with("http://") {
                         return Some(value.to_string());
                     }
-                    return Some(format!("http://{}:{}{}", host, self.port, value));
+                    let path = value.trim();
+                    let path = if path.is_empty() { "/" } else { path };
+                    let path = if !path.starts_with('/') {
+                        format!("/{}", path)
+                    } else {
+                        path.to_string()
+                    };
+                    return Some(format!("http://{}:{}{}", host, self.port, path));
                 }
             }
             return Some(format!("http://{}:{}/", host, self.port));
@@ -148,9 +155,31 @@ impl ServiceEntry {
 
         for txt in &self.txt {
             if let Some((key, value)) = txt.split_once('=')
-                && (key == "internal_url" || key == "path" || key == "base_url")
+                && key == "internal_url"
+                && let Ok(url) = url::Url::parse(value)
+                && (url.scheme() == "http" || url.scheme() == "https")
             {
-                return Some(value.to_string());
+                return Some(url.into());
+            }
+        }
+
+        for txt in &self.txt {
+            if let Some((key, value)) = txt.split_once('=')
+                && key == "base_url"
+                && let Ok(url) = url::Url::parse(value)
+                && (url.scheme() == "http" || url.scheme() == "https")
+            {
+                return Some(url.into());
+            }
+        }
+
+        for txt in &self.txt {
+            if let Some((key, value)) = txt.split_once('=')
+                && key == "path"
+                && let Ok(url) = url::Url::parse(value)
+                && (url.scheme() == "http" || url.scheme() == "https")
+            {
+                return Some(url.into());
             }
         }
 
@@ -685,5 +714,117 @@ pub mod tests {
 
         service.update_flapping_status();
         assert!(!service.is_flapping);
+    }
+
+    #[test]
+    fn test_get_url_http_service_default_root() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.txt = vec![];
+        service.host = "myhost.local".to_string();
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://myhost.local:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_http_service_custom_path() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.txt = vec!["path=/api".to_string()];
+        service.host = "myhost.local".to_string();
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://myhost.local:8080/api".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_http_service_path_without_leading_slash() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.txt = vec!["path=admin".to_string()];
+        service.host = "myhost.local".to_string();
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://myhost.local:8080/admin".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_internal_url() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec!["internal_url=http://example.com".to_string()];
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://example.com/".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_base_url() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec!["base_url=http://example.com".to_string()];
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://example.com/".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_non_http_or_malformed_rejected() {
+        let service = ServiceEntry {
+            fullname: "test._service._tcp.local.".to_string(),
+            host: "myhost.local".to_string(),
+            service_type: "_service._tcp.local.".to_string(),
+            subtype: None,
+            addrs: vec![],
+            port: 8080,
+            txt: vec!["internal_url=mailto:test@example.com".to_string()],
+            online: true,
+            updated_at_micros: 0,
+            first_seen_micros: 0,
+            last_online_micros: None,
+            last_offline_micros: None,
+            session_history: vec![],
+            is_flapping: false,
+        };
+
+        let url = service.get_url();
+        assert_eq!(url, None);
+    }
+
+    #[test]
+    fn test_get_url_host_trailing_dot() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local.".to_string();
+        service.txt = vec![];
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://myhost.local:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_path_empty() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.txt = vec!["path=".to_string()];
+        service.host = "myhost.local".to_string();
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://myhost.local:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_url_no_url_available() {
+        let service = create_test_service("test", "_ssh._tcp.local.", 22);
+
+        let url = service.get_url();
+        assert_eq!(url, None);
+    }
+
+    #[test]
+    fn test_get_url_internal_url_priority_over_base_url_and_path() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec![
+            "path=/api".to_string(),
+            "base_url=http://base.example.com".to_string(),
+            "internal_url=http://internal.example.com".to_string(),
+        ];
+
+        let url = service.get_url();
+        assert_eq!(url, Some("http://internal.example.com/".to_string()));
     }
 }
