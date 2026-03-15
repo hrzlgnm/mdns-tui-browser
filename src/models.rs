@@ -141,7 +141,7 @@ impl ServiceEntry {
                 if let Some((key, value)) = txt.split_once('=')
                     && (key == "path" || key == "base_url")
                 {
-                    if value.starts_with("http://") || value.starts_with("https://") {
+                    if value.starts_with("http://") {
                         return Some(value.to_string());
                     }
                     return Some(format!("http://{}:{}{}", host, self.port, value));
