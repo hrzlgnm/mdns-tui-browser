@@ -382,6 +382,15 @@ impl AppState {
         }
     }
 
+    fn validate_selected_service(&mut self) {
+        let filtered_len = self.cached_filtered_services.len();
+        if filtered_len == 0 {
+            self.selected_service = 0;
+        } else if self.selected_service >= filtered_len {
+            self.selected_service = filtered_len.saturating_sub(1);
+        }
+    }
+
     fn get_filtered_services(&mut self) -> &[usize] {
         // Check if we need to invalidate the cache before processing
         let cache_was_rebuilt = self.update_filtered_cache();
@@ -797,6 +806,9 @@ impl AppState {
             self.sort_filtered_services();
             self.cached_sorted = true;
         }
+
+        // Validate selected service is within bounds after cache rebuild
+        self.validate_selected_service();
     }
 
     // Key handling methods
