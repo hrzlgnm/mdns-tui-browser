@@ -135,7 +135,7 @@ impl ServiceEntry {
             let host = self.host.trim_end_matches('.');
             for txt in &self.txt {
                 if let Some((key, value)) = txt.split_once('=')
-                    && (key == "path" || key == "base_url")
+                    && key == "path"
                 {
                     if value.starts_with("http://") {
                         return Some(value.to_string());
