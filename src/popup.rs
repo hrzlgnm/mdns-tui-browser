@@ -352,7 +352,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from(" "),
         Line::from(" Actions:"),
         Line::from(
-            "   Enter             - Open service URL in browser (_http._tcp or URL-like TXT)",
+            "   Enter             - Open service URL in browser (_http._tcp or URL from TXT)",
         ),
         Line::from("   d                 - Remove offline services"),
         Line::from("   D                 - Clear stale service types"),
