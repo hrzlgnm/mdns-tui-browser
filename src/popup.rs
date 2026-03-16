@@ -193,7 +193,6 @@ pub struct UrlSelectionPopup {
     pub active: bool,
     urls: Vec<String>,
     selected_index: usize,
-    scroll: ScrollState,
     confirmed_selection: bool,
 }
 
@@ -204,7 +203,6 @@ impl UrlSelectionPopup {
             active: false,
             urls: Vec::new(),
             selected_index: 0,
-            scroll: ScrollState::new(),
             confirmed_selection: false,
         }
     }
@@ -223,7 +221,6 @@ impl UrlSelectionPopup {
     pub fn show(&mut self, urls: Vec<String>) {
         self.urls = urls;
         self.selected_index = 0;
-        self.scroll.reset();
         self.active = true;
         self.confirmed_selection = false;
     }
@@ -233,7 +230,6 @@ impl UrlSelectionPopup {
         self.active = false;
         self.urls.clear();
         self.selected_index = 0;
-        self.scroll.reset();
         self.confirmed_selection = false;
     }
 
@@ -367,6 +363,8 @@ impl PopupState {
         self.metrics_popup.toggle();
     }
 
+    /// Shows the URL selection popup with the given URLs.
+    /// Calls [`UrlSelectionPopup::show`] internally.
     pub fn show_url_selection(&mut self, urls: Vec<String>) {
         self.url_selection_popup.show(urls);
     }
@@ -1274,6 +1272,18 @@ mod tests {
 
         assert_eq!(url, Some("http://b.com".to_string()));
         assert!(!popup.is_active());
+    }
+
+    #[test]
+    fn test_url_selection_popup_take_selected_url_without_confirmation() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        popup.selected_index = 1;
+
+        let url = popup.take_selected_url();
+
+        assert!(url.is_none());
+        assert!(popup.is_active());
     }
 
     #[test]
