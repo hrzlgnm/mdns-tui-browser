@@ -794,4 +794,14 @@ pub mod tests {
         let url = service.get_url();
         assert_eq!(url, None);
     }
+
+    #[test]
+    fn test_get_url_path_with_external_url_not_used_for_external() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.txt = vec!["path=https://example.com".to_string()];
+
+        let url = service.get_url();
+        assert_eq!(url, Some("https://example.com/".to_string()));
+    }
 }
