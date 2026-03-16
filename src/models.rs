@@ -158,7 +158,7 @@ impl ServiceEntry {
                         }
                     })
                 })
-                .unwrap_or("/");
+                .unwrap_or("");
 
             let scheme = if self.txt.iter().any(|txt| txt.contains("https")) {
                 "https"
