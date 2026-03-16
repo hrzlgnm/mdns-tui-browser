@@ -351,7 +351,9 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Shift+↑/↓ or J/K  - Scroll service details"),
         Line::from(" "),
         Line::from(" Actions:"),
-        Line::from("   Enter             - Open service URL in browser (_http._tcp or with internal_url/base_url TXT)"),
+        Line::from(
+            "   Enter             - Open service URL in browser (_http._tcp or URL-like TXT)",
+        ),
         Line::from("   d                 - Remove offline services"),
         Line::from("   D                 - Clear stale service types"),
         Line::from("   m                 - Show service metrics"),
