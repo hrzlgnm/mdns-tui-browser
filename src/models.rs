@@ -129,44 +129,6 @@ pub struct ServiceEntry {
 }
 
 impl ServiceEntry {
-    /// Returns the URL to open this service if applicable.
-    #[allow(dead_code)]
-    pub fn get_url(&self) -> Option<String> {
-        for txt in &self.txt {
-            if let Some((_key, value)) = txt.split_once('=')
-                && let Ok(url) = url::Url::parse(value)
-                && (url.scheme() == "http" || url.scheme() == "https")
-            {
-                return Some(url.into());
-            }
-        }
-
-        if self.service_type.starts_with("_http._tcp") {
-            let host = self.host.trim_end_matches('.');
-            let path = self
-                .txt
-                .iter()
-                .find_map(|txt| {
-                    txt.split_once('=').and_then(|(key, value)| {
-                        if key == "path" {
-                            Some(value.trim())
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .unwrap_or("/");
-
-            if let Ok(base) = url::Url::parse(&format!("http://{}:{}", host, self.port))
-                && let Ok(url) = base.join(path)
-            {
-                return Some(url.into());
-            }
-        }
-
-        None
-    }
-
     /// Returns all URLs associated with this service, deduplicated.
     pub fn get_urls(&self) -> Vec<String> {
         use std::collections::BTreeSet;
@@ -182,7 +144,7 @@ impl ServiceEntry {
             }
         }
 
-        if self.service_type.starts_with("_http._tcp") {
+        if self.service_type.contains("http") {
             let host = self.host.trim_end_matches('.');
             let path = self
                 .txt
@@ -198,7 +160,13 @@ impl ServiceEntry {
                 })
                 .unwrap_or("/");
 
-            if let Ok(base) = url::Url::parse(&format!("http://{}:{}", host, self.port))
+            let scheme = if self.txt.iter().any(|txt| txt.contains("https")) {
+                "https"
+            } else {
+                "http"
+            };
+
+            if let Ok(base) = url::Url::parse(&format!("{}://{}:{}", scheme, host, self.port))
                 && let Ok(url) = base.join(path)
             {
                 urls.insert(url.into());
@@ -744,8 +712,9 @@ pub mod tests {
         service.txt = vec![];
         service.host = "myhost.local".to_string();
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://myhost.local:8080/".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/");
     }
 
     #[test]
@@ -754,8 +723,9 @@ pub mod tests {
         service.txt = vec!["path=/api".to_string()];
         service.host = "myhost.local".to_string();
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://myhost.local:8080/api".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/api");
     }
 
     #[test]
@@ -764,8 +734,9 @@ pub mod tests {
         service.txt = vec!["path=admin".to_string()];
         service.host = "myhost.local".to_string();
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://myhost.local:8080/admin".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/admin");
     }
 
     #[test]
@@ -773,8 +744,9 @@ pub mod tests {
         let mut service = create_test_service("test", "_service._tcp.local.", 8080);
         service.txt = vec!["internal_url=http://example.com".to_string()];
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://example.com/".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://example.com/");
     }
 
     #[test]
@@ -782,8 +754,9 @@ pub mod tests {
         let mut service = create_test_service("test", "_service._tcp.local.", 8080);
         service.txt = vec!["base_url=http://example.com".to_string()];
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://example.com/".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://example.com/");
     }
 
     #[test]
@@ -805,8 +778,8 @@ pub mod tests {
             is_flapping: false,
         };
 
-        let url = service.get_url();
-        assert_eq!(url, None);
+        let urls = service.get_urls();
+        assert!(urls.is_empty());
     }
 
     #[test]
@@ -815,8 +788,9 @@ pub mod tests {
         service.host = "myhost.local.".to_string();
         service.txt = vec![];
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://myhost.local:8080/".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/");
     }
 
     #[test]
@@ -825,16 +799,17 @@ pub mod tests {
         service.txt = vec!["path=".to_string()];
         service.host = "myhost.local".to_string();
 
-        let url = service.get_url();
-        assert_eq!(url, Some("http://myhost.local:8080/".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/");
     }
 
     #[test]
     fn test_get_url_no_url_available() {
         let service = create_test_service("test", "_ssh._tcp.local.", 22);
 
-        let url = service.get_url();
-        assert_eq!(url, None);
+        let urls = service.get_urls();
+        assert!(urls.is_empty());
     }
 
     #[test]
@@ -843,8 +818,9 @@ pub mod tests {
         service.host = "myhost.local".to_string();
         service.txt = vec!["path=https://example.com".to_string()];
 
-        let url = service.get_url();
-        assert_eq!(url, Some("https://example.com/".to_string()));
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://example.com/");
     }
 
     #[test]
