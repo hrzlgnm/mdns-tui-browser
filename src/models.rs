@@ -131,15 +131,21 @@ pub struct ServiceEntry {
 impl ServiceEntry {
     /// Returns the URL to open this service if applicable.
     pub fn get_url(&self) -> Option<String> {
-        if self.service_type.contains("_http._tcp") {
+        for txt in &self.txt {
+            if let Some((_key, value)) = txt.split_once('=')
+                && let Ok(url) = url::Url::parse(value)
+                && (url.scheme() == "http" || url.scheme() == "https")
+            {
+                return Some(url.into());
+            }
+        }
+
+        if self.service_type.starts_with("_http._tcp") {
             let host = self.host.trim_end_matches('.');
             for txt in &self.txt {
                 if let Some((key, value)) = txt.split_once('=')
                     && key == "path"
                 {
-                    if value.starts_with("http://") {
-                        return Some(value.to_string());
-                    }
                     let path = value.trim();
                     let path = if path.is_empty() { "/" } else { path };
                     let path = if !path.starts_with('/') {
@@ -151,15 +157,6 @@ impl ServiceEntry {
                 }
             }
             return Some(format!("http://{}:{}/", host, self.port));
-        }
-
-        for txt in &self.txt {
-            if let Some((_key, value)) = txt.split_once('=')
-                && let Ok(url) = url::Url::parse(value)
-                && (url.scheme() == "http" || url.scheme() == "https")
-            {
-                return Some(url.into());
-            }
         }
 
         None
