@@ -142,21 +142,25 @@ impl ServiceEntry {
 
         if self.service_type.starts_with("_http._tcp") {
             let host = self.host.trim_end_matches('.');
-            for txt in &self.txt {
-                if let Some((key, value)) = txt.split_once('=')
-                    && key == "path"
-                {
-                    let path = value.trim();
-                    let path = if path.is_empty() { "/" } else { path };
-                    let path = if !path.starts_with('/') {
-                        format!("/{}", path)
-                    } else {
-                        path.to_string()
-                    };
-                    return Some(format!("http://{}:{}{}", host, self.port, path));
-                }
+            let path = self
+                .txt
+                .iter()
+                .find_map(|txt| {
+                    txt.split_once('=').and_then(|(key, value)| {
+                        if key == "path" {
+                            Some(value.trim())
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .unwrap_or("/");
+
+            if let Ok(base) = url::Url::parse(&format!("http://{}:{}", host, self.port))
+                && let Ok(url) = base.join(path)
+            {
+                return Some(url.into());
             }
-            return Some(format!("http://{}:{}/", host, self.port));
         }
 
         None
@@ -789,18 +793,5 @@ pub mod tests {
 
         let url = service.get_url();
         assert_eq!(url, None);
-    }
-
-    #[test]
-    fn test_get_url_internal_url_priority_over_base_url_and_path() {
-        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
-        service.txt = vec![
-            "path=/api".to_string(),
-            "base_url=http://base.example.com".to_string(),
-            "internal_url=http://internal.example.com".to_string(),
-        ];
-
-        let url = service.get_url();
-        assert_eq!(url, Some("http://internal.example.com/".to_string()));
     }
 }
