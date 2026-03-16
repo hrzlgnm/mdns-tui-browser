@@ -160,7 +160,9 @@ impl ServiceEntry {
                 })
                 .unwrap_or("");
 
-            let scheme = if self.txt.iter().any(|txt| txt.contains("https")) {
+            let scheme = if self.service_type.contains("https")
+                || self.txt.iter().any(|txt| txt.contains("https"))
+            {
                 "https"
             } else {
                 "http"
