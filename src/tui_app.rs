@@ -841,6 +841,9 @@ impl AppState {
             || self.popup_state.metrics_popup.active
             || self.popup_state.url_selection_popup.is_active()
         {
+            let popup_active = self.popup_state.help_popup.active
+                || self.popup_state.metrics_popup.active
+                || self.popup_state.url_selection_popup.is_active();
             let result = self
                 .popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics);
@@ -863,7 +866,7 @@ impl AppState {
             {
                 *msg = format!("Failed to open URL: {}", e);
             }
-            result
+            result || popup_active
         } else if self.is_input_active()
             && matches!(
                 key.code,

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
@@ -131,8 +131,6 @@ pub struct ServiceEntry {
 impl ServiceEntry {
     /// Returns all URLs associated with this service, deduplicated.
     pub fn get_urls(&self) -> Vec<String> {
-        use std::collections::BTreeSet;
-
         let mut urls = BTreeSet::new();
 
         for txt in &self.txt {
@@ -853,6 +851,16 @@ pub mod tests {
         assert_eq!(urls.len(), 2);
         assert!(urls.contains(&"http://example.com/".to_string()));
         assert!(urls.contains(&"http://backup.example.com/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_txt_key_agnostic() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec!["foo=http://example.org".to_string()];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://example.org/");
     }
 
     #[test]

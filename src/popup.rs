@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    Frame,
     layout::Rect,
     style::{Color, Style},
     text::Line,
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::scroll::ScrollState;
@@ -187,42 +187,60 @@ impl Default for MetricsPopup {
     }
 }
 
+/// Popup for selecting a URL when a service has multiple URLs.
 #[derive(Debug, Clone)]
 pub struct UrlSelectionPopup {
     pub active: bool,
     urls: Vec<String>,
     selected_index: usize,
     scroll: ScrollState,
+    confirmed_selection: bool,
 }
 
 impl UrlSelectionPopup {
+    /// Creates a new empty UrlSelectionPopup.
     pub fn new() -> Self {
         Self {
             active: false,
             urls: Vec::new(),
             selected_index: 0,
             scroll: ScrollState::new(),
+            confirmed_selection: false,
         }
     }
 
+    /// Returns whether the popup is currently visible.
     pub fn is_active(&self) -> bool {
         self.active
     }
 
+    /// Shows the popup with the given URLs.
+    /// Resets selection to the first item and clears any previous confirmation.
+    /// # Example
+    /// ```ignore
+    /// popup.show(vec!["http://example.com".to_string(), "http://test.com".to_string()]);
+    /// ```
     pub fn show(&mut self, urls: Vec<String>) {
         self.urls = urls;
         self.selected_index = 0;
         self.scroll.reset();
         self.active = true;
+        self.confirmed_selection = false;
     }
 
+    /// Hides the popup and clears all state including selection and confirmation.
     pub fn hide(&mut self) {
         self.active = false;
         self.urls.clear();
         self.selected_index = 0;
         self.scroll.reset();
+        self.confirmed_selection = false;
     }
 
+    /// Handles key events for navigation and confirmation.
+    /// - Up/Down: navigate selection
+    /// - Enter: confirm selection
+    /// - Esc or any other key: cancel and close
     pub fn handle_key_event(&mut self, key: KeyEvent, _terminal_area: Rect) -> bool {
         if !self.active {
             return false;
@@ -241,7 +259,10 @@ impl UrlSelectionPopup {
                 }
                 true
             }
-            KeyCode::Enter => true,
+            KeyCode::Enter => {
+                self.confirmed_selection = true;
+                true
+            }
             KeyCode::Esc => {
                 self.hide();
                 true
@@ -253,6 +274,7 @@ impl UrlSelectionPopup {
         }
     }
 
+    /// Renders the popup to the frame if active.
     pub fn render(&self, f: &mut Frame, terminal_area: Rect) {
         if !self.active || self.urls.is_empty() {
             return;
@@ -295,8 +317,16 @@ impl UrlSelectionPopup {
         f.render_widget(border_block, popup_area);
     }
 
+    /// Returns the selected URL and closes the popup.
+    /// Returns `None` if the popup is not active or selection was not confirmed via Enter.
+    /// # Example
+    /// ```ignore
+    /// if let Some(url) = popup.take_selected_url() {
+    ///     open::that_detached(&url).ok();
+    /// }
+    /// ```
     pub fn take_selected_url(&mut self) -> Option<String> {
-        if self.active && self.selected_index < self.urls.len() {
+        if self.active && self.confirmed_selection && self.selected_index < self.urls.len() {
             let url = self.urls.remove(self.selected_index);
             self.hide();
             Some(url)
@@ -307,6 +337,7 @@ impl UrlSelectionPopup {
 }
 
 impl Default for UrlSelectionPopup {
+    /// Creates a default empty UrlSelectionPopup.
     fn default() -> Self {
         Self::new()
     }
@@ -819,11 +850,9 @@ mod tests {
     fn test_generate_help_content() {
         let content = generate_help_content();
         assert!(!content.is_empty());
-        assert!(
-            content
-                .iter()
-                .any(|line| line.to_string().contains("Help Popup Controls"))
-        );
+        assert!(content
+            .iter()
+            .any(|line| line.to_string().contains("Help Popup Controls")));
     }
 
     #[test]
@@ -831,11 +860,9 @@ mod tests {
         let metrics: BTreeMap<String, u64> = BTreeMap::new();
         let content = generate_metrics_content(&metrics);
         assert!(!content.is_empty());
-        assert!(
-            content
-                .iter()
-                .any(|line| line.to_string().contains("No metrics collected yet"))
-        );
+        assert!(content
+            .iter()
+            .any(|line| line.to_string().contains("No metrics collected yet")));
     }
 
     #[test]
@@ -1234,6 +1261,10 @@ mod tests {
             "http://c.com".to_string(),
         ]);
         popup.selected_index = 1;
+
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let enter_key = KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+        popup.handle_key_event(enter_key, terminal_area);
 
         let url = popup.take_selected_url();
 
