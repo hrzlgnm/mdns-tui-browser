@@ -837,7 +837,10 @@ impl AppState {
             msg.clear();
             return true;
         }
-        if self.popup_state.help_popup.active || self.popup_state.metrics_popup.active {
+        if self.popup_state.help_popup.active
+            || self.popup_state.metrics_popup.active
+            || self.popup_state.url_selection_popup.is_active()
+        {
             let result = self
                 .popup_state
                 .handle_key_event(key, self.terminal_area, &self.metrics);
@@ -851,6 +854,14 @@ impl AppState {
                 {
                     *msg = format!("Failed to open browser: {}", err);
                 }
+            }
+            if self.popup_state.url_selection_popup.is_active()
+                && matches!(key.code, KeyCode::Enter)
+                && let Some(url) = self.popup_state.url_selection_popup.take_selected_url()
+                && let Err(e) = open::that_detached(&url)
+                && let Ok(mut msg) = self.status_message.try_lock()
+            {
+                *msg = format!("Failed to open URL: {}", e);
             }
             result
         } else if self.is_input_active()
@@ -1500,11 +1511,25 @@ impl AppState {
 
         if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
             && let Some(service) = self.services.get(service_idx)
-            && let Some(url) = service.get_url()
-            && let Err(e) = open::that_detached(&url)
-            && let Ok(mut msg) = self.status_message.try_lock()
         {
-            *msg = format!("Failed to open URL: {}", e);
+            let urls = service.get_urls();
+            match urls.len() {
+                0 => {
+                    if let Ok(mut msg) = self.status_message.try_lock() {
+                        *msg = "No URL found for this service".to_string();
+                    }
+                }
+                1 => {
+                    if let Err(e) = open::that_detached(&urls[0])
+                        && let Ok(mut msg) = self.status_message.try_lock()
+                    {
+                        *msg = format!("Failed to open URL: {}", e);
+                    }
+                }
+                _ => {
+                    self.popup_state.show_url_selection(urls);
+                }
+            }
         }
     }
 }

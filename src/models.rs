@@ -130,6 +130,7 @@ pub struct ServiceEntry {
 
 impl ServiceEntry {
     /// Returns the URL to open this service if applicable.
+    #[allow(dead_code)]
     pub fn get_url(&self) -> Option<String> {
         for txt in &self.txt {
             if let Some((_key, value)) = txt.split_once('=')
@@ -164,6 +165,47 @@ impl ServiceEntry {
         }
 
         None
+    }
+
+    /// Returns all URLs associated with this service, deduplicated.
+    pub fn get_urls(&self) -> Vec<String> {
+        use std::collections::BTreeSet;
+
+        let mut urls = BTreeSet::new();
+
+        for txt in &self.txt {
+            if let Some((_key, value)) = txt.split_once('=')
+                && let Ok(url) = url::Url::parse(value)
+                && (url.scheme() == "http" || url.scheme() == "https")
+            {
+                urls.insert(url.into());
+            }
+        }
+
+        if self.service_type.starts_with("_http._tcp") {
+            let host = self.host.trim_end_matches('.');
+            let path = self
+                .txt
+                .iter()
+                .find_map(|txt| {
+                    txt.split_once('=').and_then(|(key, value)| {
+                        if key == "path" {
+                            Some(value.trim())
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .unwrap_or("/");
+
+            if let Ok(base) = url::Url::parse(&format!("http://{}:{}", host, self.port))
+                && let Ok(url) = base.join(path)
+            {
+                urls.insert(url.into());
+            }
+        }
+
+        urls.into_iter().collect()
     }
 
     /// Marks the service as offline at the given timestamp.
@@ -803,5 +845,100 @@ pub mod tests {
 
         let url = service.get_url();
         assert_eq!(url, Some("https://example.com/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_empty() {
+        let service = create_test_service("test", "_service._tcp.local.", 8080);
+
+        let urls = service.get_urls();
+        assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn test_get_urls_single_url_from_txt() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec!["internal_url=http://example.com".to_string()];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://example.com/");
+    }
+
+    #[test]
+    fn test_get_urls_multiple_urls_from_txt() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec![
+            "internal_url=http://example.com".to_string(),
+            "base_url=http://backup.example.com".to_string(),
+        ];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 2);
+        assert!(urls.contains(&"http://example.com/".to_string()));
+        assert!(urls.contains(&"http://backup.example.com/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_deduplicated() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.txt = vec!["internal_url=http://myhost.local:8080/".to_string()];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+    }
+
+    #[test]
+    fn test_get_urls_http_service_default_root() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.txt = vec![];
+        service.host = "myhost.local".to_string();
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/");
+    }
+
+    #[test]
+    fn test_get_urls_http_service_with_path() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.txt = vec!["path=/api".to_string()];
+        service.host = "myhost.local".to_string();
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/api");
+    }
+
+    #[test]
+    fn test_get_urls_mixed_txt_and_constructed() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.txt = vec!["internal_url=http://explicit.example.com".to_string()];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 2);
+        assert!(urls.contains(&"http://explicit.example.com/".to_string()));
+        assert!(urls.contains(&"http://myhost.local:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_https_urls() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 443);
+        service.txt = vec!["internal_url=https://secure.example.com".to_string()];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://secure.example.com/");
+    }
+
+    #[test]
+    fn test_get_urls_non_http_rejected() {
+        let mut service = create_test_service("test", "_service._tcp.local.", 8080);
+        service.txt = vec!["internal_url=mailto:test@example.com".to_string()];
+
+        let urls = service.get_urls();
+        assert!(urls.is_empty());
     }
 }
