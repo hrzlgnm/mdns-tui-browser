@@ -160,9 +160,7 @@ impl ServiceEntry {
                 })
                 .unwrap_or("");
 
-            let scheme = if self.service_type.contains("https")
-                || self.txt.iter().any(|txt| txt.contains("https"))
-            {
+            let scheme = if self.service_type.contains("https") {
                 "https"
             } else {
                 "http"
@@ -940,16 +938,5 @@ pub mod tests {
         let urls = service.get_urls();
         assert_eq!(urls.len(), 1);
         assert_eq!(urls[0], "https://myhost.local/");
-    }
-
-    #[test]
-    fn test_get_urls_https_detected_from_txt() {
-        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
-        service.host = "myhost.local".to_string();
-        service.txt = vec!["https=true".to_string()];
-
-        let urls = service.get_urls();
-        assert_eq!(urls.len(), 1);
-        assert_eq!(urls[0], "https://myhost.local:8080/");
     }
 }
