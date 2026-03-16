@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    Frame,
     layout::Rect,
     style::Color,
     text::Line,
     widgets::{Block, Borders, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::scroll::ScrollState;
@@ -351,7 +351,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Shift+↑/↓ or J/K  - Scroll service details"),
         Line::from(" "),
         Line::from(" Actions:"),
-        Line::from("   Enter             - Open service URL in browser"),
+        Line::from("   Enter             - Open service URL in browser (_http._tcp or with internal_url/base_url TXT)"),
         Line::from("   d                 - Remove offline services"),
         Line::from("   D                 - Clear stale service types"),
         Line::from("   m                 - Show service metrics"),
@@ -682,11 +682,9 @@ mod tests {
     fn test_generate_help_content() {
         let content = generate_help_content();
         assert!(!content.is_empty());
-        assert!(
-            content
-                .iter()
-                .any(|line| line.to_string().contains("Help Popup Controls"))
-        );
+        assert!(content
+            .iter()
+            .any(|line| line.to_string().contains("Help Popup Controls")));
     }
 
     #[test]
@@ -694,11 +692,9 @@ mod tests {
         let metrics: BTreeMap<String, u64> = BTreeMap::new();
         let content = generate_metrics_content(&metrics);
         assert!(!content.is_empty());
-        assert!(
-            content
-                .iter()
-                .any(|line| line.to_string().contains("No metrics collected yet"))
-        );
+        assert!(content
+            .iter()
+            .any(|line| line.to_string().contains("No metrics collected yet")));
     }
 
     #[test]
