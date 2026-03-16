@@ -8,9 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::Rect,
-    style::Color,
+    style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 use crate::scroll::ScrollState;
@@ -187,10 +187,163 @@ impl Default for MetricsPopup {
     }
 }
 
+/// Popup for selecting a URL when a service has multiple URLs.
+#[derive(Debug, Clone)]
+pub struct UrlSelectionPopup {
+    pub active: bool,
+    urls: Vec<String>,
+    selected_index: usize,
+    confirmed_selection: bool,
+}
+
+impl UrlSelectionPopup {
+    /// Creates a new empty UrlSelectionPopup.
+    pub fn new() -> Self {
+        Self {
+            active: false,
+            urls: Vec::new(),
+            selected_index: 0,
+            confirmed_selection: false,
+        }
+    }
+
+    /// Returns whether the popup is currently visible.
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// Shows the popup with the given URLs.
+    /// Resets selection to the first item and clears any previous confirmation.
+    /// # Example
+    /// ```ignore
+    /// popup.show(vec!["http://example.com".to_string(), "http://test.com".to_string()]);
+    /// ```
+    pub fn show(&mut self, urls: Vec<String>) {
+        self.urls = urls;
+        self.selected_index = 0;
+        self.active = true;
+        self.confirmed_selection = false;
+    }
+
+    /// Hides the popup and clears all state including selection and confirmation.
+    pub fn hide(&mut self) {
+        self.active = false;
+        self.urls.clear();
+        self.selected_index = 0;
+        self.confirmed_selection = false;
+    }
+
+    /// Handles key events for navigation and confirmation.
+    /// - Up/Down: navigate selection
+    /// - Enter: confirm selection
+    /// - Esc or any other key: cancel and close
+    pub fn handle_key_event(&mut self, key: KeyEvent, _terminal_area: Rect) -> bool {
+        if !self.active {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Up => {
+                if self.selected_index > 0 {
+                    self.selected_index -= 1;
+                }
+                true
+            }
+            KeyCode::Down => {
+                if self.selected_index < self.urls.len().saturating_sub(1) {
+                    self.selected_index += 1;
+                }
+                true
+            }
+            KeyCode::Enter => {
+                self.confirmed_selection = true;
+                true
+            }
+            KeyCode::Esc => {
+                self.hide();
+                true
+            }
+            _ => {
+                self.hide();
+                true
+            }
+        }
+    }
+
+    /// Renders the popup to the frame if active.
+    pub fn render(&self, f: &mut Frame, terminal_area: Rect) {
+        if !self.active || self.urls.is_empty() {
+            return;
+        }
+
+        let popup_area = create_centered_popup(terminal_area, 60, 70);
+
+        f.render_widget(ratatui::widgets::Clear, popup_area);
+
+        let background_block = Block::default().style(Style::default().bg(Color::Black));
+        f.render_widget(background_block, popup_area);
+
+        let inner_area = Rect::new(
+            popup_area.x + 1,
+            popup_area.y + 1,
+            popup_area.width.saturating_sub(2),
+            popup_area.height.saturating_sub(2),
+        );
+
+        let items: Vec<ListItem> = self
+            .urls
+            .iter()
+            .map(|url| ListItem::new(url.as_str()))
+            .collect();
+
+        let mut list_state = ListState::default();
+        list_state.select(Some(self.selected_index));
+
+        let list = List::new(items)
+            .style(Style::default().fg(Color::White))
+            .highlight_style(Style::default().bg(Color::DarkGray).fg(Color::White))
+            .highlight_symbol("> ");
+
+        f.render_stateful_widget(list, inner_area, &mut list_state);
+
+        let border_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Select URL")
+            .title_style(Style::default().add_modifier(ratatui::style::Modifier::BOLD));
+        f.render_widget(border_block, popup_area);
+    }
+
+    /// Returns the selected URL and closes the popup.
+    /// Returns `None` if the popup is not active or selection was not confirmed via Enter.
+    /// # Example
+    /// ```ignore
+    /// if let Some(url) = popup.take_selected_url() {
+    ///     open::that_detached(&url).ok();
+    /// }
+    /// ```
+    pub fn take_selected_url(&mut self) -> Option<String> {
+        if self.active && self.confirmed_selection && self.selected_index < self.urls.len() {
+            let url = self.urls.remove(self.selected_index);
+            self.hide();
+            Some(url)
+        } else {
+            None
+        }
+    }
+}
+
+impl Default for UrlSelectionPopup {
+    /// Creates a default empty UrlSelectionPopup.
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PopupState {
     pub help_popup: HelpPopup,
     pub metrics_popup: MetricsPopup,
+    pub url_selection_popup: UrlSelectionPopup,
 }
 
 impl PopupState {
@@ -198,6 +351,7 @@ impl PopupState {
         Self {
             help_popup: HelpPopup::new(),
             metrics_popup: MetricsPopup::new(),
+            url_selection_popup: UrlSelectionPopup::new(),
         }
     }
 
@@ -209,13 +363,22 @@ impl PopupState {
         self.metrics_popup.toggle();
     }
 
+    /// Shows the URL selection popup with the given URLs.
+    /// Calls [`UrlSelectionPopup::show`] internally.
+    pub fn show_url_selection(&mut self, urls: Vec<String>) {
+        self.url_selection_popup.show(urls);
+    }
+
     pub fn handle_key_event(
         &mut self,
         key: KeyEvent,
         terminal_area: Rect,
         metrics: &BTreeMap<String, u64>,
     ) -> bool {
-        if self.help_popup.is_active() {
+        if self.url_selection_popup.is_active() {
+            self.url_selection_popup
+                .handle_key_event(key, terminal_area)
+        } else if self.help_popup.is_active() {
             self.help_popup.handle_key_event(key, terminal_area)
         } else if self.metrics_popup.is_active() {
             self.metrics_popup
@@ -230,6 +393,7 @@ impl PopupState {
         if !self.help_popup.is_active() {
             self.metrics_popup.render(f, terminal_area, metrics);
         }
+        self.url_selection_popup.render(f, terminal_area);
     }
 }
 
@@ -947,5 +1111,256 @@ mod tests {
                 test_case.name, test_case.description, test_case.expected_popup_open, popup.active
             );
         }
+    }
+
+    #[test]
+    fn test_url_selection_popup_new() {
+        let popup = UrlSelectionPopup::new();
+        assert!(!popup.is_active());
+        assert!(popup.urls.is_empty());
+        assert_eq!(popup.selected_index, 0);
+    }
+
+    #[test]
+    fn test_url_selection_popup_show() {
+        let mut popup = UrlSelectionPopup::new();
+        let urls = vec![
+            "http://example.com".to_string(),
+            "http://test.com".to_string(),
+        ];
+
+        popup.show(urls.clone());
+
+        assert!(popup.is_active());
+        assert_eq!(popup.urls, urls);
+        assert_eq!(popup.selected_index, 0);
+    }
+
+    #[test]
+    fn test_url_selection_popup_hide() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://example.com".to_string()]);
+        assert!(popup.is_active());
+
+        popup.hide();
+
+        assert!(!popup.is_active());
+        assert!(popup.urls.is_empty());
+        assert_eq!(popup.selected_index, 0);
+    }
+
+    #[test]
+    fn test_url_selection_popup_navigation_up() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec![
+            "http://a.com".to_string(),
+            "http://b.com".to_string(),
+            "http://c.com".to_string(),
+        ]);
+        popup.selected_index = 2;
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert_eq!(popup.selected_index, 1);
+    }
+
+    #[test]
+    fn test_url_selection_popup_navigation_up_at_first() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        popup.selected_index = 0;
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert_eq!(popup.selected_index, 0);
+    }
+
+    #[test]
+    fn test_url_selection_popup_navigation_down() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec![
+            "http://a.com".to_string(),
+            "http://b.com".to_string(),
+            "http://c.com".to_string(),
+        ]);
+        popup.selected_index = 0;
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert_eq!(popup.selected_index, 1);
+    }
+
+    #[test]
+    fn test_url_selection_popup_navigation_down_at_last() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        popup.selected_index = 1;
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert_eq!(popup.selected_index, 1);
+    }
+
+    #[test]
+    fn test_url_selection_popup_enter_key() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        popup.selected_index = 1;
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert!(popup.is_active());
+    }
+
+    #[test]
+    fn test_url_selection_popup_escape_key() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://example.com".to_string()]);
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert!(!popup.is_active());
+    }
+
+    #[test]
+    fn test_url_selection_popup_other_key_closes() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://example.com".to_string()]);
+        popup.selected_index = 5;
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Char('x'), crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(result);
+        assert!(!popup.is_active());
+    }
+
+    #[test]
+    fn test_url_selection_popup_take_selected_url() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec![
+            "http://a.com".to_string(),
+            "http://b.com".to_string(),
+            "http://c.com".to_string(),
+        ]);
+        popup.selected_index = 1;
+
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let enter_key = KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+        popup.handle_key_event(enter_key, terminal_area);
+
+        let url = popup.take_selected_url();
+
+        assert_eq!(url, Some("http://b.com".to_string()));
+        assert!(!popup.is_active());
+    }
+
+    #[test]
+    fn test_url_selection_popup_take_selected_url_without_confirmation() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        popup.selected_index = 1;
+
+        let url = popup.take_selected_url();
+
+        assert!(url.is_none());
+        assert!(popup.is_active());
+    }
+
+    #[test]
+    fn test_url_selection_popup_take_selected_url_when_inactive() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://example.com".to_string()]);
+        popup.active = false;
+
+        let url = popup.take_selected_url();
+
+        assert!(url.is_none());
+    }
+
+    #[test]
+    fn test_url_selection_popup_handle_key_when_inactive() {
+        let mut popup = UrlSelectionPopup::new();
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = popup.handle_key_event(key, terminal_area);
+
+        assert!(!result);
+        assert_eq!(popup.selected_index, 0);
+    }
+
+    #[test]
+    fn test_url_selection_popup_single_url_navigation() {
+        let mut popup = UrlSelectionPopup::new();
+        popup.show(vec!["http://onlyone.com".to_string()]);
+        let terminal_area = Rect::new(0, 0, 80, 24);
+
+        let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        popup.handle_key_event(key_up, terminal_area);
+        assert_eq!(popup.selected_index, 0);
+
+        let key_down = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        popup.handle_key_event(key_down, terminal_area);
+        assert_eq!(popup.selected_index, 0);
+    }
+
+    #[test]
+    fn test_popup_state_url_selection_show() {
+        let mut state = PopupState::new();
+        let urls = vec!["http://a.com".to_string(), "http://b.com".to_string()];
+
+        state.show_url_selection(urls.clone());
+
+        assert!(state.url_selection_popup.is_active());
+        assert_eq!(state.url_selection_popup.urls, urls);
+    }
+
+    #[test]
+    fn test_popup_state_url_selection_key_event() {
+        let mut state = PopupState::new();
+        state.show_url_selection(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let metrics = BTreeMap::new();
+
+        let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_key_event(key, terminal_area, &metrics);
+
+        assert!(result);
+        assert_eq!(state.url_selection_popup.selected_index, 1);
+    }
+
+    #[test]
+    fn test_popup_state_url_selection_takes_priority() {
+        let mut state = PopupState::new();
+        state.help_popup.active = true;
+        state.show_url_selection(vec!["http://a.com".to_string(), "http://b.com".to_string()]);
+        let terminal_area = Rect::new(0, 0, 80, 24);
+        let metrics = BTreeMap::new();
+
+        let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let result = state.handle_key_event(key, terminal_area, &metrics);
+
+        assert!(result);
+        assert_eq!(state.url_selection_popup.selected_index, 1);
     }
 }
