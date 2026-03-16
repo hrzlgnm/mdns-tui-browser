@@ -194,6 +194,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>Ctrl</kbd>+<kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service type
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
+- <kbd>Enter</kbd> - Open service URL in browser (_http._tcp or URL from TXT)
 - <kbd>s</kbd> - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
 - <kbd>S</kbd> - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
 - <kbd>o</kbd> - Toggle sort direction (↑/↓)
@@ -272,6 +273,7 @@ The application is built with:
 - **if-addrs** - Network interface enumeration
 - **nix** - Unix system calls (signal handling for Ctrl+Z suspend)
 - **open** - Cross-platform library to open URLs in the browser
+- **url** - URL parsing and validation for URL extraction from TXT records
 
 ### Safety Policy
 

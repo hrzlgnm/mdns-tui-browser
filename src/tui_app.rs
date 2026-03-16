@@ -1071,6 +1071,12 @@ impl AppState {
                 true
             }
 
+            // Open URL in browser
+            KeyCode::Enter => {
+                self.open_selected_service_url();
+                true
+            }
+
             // Sorting
             KeyCode::Char('s') => {
                 self.cycle_sort_field(true);
@@ -1485,6 +1491,20 @@ impl AppState {
                 self.details_scroll.offset =
                     std::cmp::min(self.details_scroll.offset + 1, max_scroll_offset);
             }
+        }
+    }
+
+    fn open_selected_service_url(&mut self) {
+        let selected_service_idx = self.selected_service;
+        let filtered_indices = self.get_filtered_services();
+
+        if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
+            && let Some(service) = self.services.get(service_idx)
+            && let Some(url) = service.get_url()
+            && let Err(e) = open::that_detached(&url)
+            && let Ok(mut msg) = self.status_message.try_lock()
+        {
+            *msg = format!("Failed to open URL: {}", e);
         }
     }
 }
