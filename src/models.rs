@@ -905,7 +905,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_get_urls_ip_deduplicated_from_hostname() {
+    fn test_get_urls_hostname_and_ip_coexist() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
         service.addrs = vec!["192.168.1.100".to_string()];
