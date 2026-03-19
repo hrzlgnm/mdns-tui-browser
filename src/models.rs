@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
+use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
@@ -143,7 +145,6 @@ impl ServiceEntry {
         }
 
         if self.service_type.contains("http") {
-            let host = self.host.trim_end_matches('.');
             let path = self
                 .txt
                 .iter()
@@ -164,10 +165,28 @@ impl ServiceEntry {
                 "http"
             };
 
-            if let Ok(base) = url::Url::parse(&format!("{}://{}:{}", scheme, host, self.port))
-                && let Ok(url) = base.join(path)
-            {
-                urls.insert(url.into());
+            let mut insert_url = |host: &str| {
+                if let Ok(base) = url::Url::parse(&format!("{}://{}:{}", scheme, host, self.port))
+                    && let Ok(url) = base.join(path)
+                {
+                    urls.insert(url.into());
+                }
+            };
+
+            insert_url(self.host.trim_end_matches('.'));
+
+            for addr in &self.addrs {
+                if let Ok(IpAddr::V6(ip)) = addr.parse::<IpAddr>()
+                    && ip.is_unicast_link_local()
+                {
+                    continue;
+                }
+                let host_part: Cow<str> = if addr.contains(':') {
+                    Cow::Owned(format!("[{}]", addr))
+                } else {
+                    Cow::Borrowed(addr)
+                };
+                insert_url(&host_part);
             }
         }
 
@@ -750,6 +769,7 @@ pub mod tests {
     fn test_get_urls_deduplicated() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
+        service.addrs = vec![];
         service.txt = vec!["internal_url=http://myhost.local:8080/".to_string()];
 
         let urls = service.get_urls();
@@ -761,6 +781,7 @@ pub mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.txt = vec![];
         service.host = "myhost.local".to_string();
+        service.addrs = vec![];
 
         let urls = service.get_urls();
         assert_eq!(urls.len(), 1);
@@ -772,6 +793,7 @@ pub mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.txt = vec!["path=/api".to_string()];
         service.host = "myhost.local".to_string();
+        service.addrs = vec![];
 
         let urls = service.get_urls();
         assert_eq!(urls.len(), 1);
@@ -782,6 +804,7 @@ pub mod tests {
     fn test_get_urls_mixed_txt_and_constructed() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
+        service.addrs = vec![];
         service.txt = vec!["internal_url=http://explicit.example.com".to_string()];
 
         let urls = service.get_urls();
@@ -814,6 +837,7 @@ pub mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.txt = vec![];
         service.host = "myhost.local".to_string();
+        service.addrs = vec![];
 
         let urls = service.get_urls();
         assert_eq!(urls.len(), 1);
@@ -825,9 +849,90 @@ pub mod tests {
         let mut service = create_test_service("test", "_https._tcp.local.", 443);
         service.txt = vec![];
         service.host = "myhost.local".to_string();
+        service.addrs = vec![];
 
         let urls = service.get_urls();
         assert_eq!(urls.len(), 1);
         assert_eq!(urls[0], "https://myhost.local/");
+    }
+
+    #[test]
+    fn test_get_urls_ipv4_address() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.addrs = vec!["192.168.1.100".to_string()];
+
+        let urls = service.get_urls();
+        assert!(urls.contains(&"http://192.168.1.100:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_ipv6_address() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.addrs = vec!["2001:db8::1".to_string()];
+
+        let urls = service.get_urls();
+        assert!(urls.contains(&"http://[2001:db8::1]:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_ipv6_link_local_skipped() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.addrs = vec!["fe80::1".to_string()];
+
+        let urls = service.get_urls();
+        let ipv6_urls: Vec<_> = urls.iter().filter(|u| u.contains("fe80")).collect();
+        assert!(ipv6_urls.is_empty());
+    }
+
+    #[test]
+    fn test_get_urls_ipv4_and_ipv6_multiple_addrs() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.addrs = vec![
+            "192.168.1.100".to_string(),
+            "fe80::1".to_string(),
+            "2001:db8::1".to_string(),
+        ];
+
+        let urls = service.get_urls();
+        assert!(urls.contains(&"http://192.168.1.100:8080/".to_string()));
+        assert!(urls.contains(&"http://[2001:db8::1]:8080/".to_string()));
+        let ipv6_link_local_urls: Vec<_> = urls.iter().filter(|u| u.contains("fe80")).collect();
+        assert!(ipv6_link_local_urls.is_empty());
+    }
+
+    #[test]
+    fn test_get_urls_hostname_and_ip_coexist() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.addrs = vec!["192.168.1.100".to_string()];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 2);
+        assert!(urls.contains(&"http://myhost.local:8080/".to_string()));
+        assert!(urls.contains(&"http://192.168.1.100:8080/".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_ip_with_path() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.host = "myhost.local".to_string();
+        service.addrs = vec!["192.168.1.100".to_string()];
+        service.txt = vec!["path=/api/v1".to_string()];
+
+        let urls = service.get_urls();
+        assert!(urls.contains(&"http://192.168.1.100:8080/api/v1".to_string()));
+    }
+
+    #[test]
+    fn test_get_urls_non_http_service_ignores_addrs() {
+        let mut service = create_test_service("test", "_ssh._tcp.local.", 22);
+        service.addrs = vec!["192.168.1.100".to_string()];
+
+        let urls = service.get_urls();
+        assert!(urls.is_empty());
     }
 }
