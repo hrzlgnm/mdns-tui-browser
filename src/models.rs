@@ -8,8 +8,115 @@ use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
-use mdns_sd::ResolvedService;
+use mdns_sd::{ResolvedService, ScopedIp};
 use serde::{Deserialize, Serialize};
+
+pub fn format_ip_for_display(ip: &ScopedIp) -> String {
+    match ip {
+        ScopedIp::V4(v4) => v4.addr().to_string(),
+        ScopedIp::V6(v6) => v6.addr().to_string(),
+        _ => ip.to_string(),
+    }
+}
+
+pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> String {
+    match ip {
+        ScopedIp::V4(v4) => {
+            let addr = v4.addr();
+            let interface_ids = v4.interface_ids();
+            if interface_ids.is_empty() {
+                addr.to_string()
+            } else {
+                let mut sorted_ids = interface_ids.to_vec();
+                sorted_ids.sort_by_key(|id| id.index);
+                let names: Vec<&str> = sorted_ids.iter().map(|id| id.name.as_str()).collect();
+                format!("{} via {}", addr, names.join(", "))
+            }
+        }
+        ScopedIp::V6(v6) => {
+            let addr = v6.addr();
+            let scope_id = v6.scope_id();
+            let is_link_local = addr.is_unicast_link_local();
+            
+            // For link-local: only consider entries with SAME address AND SAME interface
+            // For non-link-local: consider all entries with same address (regardless of interface)
+            
+            if is_link_local {
+                let mut seen_before = false;
+                for (i, a) in all_addrs.iter().enumerate() {
+                    if let ScopedIp::V6(av6) = a
+                        && av6.addr() == addr
+                        && av6.scope_id().name == scope_id.name
+                        && i < all_addrs.iter().position(|x| std::ptr::eq(x, ip)).unwrap_or(usize::MAX)
+                    {
+                        seen_before = true;
+                        break;
+                    }
+                }
+
+                if seen_before {
+                    return String::new();
+                }
+                
+                #[cfg(windows)]
+                {
+                    format!("{}%{}", addr, scope_id.index)
+                }
+                #[cfg(not(windows))]
+                {
+                    format!("{}%{}", addr, scope_id.name)
+                }
+            } else {
+                // For non-link-local: collect ALL unique interface names for this address
+                let mut all_interfaces: Vec<&str> = Vec::new();
+                for a in all_addrs {
+                    if let ScopedIp::V6(av6) = a && av6.addr() == addr {
+                        let if_name = av6.scope_id().name.as_str();
+                        if !all_interfaces.contains(&if_name) {
+                            all_interfaces.push(if_name);
+                        }
+                    }
+                }
+                all_interfaces.sort();
+
+                // Only show at first occurrence
+                let first_occurrence = all_addrs.iter().position(|a| {
+                    if let ScopedIp::V6(av6) = a {
+                        av6.addr() == addr
+                    } else {
+                        false
+                    }
+                });
+
+                let my_index = all_addrs.iter().position(|a| {
+                    if let ScopedIp::V6(av6) = a {
+                        av6.addr() == addr && av6.scope_id().name == scope_id.name
+                    } else {
+                        false
+                    }
+                });
+
+                if let (Some(first), Some(mine)) = (first_occurrence, my_index)
+                    && mine != first
+                {
+                    return String::new();
+                }
+                
+                if all_interfaces.is_empty() {
+                    addr.to_string()
+                } else {
+                    format!("{} via {}", addr, all_interfaces.join(", "))
+                }
+            }
+        }
+        _ => ip.to_string(),
+    }
+}
+
+#[allow(dead_code)]
+pub fn format_scoped_ip(ip: &ScopedIp) -> String {
+    format_scoped_ip_with_context(ip, &[])
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ServiceSession {
@@ -118,7 +225,7 @@ pub struct ServiceEntry {
     pub host: String,
     pub service_type: String,
     pub subtype: Option<String>,
-    pub addrs: Vec<String>,
+    pub addrs: Vec<ScopedIp>,
     pub port: u16,
     pub txt: Vec<String>,
     pub online: bool,
@@ -176,15 +283,16 @@ impl ServiceEntry {
             insert_url(self.host.trim_end_matches('.'));
 
             for addr in &self.addrs {
-                if let Ok(IpAddr::V6(ip)) = addr.parse::<IpAddr>()
+                if let IpAddr::V6(ip) = addr.to_ip_addr()
                     && ip.is_unicast_link_local()
                 {
                     continue;
                 }
-                let host_part: Cow<str> = if addr.contains(':') {
-                    Cow::Owned(format!("[{}]", addr))
+                let addr_str = addr.to_string();
+                let host_part: Cow<str> = if addr_str.contains(':') {
+                    Cow::Owned(format!("[{}]", addr_str))
                 } else {
-                    Cow::Borrowed(addr)
+                    Cow::Owned(addr_str)
                 };
                 insert_url(&host_part);
             }
@@ -297,12 +405,9 @@ impl From<ResolvedService> for ServiceEntry {
                 .as_ref()
                 .map(|s| s.to_string()),
             addrs: {
-                let mut addrs: Vec<String> = resolved_service
-                    .get_addresses()
-                    .iter()
-                    .map(|ip| ip.to_string())
-                    .collect();
-                addrs.sort();
+                let mut addrs: Vec<ScopedIp> =
+                    resolved_service.get_addresses().iter().cloned().collect();
+                addrs.sort_by_key(|a| a.to_string());
                 addrs
             },
             port: resolved_service.get_port(),
@@ -353,7 +458,7 @@ impl From<&ServiceEntry> for SerializableServiceEntry {
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
             subtype: entry.subtype.clone(),
-            addresses: entry.addrs.clone(),
+            addresses: entry.addrs.iter().map(|ip| ip.to_string()).collect(),
             port: entry.port,
             txt_records: entry.txt.clone(),
             is_online: entry.online,
@@ -375,6 +480,11 @@ impl From<&ServiceSession> for SerializableServiceSession {
         }
     }
 }
+
+fn parse_scoped_ip(s: &str) -> Option<ScopedIp> {
+    s.parse::<IpAddr>().ok().map(ScopedIp::from)
+}
+
 impl From<&SerializableServiceEntry> for ServiceEntry {
     fn from(entry: &SerializableServiceEntry) -> Self {
         let first_seen_micros = iso_timestamp_to_micros(&entry.created_at);
@@ -397,7 +507,11 @@ impl From<&SerializableServiceEntry> for ServiceEntry {
             host: entry.host.clone(),
             service_type: entry.service_type.clone(),
             subtype: entry.subtype.clone(),
-            addrs: entry.addresses.clone(),
+            addrs: entry
+                .addresses
+                .iter()
+                .filter_map(|s| parse_scoped_ip(s))
+                .collect(),
             port: entry.port,
             txt: entry.txt_records.clone(),
             online: entry.is_online,
@@ -498,14 +612,19 @@ pub mod tests {
 
     use super::*;
 
+    pub fn scoped_ip(s: &str) -> ScopedIp {
+        ScopedIp::from(s.parse::<IpAddr>().unwrap())
+    }
+
     pub fn create_test_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
         let last_octet = (port % 254) + 1;
+        let addr: IpAddr = format!("192.168.1.{}", last_octet).parse().unwrap();
         ServiceEntry {
             fullname: format!("{}.{}", name, service_type),
             host: format!("{}.local.", name),
             service_type: service_type.to_string(),
             subtype: None,
-            addrs: vec![format!("192.168.1.{}", last_octet)],
+            addrs: vec![ScopedIp::from(addr)],
             port,
             txt: vec![],
             online: true,
@@ -860,7 +979,7 @@ pub mod tests {
     fn test_get_urls_ipv4_address() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
-        service.addrs = vec!["192.168.1.100".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.100")];
 
         let urls = service.get_urls();
         assert!(urls.contains(&"http://192.168.1.100:8080/".to_string()));
@@ -870,7 +989,7 @@ pub mod tests {
     fn test_get_urls_ipv6_address() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
-        service.addrs = vec!["2001:db8::1".to_string()];
+        service.addrs = vec![scoped_ip("2001:db8::1")];
 
         let urls = service.get_urls();
         assert!(urls.contains(&"http://[2001:db8::1]:8080/".to_string()));
@@ -880,7 +999,7 @@ pub mod tests {
     fn test_get_urls_ipv6_link_local_skipped() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
-        service.addrs = vec!["fe80::1".to_string()];
+        service.addrs = vec![scoped_ip("fe80::1")];
 
         let urls = service.get_urls();
         let ipv6_urls: Vec<_> = urls.iter().filter(|u| u.contains("fe80")).collect();
@@ -892,9 +1011,9 @@ pub mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
         service.addrs = vec![
-            "192.168.1.100".to_string(),
-            "fe80::1".to_string(),
-            "2001:db8::1".to_string(),
+            scoped_ip("192.168.1.100"),
+            scoped_ip("fe80::1"),
+            scoped_ip("2001:db8::1"),
         ];
 
         let urls = service.get_urls();
@@ -908,7 +1027,7 @@ pub mod tests {
     fn test_get_urls_hostname_and_ip_coexist() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
-        service.addrs = vec!["192.168.1.100".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.100")];
 
         let urls = service.get_urls();
         assert_eq!(urls.len(), 2);
@@ -920,7 +1039,7 @@ pub mod tests {
     fn test_get_urls_ip_with_path() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
-        service.addrs = vec!["192.168.1.100".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.100")];
         service.txt = vec!["path=/api/v1".to_string()];
 
         let urls = service.get_urls();
@@ -930,7 +1049,7 @@ pub mod tests {
     #[test]
     fn test_get_urls_non_http_service_ignores_addrs() {
         let mut service = create_test_service("test", "_ssh._tcp.local.", 22);
-        service.addrs = vec!["192.168.1.100".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.100")];
 
         let urls = service.get_urls();
         assert!(urls.is_empty());

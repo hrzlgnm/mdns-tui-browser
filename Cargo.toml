@@ -11,8 +11,16 @@ copyright = "Copyright 2026 hrzlgnm"
 license-file = "LICENSE"
 depends = "libgcc-s1 (>= 4.2)"
 assets = [
-    ["docs/mdns-tui-browser.1", "usr/share/man/man1/mdns-tui-browser.1", "644"],
-    ["target/release/mdns-tui-browser", "usr/bin/", "755"],
+    [
+        "docs/mdns-tui-browser.1",
+        "usr/share/man/man1/mdns-tui-browser.1",
+        "644",
+    ],
+    [
+        "target/release/mdns-tui-browser",
+        "usr/bin/",
+        "755",
+    ],
 ]
 
 [profile.release]
@@ -25,7 +33,7 @@ split-debuginfo = "packed"
 strip = true
 
 [dependencies]
-mdns-sd = "0.18"
+mdns-sd = { git = "https://github.com/keepsimple1/mdns-sd.git", branch = "main" }
 tokio = { version = "1.0", features = ["full"] }
 ratatui = "0.30"
 crossterm = "0.29"
