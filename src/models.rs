@@ -42,18 +42,15 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
 
             if is_link_local {
                 let my_index = all_addrs.iter().position(|a| std::ptr::eq(a, ip));
-                let mut seen_before = false;
-                for (i, a) in all_addrs.iter().enumerate() {
-                    if let Some(my_idx) = my_index
-                        && let ScopedIp::V6(av6) = a
-                        && av6.addr() == addr
-                        && av6.scope_id().name == scope_id.name
-                        && i < my_idx
-                    {
-                        seen_before = true;
-                        break;
-                    }
-                }
+                let seen_before = my_index.is_some_and(|my_pos| {
+                    all_addrs[..my_pos].iter().any(|a| {
+                        if let ScopedIp::V6(av6) = a {
+                            av6.addr() == addr && av6.scope_id().name == scope_id.name
+                        } else {
+                            false
+                        }
+                    })
+                });
 
                 if seen_before {
                     return String::new();
@@ -69,9 +66,12 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 }
             } else {
                 // For non-link-local: collect ALL unique interface names for this address
-                let mut all_interfaces: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+                let mut all_interfaces: std::collections::BTreeSet<&str> =
+                    std::collections::BTreeSet::new();
                 for a in all_addrs {
-                    if let ScopedIp::V6(av6) = a && av6.addr() == addr {
+                    if let ScopedIp::V6(av6) = a
+                        && av6.addr() == addr
+                    {
                         all_interfaces.insert(av6.scope_id().name.as_str());
                     }
                 }
