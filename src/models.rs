@@ -37,17 +37,20 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
             let addr = v6.addr();
             let scope_id = v6.scope_id();
             let is_link_local = addr.is_unicast_link_local();
-            
+
             // For link-local: only consider entries with SAME address AND SAME interface
             // For non-link-local: consider all entries with same address (regardless of interface)
-            
+
             if is_link_local {
                 let mut seen_before = false;
                 for (i, a) in all_addrs.iter().enumerate() {
                     if let ScopedIp::V6(av6) = a
                         && av6.addr() == addr
                         && av6.scope_id().name == scope_id.name
-                        && i < all_addrs.iter().position(|x| std::ptr::eq(x, ip)).unwrap_or(usize::MAX)
+                        && i < all_addrs
+                            .iter()
+                            .position(|x| std::ptr::eq(x, ip))
+                            .unwrap_or(usize::MAX)
                     {
                         seen_before = true;
                         break;
@@ -57,7 +60,7 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 if seen_before {
                     return String::new();
                 }
-                
+
                 #[cfg(windows)]
                 {
                     format!("{}%{}", addr, scope_id.index)
@@ -70,7 +73,9 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 // For non-link-local: collect ALL unique interface names for this address
                 let mut all_interfaces: Vec<&str> = Vec::new();
                 for a in all_addrs {
-                    if let ScopedIp::V6(av6) = a && av6.addr() == addr {
+                    if let ScopedIp::V6(av6) = a
+                        && av6.addr() == addr
+                    {
                         let if_name = av6.scope_id().name.as_str();
                         if !all_interfaces.contains(&if_name) {
                             all_interfaces.push(if_name);
@@ -101,7 +106,7 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 {
                     return String::new();
                 }
-                
+
                 if all_interfaces.is_empty() {
                     addr.to_string()
                 } else {

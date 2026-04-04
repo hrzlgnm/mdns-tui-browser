@@ -7577,7 +7577,10 @@ mod tests {
             8080,
             vec!["10.0.0.1", "10.0.0.2"],
         );
-        assert_eq!(service_with_addrs.addrs, vec![scoped_ip("10.0.0.1"), scoped_ip("10.0.0.2")]);
+        assert_eq!(
+            service_with_addrs.addrs,
+            vec![scoped_ip("10.0.0.1"), scoped_ip("10.0.0.2")]
+        );
 
         // Test create_service_with_txt
         let service_with_txt = create_service_with_txt(
