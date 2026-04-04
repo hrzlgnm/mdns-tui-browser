@@ -2692,7 +2692,7 @@ pub async fn run_tui(
                 .disable_interface(IfKind::IPv6)
                 .map_err(|e| format!("Failed to disable IPv6: {}", e))?;
         }
-        let _ = mdns_ref.set_ip_check_interval(1);
+        mdns_ref.set_ip_check_interval(1).map_err(|e| format!("Failed to set mDNS IP check interval: {}", e))?;
     }
 
     // Initialize app state
