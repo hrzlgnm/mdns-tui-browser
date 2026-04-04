@@ -400,7 +400,11 @@ impl From<ResolvedService> for ServiceEntry {
             addrs: {
                 let mut addrs: Vec<ScopedIp> =
                     resolved_service.get_addresses().iter().cloned().collect();
-                addrs.sort_by_key(|a| a.to_string());
+                addrs.sort_by(|a, b| {
+                    a.to_ip_addr()
+                        .cmp(&b.to_ip_addr())
+                        .then_with(|| a.to_string().cmp(&b.to_string()))
+                });
                 addrs
             },
             port: resolved_service.get_port(),
