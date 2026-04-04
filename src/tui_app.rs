@@ -21,7 +21,7 @@ use tokio::sync::RwLock;
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, Metadata, ServiceEntry, SortDirection, SortField, SortInfo, StateDump,
-    current_timestamp_micros,
+    current_timestamp_micros, format_ip_for_display, format_service_addrs,
 };
 use crate::popup::PopupState;
 use crate::scroll::ScrollState;
@@ -282,7 +282,7 @@ impl AppState {
                 service.fullname.clone(),
                 service.host.clone(),
                 service.service_type.clone(),
-                service.addrs.join(" "),
+                format_service_addrs(&service.addrs, " "),
                 service.port.to_string(),
                 service.txt.join(" "),
                 service.subtype.as_ref().unwrap_or(&String::new()).clone(),
@@ -1548,15 +1548,17 @@ fn compare_services_by_field(
         SortField::Fullname => a.fullname.cmp(&b.fullname),
         SortField::Port => a.port.cmp(&b.port),
         SortField::Address => {
-            use std::net::IpAddr;
+            let a_addr = a.addrs.first();
+            let b_addr = b.addrs.first();
 
-            let a_addr_str = a.addrs.first().map(|s| s.as_str()).unwrap_or_default();
-            let b_addr_str = b.addrs.first().map(|s| s.as_str()).unwrap_or_default();
-
-            // Try to parse as IP addresses for numeric comparison, fall back to string comparison
-            match (a_addr_str.parse::<IpAddr>(), b_addr_str.parse::<IpAddr>()) {
-                (Ok(a_ip), Ok(b_ip)) => a_ip.cmp(&b_ip),
-                _ => a_addr_str.cmp(b_addr_str),
+            match (a_addr, b_addr) {
+                (Some(a_ip), Some(b_ip)) => a_ip
+                    .to_ip_addr()
+                    .cmp(&b_ip.to_ip_addr())
+                    .then_with(|| a_ip.to_string().cmp(&b_ip.to_string())),
+                (Some(_), None) => std::cmp::Ordering::Greater,
+                (None, Some(_)) => std::cmp::Ordering::Less,
+                (None, None) => std::cmp::Ordering::Equal,
             }
         }
         SortField::Timestamp => a.updated_at_micros.cmp(&b.updated_at_micros),
@@ -2273,7 +2275,7 @@ fn format_service_for_display(service: &ServiceEntry) -> String {
     let address = service
         .addrs
         .first()
-        .map(|a| a.to_string())
+        .map(format_ip_for_display)
         .unwrap_or_else(|| "<no-addr>".into());
     format!(
         "{} - {} - {}:{}",
@@ -2540,7 +2542,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let addresses_text = if service.addrs.is_empty() {
         "None".to_string()
     } else {
-        service.addrs.join("\n")
+        format_service_addrs(&service.addrs, "\n")
     };
     for addr_line in addresses_text.lines() {
         lines.push(Line::from(addr_line.to_string()));
@@ -2998,7 +3000,7 @@ mod tests {
     use crate::models::SerializableServiceSession;
     use crate::models::ServiceSession;
     use crate::models::micros_to_iso_timestamp;
-    use crate::models::tests::{create_test_service, create_test_service_with_sessions};
+    use crate::models::tests::{create_test_service, create_test_service_with_sessions, scoped_ip};
 
     /// Helper to create AppState for testing
     fn create_test_app_state() -> AppState {
@@ -3317,7 +3319,7 @@ mod tests {
         addrs: Vec<&str>,
     ) -> ServiceEntry {
         let mut service = create_test_service(name, service_type, port);
-        service.addrs = addrs.into_iter().map(|s| s.to_string()).collect();
+        service.addrs = addrs.into_iter().map(scoped_ip).collect();
         service
     }
 
@@ -5406,7 +5408,7 @@ mod tests {
     fn test_create_service_details_text() {
         let mut service = create_test_service("MyService", "_http._tcp.local.", 8080);
         service.subtype = Some("printer._sub._http._tcp.local.".to_string());
-        service.addrs = vec!["192.168.1.63".to_string(), "192.168.1.20".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.63"), scoped_ip("192.168.1.20")];
         service.txt = vec!["key1=value1".to_string(), "key2=value2".to_string()];
         service.online = true;
         service.updated_at_micros = 1000000000;
@@ -5860,9 +5862,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_ip() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["192.168.1.11".to_string()];
+        service1.addrs = vec![scoped_ip("192.168.1.11")];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["192.168.1.22".to_string()];
+        service2.addrs = vec![scoped_ip("192.168.1.22")];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -5871,9 +5873,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_ipv6() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["2001:db8::2".to_string()];
+        service1.addrs = vec![scoped_ip("2001:db8::2")];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["2001:db8::3".to_string()];
+        service2.addrs = vec![scoped_ip("2001:db8::3")];
 
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
@@ -5882,9 +5884,9 @@ mod tests {
     #[test]
     fn test_compare_services_by_field_address_mixed_ipv4_ipv6() {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["192.168.1.63".to_string()];
+        service1.addrs = vec![scoped_ip("192.168.1.63")];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["2001:db8::1".to_string()];
+        service2.addrs = vec![scoped_ip("2001:db8::1")];
 
         // IPv4 should come before IPv6 (lexicographic comparison of IP types)
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
@@ -5896,20 +5898,8 @@ mod tests {
         let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
         service1.addrs = vec![];
         let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["192.168.1.3".to_string()];
+        service2.addrs = vec![scoped_ip("192.168.1.3")];
 
-        let result = compare_services_by_field(&service1, &service2, SortField::Address);
-        assert_eq!(result, std::cmp::Ordering::Less);
-    }
-
-    #[test]
-    fn test_compare_services_by_field_address_string_fallback() {
-        let mut service1 = create_test_service("test1", "_http._tcp.local.", 80);
-        service1.addrs = vec!["invalid-ip-2".to_string()];
-        let mut service2 = create_test_service("test2", "_http._tcp.local.", 80);
-        service2.addrs = vec!["invalid-ip-3".to_string()];
-
-        // Falls back to string comparison when IP parsing fails
         let result = compare_services_by_field(&service1, &service2, SortField::Address);
         assert_eq!(result, std::cmp::Ordering::Less);
     }
@@ -6124,7 +6114,7 @@ mod tests {
 
         // Test address search
         state.filter_input.set_text("192.168.1.100");
-        service.addrs = vec!["192.168.1.100".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.100")];
         assert!(state.filter_service(&service));
 
         // Test port search
@@ -6588,13 +6578,13 @@ mod tests {
 
         // Update service with different address
         let mut service2 = service1.clone();
-        service2.addrs = vec!["192.168.2.100".to_string()];
+        service2.addrs = vec![scoped_ip("192.168.2.100")];
 
         let was_updated = state.add_or_update_service(service2);
 
         assert!(was_updated);
         assert_eq!(state.services.len(), 1);
-        assert_eq!(state.services[0].addrs[0], "192.168.2.100");
+        assert_eq!(state.services[0].addrs[0].to_string(), "192.168.2.100");
         assert_eq!(state.metrics.get("services_updated"), Some(&1));
     }
 
@@ -6803,7 +6793,7 @@ mod tests {
         state.filter_input.set_text("192.168");
 
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
-        service.addrs = vec!["192.168.1.100".to_string()];
+        service.addrs = vec![scoped_ip("192.168.1.100")];
 
         assert!(state.filter_service(&service));
     }
@@ -7574,7 +7564,10 @@ mod tests {
             8080,
             vec!["10.0.0.1", "10.0.0.2"],
         );
-        assert_eq!(service_with_addrs.addrs, vec!["10.0.0.1", "10.0.0.2"]);
+        assert_eq!(
+            service_with_addrs.addrs,
+            vec![scoped_ip("10.0.0.1"), scoped_ip("10.0.0.2")]
+        );
 
         // Test create_service_with_txt
         let service_with_txt = create_service_with_txt(
