@@ -1552,11 +1552,10 @@ fn compare_services_by_field(
             let b_addr = b.addrs.first();
 
             match (a_addr, b_addr) {
-                (Some(a_ip), Some(b_ip)) => {
-                    let a_cmp = a_ip.to_string();
-                    let b_cmp = b_ip.to_string();
-                    a_cmp.cmp(&b_cmp)
-                }
+                (Some(a_ip), Some(b_ip)) => a_ip
+                    .to_ip_addr()
+                    .cmp(&b_ip.to_ip_addr())
+                    .then_with(|| a_ip.to_string().cmp(&b_ip.to_string())),
                 (Some(_), None) => std::cmp::Ordering::Greater,
                 (None, Some(_)) => std::cmp::Ordering::Less,
                 (None, None) => std::cmp::Ordering::Equal,
