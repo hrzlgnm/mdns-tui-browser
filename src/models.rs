@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT-0
 #![forbid(unsafe_code)]
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -298,11 +297,9 @@ impl ServiceEntry {
                 {
                     continue;
                 }
-                let addr_str = addr.to_string();
-                let host_part: Cow<str> = if addr_str.contains(':') {
-                    Cow::Owned(format!("[{}]", addr_str))
-                } else {
-                    Cow::Owned(addr_str)
+                let host_part = match addr.to_ip_addr() {
+                    IpAddr::V4(ip) => ip.to_string(),
+                    IpAddr::V6(ip) => format!("[{}]", ip),
                 };
                 insert_url(&host_part);
             }
