@@ -165,8 +165,7 @@ src/
 10. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
 11. Commit only when all checks pass
 12. After committing, push to the repository and create a pull request if applicable
-13. After the pull request is created, add a comment `@coderabbitai review`
-14. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 
