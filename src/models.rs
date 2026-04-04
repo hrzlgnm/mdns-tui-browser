@@ -69,15 +69,9 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 let mut all_interfaces: std::collections::BTreeSet<&str> =
                     std::collections::BTreeSet::new();
                 for a in all_addrs {
-                    if let ScopedIp::V6(av6) = a
-                        && av6.addr() == addr
-                    {
-                        all_interfaces.insert(av6.scope_id().name.as_str());
-                    }
-                }
-
                 // Only show at first occurrence
-                let first_occurrence = all_addrs.iter().position(|a| {
+                let my_actual_index = all_addrs.iter().position(|a| std::ptr::eq(a, ip));
+                let first_occurrence_for_addr = all_addrs.iter().position(|a| {
                     if let ScopedIp::V6(av6) = a {
                         av6.addr() == addr
                     } else {
@@ -85,10 +79,10 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                     }
                 });
 
-                if let Some(my_pos) = all_addrs.iter().position(|x| std::ptr::eq(x, ip))
-                    && Some(my_pos) != first_occurrence
-                {
-                    return String::new();
+                if let (Some(my_idx), Some(first_idx)) = (my_actual_index, first_occurrence_for_addr) {
+                    if my_idx != first_idx {
+                        return String::new();
+                    }
                 }
 
                 if all_interfaces.is_empty() {
