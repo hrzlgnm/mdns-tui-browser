@@ -65,11 +65,15 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                     format!("{}%{}", addr, scope_id.name)
                 }
             } else {
-                // For non-link-local: collect ALL unique interface names for this address
-                let mut all_interfaces: std::collections::BTreeSet<&str> =
+                let mut all_interfaces: std::collections::BTreeSet<String> =
                     std::collections::BTreeSet::new();
                 for a in all_addrs {
-                // Only show at first occurrence
+                    if let ScopedIp::V6(av6) = a
+                        && av6.addr() == addr
+                    {
+                        all_interfaces.insert(av6.scope_id().name.clone());
+                    }
+                }
                 let my_actual_index = all_addrs.iter().position(|a| std::ptr::eq(a, ip));
                 let first_occurrence_for_addr = all_addrs.iter().position(|a| {
                     if let ScopedIp::V6(av6) = a {
@@ -79,16 +83,17 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                     }
                 });
 
-                if let (Some(my_idx), Some(first_idx)) = (my_actual_index, first_occurrence_for_addr) {
-                    if my_idx != first_idx {
-                        return String::new();
-                    }
+                if let (Some(my_idx), Some(first_idx)) =
+                    (my_actual_index, first_occurrence_for_addr)
+                    && my_idx != first_idx
+                {
+                    return String::new();
                 }
 
                 if all_interfaces.is_empty() {
                     addr.to_string()
                 } else {
-                    let interfaces: Vec<&str> = all_interfaces.iter().copied().collect();
+                    let interfaces: Vec<&str> = all_interfaces.iter().map(|s| s.as_str()).collect();
                     format!("{} via {}", addr, interfaces.join(", "))
                 }
             }
