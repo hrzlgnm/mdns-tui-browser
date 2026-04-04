@@ -21,7 +21,7 @@ use tokio::sync::RwLock;
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, Metadata, ServiceEntry, SortDirection, SortField, SortInfo, StateDump,
-    current_timestamp_micros, format_ip_for_display, format_scoped_ip_with_context,
+    current_timestamp_micros, format_ip_for_display, format_service_addrs,
 };
 use crate::popup::PopupState;
 use crate::scroll::ScrollState;
@@ -282,15 +282,7 @@ impl AppState {
                 service.fullname.clone(),
                 service.host.clone(),
                 service.service_type.clone(),
-                service
-                    .addrs
-                    .iter()
-                    .filter_map(|addr| {
-                        let s = format_scoped_ip_with_context(addr, &service.addrs);
-                        if s.is_empty() { None } else { Some(s) }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" "),
+                format_service_addrs(&service.addrs, " "),
                 service.port.to_string(),
                 service.txt.join(" "),
                 service.subtype.as_ref().unwrap_or(&String::new()).clone(),
@@ -1556,11 +1548,15 @@ fn compare_services_by_field(
         SortField::Fullname => a.fullname.cmp(&b.fullname),
         SortField::Port => a.port.cmp(&b.port),
         SortField::Address => {
-            let a_ip = a.addrs.first().map(|s| s.to_ip_addr());
-            let b_ip = b.addrs.first().map(|s| s.to_ip_addr());
+            let a_addr = a.addrs.first();
+            let b_addr = b.addrs.first();
 
-            match (a_ip, b_ip) {
-                (Some(a_ip), Some(b_ip)) => a_ip.cmp(&b_ip),
+            match (a_addr, b_addr) {
+                (Some(a_ip), Some(b_ip)) => {
+                    let a_cmp = a_ip.to_string();
+                    let b_cmp = b_ip.to_string();
+                    a_cmp.cmp(&b_cmp)
+                }
                 (Some(_), None) => std::cmp::Ordering::Greater,
                 (None, Some(_)) => std::cmp::Ordering::Less,
                 (None, None) => std::cmp::Ordering::Equal,
@@ -2547,15 +2543,7 @@ fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
     let addresses_text = if service.addrs.is_empty() {
         "None".to_string()
     } else {
-        service
-            .addrs
-            .iter()
-            .filter_map(|addr| {
-                let s = format_scoped_ip_with_context(addr, &service.addrs);
-                if s.is_empty() { None } else { Some(s) }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        format_service_addrs(&service.addrs, "\n")
     };
     for addr_line in addresses_text.lines() {
         lines.push(Line::from(addr_line.to_string()));

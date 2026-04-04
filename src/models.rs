@@ -42,15 +42,14 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
             // For non-link-local: consider all entries with same address (regardless of interface)
 
             if is_link_local {
+                let my_index = all_addrs.iter().position(|a| std::ptr::eq(a, ip));
                 let mut seen_before = false;
                 for (i, a) in all_addrs.iter().enumerate() {
-                    if let ScopedIp::V6(av6) = a
+                    if let Some(my_idx) = my_index
+                        && let ScopedIp::V6(av6) = a
                         && av6.addr() == addr
                         && av6.scope_id().name == scope_id.name
-                        && i < all_addrs
-                            .iter()
-                            .position(|x| std::ptr::eq(x, ip))
-                            .unwrap_or(usize::MAX)
+                        && i < my_idx
                     {
                         seen_before = true;
                         break;
@@ -118,9 +117,15 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
     }
 }
 
-#[allow(dead_code)]
-pub fn format_scoped_ip(ip: &ScopedIp) -> String {
-    format_scoped_ip_with_context(ip, &[])
+pub fn format_service_addrs(addrs: &[ScopedIp], separator: &str) -> String {
+    addrs
+        .iter()
+        .filter_map(|addr| {
+            let s = format_scoped_ip_with_context(addr, addrs);
+            if s.is_empty() { None } else { Some(s) }
+        })
+        .collect::<Vec<_>>()
+        .join(separator)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -487,7 +492,11 @@ impl From<&ServiceSession> for SerializableServiceSession {
 }
 
 fn parse_scoped_ip(s: &str) -> Option<ScopedIp> {
-    s.parse::<IpAddr>().ok().map(ScopedIp::from)
+    if let Some((addr_part, _scope)) = s.split_once('%') {
+        addr_part.parse::<IpAddr>().ok().map(ScopedIp::from)
+    } else {
+        s.parse::<IpAddr>().ok().map(ScopedIp::from)
+    }
 }
 
 impl From<&SerializableServiceEntry> for ServiceEntry {
