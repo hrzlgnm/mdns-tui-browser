@@ -69,18 +69,12 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 }
             } else {
                 // For non-link-local: collect ALL unique interface names for this address
-                let mut all_interfaces: Vec<&str> = Vec::new();
+                let mut all_interfaces: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
                 for a in all_addrs {
-                    if let ScopedIp::V6(av6) = a
-                        && av6.addr() == addr
-                    {
-                        let if_name = av6.scope_id().name.as_str();
-                        if !all_interfaces.contains(&if_name) {
-                            all_interfaces.push(if_name);
-                        }
+                    if let ScopedIp::V6(av6) = a && av6.addr() == addr {
+                        all_interfaces.insert(av6.scope_id().name.as_str());
                     }
                 }
-                all_interfaces.sort();
 
                 // Only show at first occurrence
                 let first_occurrence = all_addrs.iter().position(|a| {
@@ -108,7 +102,8 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                 if all_interfaces.is_empty() {
                     addr.to_string()
                 } else {
-                    format!("{} via {}", addr, all_interfaces.join(", "))
+                    let interfaces: Vec<&str> = all_interfaces.iter().copied().collect();
+                    format!("{} via {}", addr, interfaces.join(", "))
                 }
             }
         }
