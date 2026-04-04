@@ -1872,7 +1872,7 @@ fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> Visib
     let available_services_height = (layout.services_area.height as usize).saturating_sub(2);
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
-        services: available_services_height.min(services_count).min(5), // Use actual layout height, capped at 15 max
+        services: available_services_height.min(services_count).min(5), // Use actual layout height, capped at 5 max
     }
 }
 

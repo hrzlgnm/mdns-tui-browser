@@ -153,7 +153,7 @@ src/
 
 ## Development Workflow
 
-1. REQUIRED: Create a branch for your changes 
+1. REQUIRED: Create a branch for your changes with an appropriate prefix (e.g., `feat/`, `fix/`, `chore/`, `refactor/`, `docs/`)
 2. Make changes to source code
 3. Run `cargo fmt` to format code
 4. Run `cargo clippy --tests -- -D warnings` to check for issues
