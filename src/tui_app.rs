@@ -5585,7 +5585,7 @@ mod tests {
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
-        assert_eq!(counts.services, 5);
+        assert_eq!(counts.services, MAX_SERVICES_LIST_SIZE);
     }
 
     #[test]
@@ -5594,7 +5594,7 @@ mod tests {
         let layout = create_main_layout(area, false, 20, 20);
         let counts = calculate_visible_counts(&layout, 20);
 
-        assert_eq!(counts.services, 5);
+        assert_eq!(counts.services, MAX_SERVICES_LIST_SIZE);
     }
 
     #[test]
@@ -5618,7 +5618,7 @@ mod tests {
         let counts = calculate_visible_counts(&layout, 20);
 
         assert!(counts.types > 0);
-        assert!(counts.services <= 15);
+        assert!(counts.services <= MAX_SERVICES_LIST_SIZE);
     }
 
     #[test]
