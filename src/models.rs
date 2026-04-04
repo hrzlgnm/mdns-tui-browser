@@ -85,16 +85,8 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
                     }
                 });
 
-                let my_index = all_addrs.iter().position(|a| {
-                    if let ScopedIp::V6(av6) = a {
-                        av6.addr() == addr && av6.scope_id().name == scope_id.name
-                    } else {
-                        false
-                    }
-                });
-
-                if let (Some(first), Some(mine)) = (first_occurrence, my_index)
-                    && mine != first
+                if let Some(my_pos) = all_addrs.iter().position(|x| std::ptr::eq(x, ip))
+                    && Some(my_pos) != first_occurrence
                 {
                     return String::new();
                 }
