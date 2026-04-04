@@ -31,6 +31,7 @@ const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
+const MAX_SERVICES_LIST_SIZE: usize = 5;
 
 // Flapping service colors (color-blind friendly)
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
@@ -1843,7 +1844,7 @@ fn create_main_layout(
         .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
-    let services_height = (services_count.min(15) + 2) as u16;
+    let services_height = (services_count.min(MAX_SERVICES_LIST_SIZE) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
@@ -1872,7 +1873,9 @@ fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> Visib
     let available_services_height = (layout.services_area.height as usize).saturating_sub(2);
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
-        services: available_services_height.min(services_count).min(15), // Use actual layout height, capped at 15 max
+        services: available_services_height
+            .min(services_count)
+            .min(MAX_SERVICES_LIST_SIZE),
     }
 }
 
@@ -1889,7 +1892,7 @@ fn create_filter_input_layout(
         .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
-    let services_height = (services_count.min(15) + 2) as u16;
+    let services_height = (services_count.min(MAX_SERVICES_LIST_SIZE) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
@@ -5582,7 +5585,7 @@ mod tests {
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
-        assert_eq!(counts.services, 10);
+        assert_eq!(counts.services, MAX_SERVICES_LIST_SIZE);
     }
 
     #[test]
@@ -5591,7 +5594,7 @@ mod tests {
         let layout = create_main_layout(area, false, 20, 20);
         let counts = calculate_visible_counts(&layout, 20);
 
-        assert_eq!(counts.services, 15);
+        assert_eq!(counts.services, MAX_SERVICES_LIST_SIZE);
     }
 
     #[test]
@@ -5615,7 +5618,7 @@ mod tests {
         let counts = calculate_visible_counts(&layout, 20);
 
         assert!(counts.types > 0);
-        assert!(counts.services <= 15);
+        assert!(counts.services <= MAX_SERVICES_LIST_SIZE);
     }
 
     #[test]
