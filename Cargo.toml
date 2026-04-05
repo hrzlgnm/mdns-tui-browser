@@ -33,7 +33,7 @@ split-debuginfo = "packed"
 strip = true
 
 [dependencies]
-mdns-sd = { git = "https://github.com/keepsimple1/mdns-sd.git", rev = "b6ddc18072dd617eb4d7414e533e485cc6920fbb" }
+mdns-sd = { git = "https://github.com/keepsimple1/mdns-sd.git", rev = "d5f906028c45b15e1ce8ee9edd4b05a51c35fb3a" }
 tokio = { version = "1.0", features = ["full"] }
 ratatui = "0.30"
 crossterm = "0.29"
