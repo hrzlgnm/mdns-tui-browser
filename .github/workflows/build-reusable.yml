@@ -236,13 +236,23 @@ jobs:
           mkdir -p "$DMG_STAGING/$APP_NAME/Contents/Resources"
           cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
           cp LICENSE "$DMG_STAGING/$APP_NAME/Contents/Resources/"
+          # Create a shell script wrapper that launches Terminal with the TUI app
+          cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
+          #!/bin/bash
+          SCRIPT=$(mktemp)
+          echo 'tell app "Terminal" to do script "'"$(dirname "$0")/mdns-tui-browser"'"' > "$SCRIPT"
+          osascript "$SCRIPT"
+          rm -f "$SCRIPT"
+          WRAPPER
+          chmod +x "$DMG_STAGING/$APP_NAME/Contents/MacOS/run"
+          # Set the wrapper as the executable in Info.plist
           cat > "$DMG_STAGING/$APP_NAME/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>CFBundleExecutable</key>
-            <string>mdns-tui-browser</string>
+            <string>run</string>
             <key>CFBundleIdentifier</key>
             <string>com.mdns-tui-browser.app</string>
             <key>CFBundleName</key>
@@ -257,6 +267,8 @@ jobs:
             <string>10.13</string>
             <key>LSApplicationCategoryType</key>
             <string>public.app-category.utilities</string>
+            <key>LSBackgroundOnly</key>
+            <true/>
           </dict>
           </plist>
           EOF
