@@ -158,8 +158,8 @@ jobs:
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
             cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
-            # Include manpage for Unix-like builds (Linux and macOS)
-            if [[ "${{ matrix.os }}" == "ubuntu-latest" || "${{ matrix.os }}" == "macos-latest" ]]; then
+            # Include manpage for Linux builds only
+            if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
               mkdir -p "$staging/man/man1"
               cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             fi
@@ -241,13 +241,8 @@ jobs:
           # Create a shell script wrapper that launches Terminal with the TUI app
           cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
           #!/bin/bash
-          SCRIPT=$(mktemp)
           EXE_PATH="$(cd "$(dirname "$0")" && pwd)/mdns-tui-browser"
-          printf -v QUOTED_EXE 'quoted form of "%s"' "$EXE_PATH"
-          printf -v SCRIPT_TEXT 'tell app "Terminal" to do script %s & "; exit"\n' "$QUOTED_EXE"
-          echo "$SCRIPT_TEXT" > "$SCRIPT"
-          osascript "$SCRIPT"
-          rm -f "$SCRIPT"
+          osascript -e 'tell app "Terminal"' -e "do script \"$EXE_PATH; exit\"" -e 'end tell'
           WRAPPER
           chmod +x "$DMG_STAGING/$APP_NAME/Contents/MacOS/run"
           # Set the wrapper as the executable in Info.plist
