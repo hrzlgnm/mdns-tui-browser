@@ -159,7 +159,7 @@ jobs:
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
             cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
             # Include manpage for Linux builds only
-            if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            if [[ "${{ matrix.os }}" =~ ^ubuntu ]]; then
               mkdir -p "$staging/man/man1"
               cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             fi
