@@ -120,7 +120,8 @@ jobs:
         if: steps.actionlint_check.outputs.should_run == 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download.sh | sh -s -- -b /usr/local/bin
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download.sh | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: 🔍 Validate workflows
         if: steps.actionlint_check.outputs.should_run == 'true'
