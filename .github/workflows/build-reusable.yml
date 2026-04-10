@@ -229,14 +229,14 @@ jobs:
           else
             VERSION_NAME="$VERSION"
           fi
-          STAGING="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}"
+          DMG_STAGING="mdns-tui-browser-dmg-${VERSION_NAME}-${{ matrix.platform }}"
           APP_NAME="mDNS TUI Browser.app"
           DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}.dmg"
-          mkdir -p "$STAGING/$APP_NAME/Contents/MacOS"
-          mkdir -p "$STAGING/$APP_NAME/Contents/Resources"
-          cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$STAGING/$APP_NAME/Contents/MacOS/"
-          cp LICENSE "$STAGING/$APP_NAME/Contents/Resources/"
-          cat > "$STAGING/$APP_NAME/Contents/Info.plist" << EOF
+          mkdir -p "$DMG_STAGING/$APP_NAME/Contents/MacOS"
+          mkdir -p "$DMG_STAGING/$APP_NAME/Contents/Resources"
+          cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
+          cp LICENSE "$DMG_STAGING/$APP_NAME/Contents/Resources/"
+          cat > "$DMG_STAGING/$APP_NAME/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -267,11 +267,13 @@ jobs:
                     --icon "$APP_NAME" 150 150 \
                     --app-drop-link 425 150 \
                     "$DMG_NAME" \
-                    "$STAGING/"
+                    "$DMG_STAGING/"
           # Self-sign the app bundle (ad-hoc signing)
-          codesign --force --deep --sign - "$STAGING/$APP_NAME"
+          codesign --force --deep --sign - "$DMG_STAGING/$APP_NAME"
           # Sign the DMG
           codesign --force --sign - "$DMG_NAME"
+          # Clean up DMG staging
+          rm -rf "$DMG_STAGING"
           echo "DMG_ASSET=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: 🧮 Compute attestation subjects
