@@ -146,8 +146,13 @@ jobs:
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> "$GITHUB_ENV"
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            # For macOS, tarball is created after DMG build (see below)
-            echo "ASSET=" >> "$GITHUB_ENV"
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
+            mkdir -p "$staging/man/man1"
+            cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
+            tar czf "$staging.tar.gz" "$staging"
+            echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
           else
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
@@ -263,16 +268,6 @@ jobs:
                     --app-drop-link 425 150 \
                     "$DMG_NAME" \
                     "$STAGING/"
-          # Copy binary, symbols, manpage, and DMG to staging for tarball
-          cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$STAGING/"
-          cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$STAGING/" || true
-          cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$STAGING/" || true
-          mkdir -p "$STAGING/man/man1"
-          cp "docs/mdns-tui-browser.1" "$STAGING/man/man1/"
-          cp "$DMG_NAME" "$STAGING/"
-          # Create tarball with all artifacts including DMG
-          tar czf "$STAGING.tar.gz" "$STAGING"
-          echo "ASSET=$STAGING.tar.gz" >> "$GITHUB_ENV"
           echo "DMG_ASSET=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: 🧮 Compute attestation subjects
