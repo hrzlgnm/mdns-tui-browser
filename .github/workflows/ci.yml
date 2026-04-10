@@ -118,6 +118,8 @@ jobs:
 
       - name: 🛠️ Install actionlint
         if: steps.actionlint_check.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release download --repo rhysd/actionlint --pattern '*_linux_amd64.tar.gz' -D /tmp/actionlint
           tar -xzf /tmp/actionlint/*.tar.gz -C /tmp/actionlint
