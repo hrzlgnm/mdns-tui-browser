@@ -116,11 +116,9 @@ jobs:
             echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: 🛠️ Install actionlint and shellcheck
+      - name: 🛠️ Install actionlint
         if: steps.actionlint_check.outputs.should_run == 'true'
         run: |
-          # shellcheck disable=SC2024
-          sudo apt-get update && sudo apt-get install -y shellcheck
           gh release download --repo rhysd/actionlint --pattern '*_linux_amd64.tar.gz' -D /tmp/actionlint
           tar -xzf /tmp/actionlint/*.tar.gz -C /tmp/actionlint
           mkdir -p "$HOME/.local/bin"
