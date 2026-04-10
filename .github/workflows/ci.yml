@@ -100,8 +100,7 @@ jobs:
   actionlint:
     name: "🔍 Validate Workflows"
     needs: changes
-    runs-on: ubuntu-latest
-    container: ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1@sha256:efcda21fbc1ef841ba2acff134533c1e9a0b730f03b255c4bfcc01cb94dd6654
+    runs-on: ubuntu-slim
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -116,6 +115,12 @@ jobs:
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: 🛠️ Install actionlint and shellcheck
+        if: steps.actionlint_check.outputs.should_run == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download.sh | sh -s -- -b /usr/local/bin
 
       - name: 🔍 Validate workflows
         if: steps.actionlint_check.outputs.should_run == 'true'
