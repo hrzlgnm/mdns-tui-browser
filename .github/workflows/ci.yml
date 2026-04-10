@@ -121,7 +121,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Download checksums file and extract SHA256 for linux_amd64
+          gh release download --repo rhysd/actionlint --pattern '*checksums*' -D /tmp/actionlint -O checksums.txt
+          EXPECTED_SHA256=$(grep "_linux_amd64.tar.gz" /tmp/actionlint/checksums.txt | awk '{print $1}')
+
+          # Download actionlint binary
           gh release download --repo rhysd/actionlint --pattern '*_linux_amd64.tar.gz' -D /tmp/actionlint
+
+          # Verify checksum
+          ACTUAL_SHA256=$(sha256sum /tmp/actionlint/*.tar.gz | awk '{print $1}')
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "ERROR: Checksum mismatch! Expected: $EXPECTED_SHA256, Got: $ACTUAL_SHA256"
+            exit 1
+          fi
+
+          # Extract and install
           tar -xzf /tmp/actionlint/*.tar.gz -C /tmp/actionlint
           mkdir -p "$HOME/.local/bin"
           mv /tmp/actionlint/actionlint "$HOME/.local/bin/"
