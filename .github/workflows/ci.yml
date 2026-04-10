@@ -119,8 +119,13 @@ jobs:
       - name: 🛠️ Install actionlint and shellcheck
         if: steps.actionlint_check.outputs.should_run == 'true'
         run: |
+          # shellcheck disable=SC2024
           sudo apt-get update && sudo apt-get install -y shellcheck
-          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download.sh | sh -s -- -b "$HOME/.local/bin"
+          gh release download --repo rhysd/actionlint --pattern '*_linux_amd64.tar.gz' -D /tmp/actionlint
+          tar -xzf /tmp/actionlint/*.tar.gz -C /tmp/actionlint
+          mkdir -p "$HOME/.local/bin"
+          mv /tmp/actionlint/actionlint "$HOME/.local/bin/"
+          rm -rf /tmp/actionlint
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: 🔍 Validate workflows
