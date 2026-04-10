@@ -145,6 +145,16 @@ jobs:
             cp "target/${{ matrix.target }}/release/mdns_tui_browser.pdb" "$staging/"
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> "$GITHUB_ENV"
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
+            mkdir -p "$staging/man/man1"
+            cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
+            DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}.dmg"
+            cp "$DMG_NAME" "$staging/"
+            tar czf "$staging.tar.gz" "$staging"
+            echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
           else
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
