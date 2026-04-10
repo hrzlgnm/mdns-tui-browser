@@ -207,21 +207,79 @@ jobs:
             fi
           fi
 
+      - name: 🛠️ Install create-dmg
+        if: contains(matrix.os, 'macos')
+        run: brew install create-dmg
+
+      - name: 📦 Build DMG
+        if: contains(matrix.os, 'macos')
+        shell: bash
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ -n "${{ inputs.tagName }}" ]; then
+            VERSION_NAME="${{ inputs.tagName }}"
+          else
+            VERSION_NAME="$VERSION"
+          fi
+          STAGING="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}"
+          APP_NAME="mDNS TUI Browser.app"
+          DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}.dmg"
+          mkdir -p "$STAGING/$APP_NAME/Contents/MacOS"
+          cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$STAGING/$APP_NAME/Contents/MacOS/"
+          cp LICENSE "$STAGING/$APP_NAME/Contents/Resources/"
+          cat > "$STAGING/$APP_NAME/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>mdns-tui-browser</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.mdns-tui-browser.app</string>
+            <key>CFBundleName</key>
+            <string>mDNS TUI Browser</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.13</string>
+            <key>LSApplicationCategoryType</key>
+            <string>public.app-category.utilities</string>
+          </dict>
+          </plist>
+          EOF
+          create-dmg --volname "mDNS TUI Browser" \
+                    --window-pos 200 120 \
+                    --window-size 600 400 \
+                    --icon-size 100 \
+                    --icon "$APP_NAME" 150 \
+                    --app-drop-link 425 150 \
+                    "$DMG_NAME" \
+                    "$STAGING/"
+          echo "DMG_ASSET=$DMG_NAME" >> "$GITHUB_ENV"
+
       - name: 🧮 Compute attestation subjects
-        if: inputs.tagName && contains(matrix.os, 'ubuntu')
+        if: inputs.tagName && (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos'))
         shell: bash
         run: |
           if [ -n "${{ env.IPK_ASSET }}" ]; then
             echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }},${{ env.IPK_ASSET }}" >> "$GITHUB_ENV"
-          else
+          elif [ -n "${{ env.DMG_ASSET }}" ]; then
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DMG_ASSET }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ env.DEB_ASSET }}" ]; then
             echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }}" >> "$GITHUB_ENV"
+          else
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }}" >> "$GITHUB_ENV"
           fi
 
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: ${{ matrix.os == 'ubuntu-latest' && env.ATTESTATION_SUBJECTS || env.ASSET }}
+          subject-path: ${{ (matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest') && env.ATTESTATION_SUBJECTS || env.ASSET }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
@@ -238,6 +296,7 @@ jobs:
             ${{ env.ASSET }}
             ${{ contains(matrix.os, 'ubuntu') && env.DEB_ASSET || '' }}
             ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
+            ${{ contains(matrix.os, 'macos') && env.DMG_ASSET || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
@@ -261,4 +320,12 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.target }}-ipk
           path: ${{ env.IPK_ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload DMG artifacts
+        if: (!inputs.tagName) && contains(matrix.os, 'macos') && env.DMG_ASSET != ''
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: mdns-tui-browser-${{ matrix.target }}-dmg
+          path: ${{ env.DMG_ASSET }}
           retention-days: 30
