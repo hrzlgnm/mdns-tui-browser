@@ -136,6 +136,7 @@ jobs:
           else
             VERSION_NAME="$VERSION"
           fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           # Use platform for tarball, but preserve original .deb name on Linux
           staging="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}"
           mkdir -p "$staging"
@@ -217,18 +218,19 @@ jobs:
 
       - name: 🛠️ Install create-dmg
         if: contains(matrix.os, 'macos')
-        run: brew install create-dmg
+        run: |
+          CREATE_DMG_VERSION="v1.1.0"
+          git clone --depth 1 --branch "$CREATE_DMG_VERSION" https://github.com/create-dmg/create-dmg.git /tmp/create-dmg
+          cd /tmp/create-dmg
+          make
+          sudo cp create-dmg /usr/local/bin/
+          cd -
+          rm -rf /tmp/create-dmg
 
       - name: 📦 Build DMG
         if: contains(matrix.os, 'macos')
         shell: bash
         run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          if [ -n "${{ inputs.tagName }}" ]; then
-            VERSION_NAME="${{ inputs.tagName }}"
-          else
-            VERSION_NAME="$VERSION"
-          fi
           DMG_STAGING="mdns-tui-browser-dmg-${VERSION_NAME}-${{ matrix.platform }}"
           APP_NAME="mDNS-TUI-Browser.app"
           DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}.dmg"
@@ -354,7 +356,7 @@ jobs:
 
       - name: 📦 Upload DMG artifacts
         if: (!inputs.tagName) && contains(matrix.os, 'macos') && env.DMG_ASSET != ''
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mdns-tui-browser-${{ matrix.target }}-dmg
           path: ${{ env.DMG_ASSET }}
