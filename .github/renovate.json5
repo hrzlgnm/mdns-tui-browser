@@ -28,7 +28,8 @@
             matchStrings: [
                 '# ?actionlint version: \\s*(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)',
             ],
-            depTypeTemplate: 'container',
+            depNameTemplate: 'rhysd/actionlint',
+            depTypeTemplate: 'build-dependencies',
             datasourceTemplate: 'github-releases',
             versioningTemplate: 'semver',
             autoReplaceStringTemplate: '# actionlint version: {{#if newValue}}{{newValue}}{{/if}}',
