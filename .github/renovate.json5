@@ -26,12 +26,12 @@
                 '/^\\.github/workflows/.*\\.yml$/',
             ],
             matchStrings: [
-                'actionlint version: (?<depName>actionlint)\\s*version:\\s*(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)',
+                '# ?actionlint version: \\s*(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)',
             ],
             depTypeTemplate: 'container',
             datasourceTemplate: 'github-releases',
             versioningTemplate: 'semver',
-            autoReplaceStringTemplate: 'actionlint version: {{#if newValue}}{{newValue}}{{/if}}',
+            autoReplaceStringTemplate: '# actionlint version: {{#if newValue}}{{newValue}}{{/if}}',
         },
         {
             matchStringsStrategy: 'any',
