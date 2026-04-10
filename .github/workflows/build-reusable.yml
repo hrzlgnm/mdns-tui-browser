@@ -240,7 +240,8 @@ jobs:
           cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
           #!/bin/bash
           SCRIPT=$(mktemp)
-          echo 'tell app "Terminal" to do script "'"$(dirname "$0")/mdns-tui-browser"'"' > "$SCRIPT"
+          EXE_PATH="$(cd "$(dirname "$0")" && pwd)/mdns-tui-browser"
+          echo "tell app \"Terminal\" to do script \"$EXE_PATH\"" > "$SCRIPT"
           osascript "$SCRIPT"
           rm -f "$SCRIPT"
           WRAPPER
