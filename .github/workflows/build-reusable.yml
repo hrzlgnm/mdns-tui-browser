@@ -136,6 +136,7 @@ jobs:
           else
             VERSION_NAME="$VERSION"
           fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           # Use platform for tarball, but preserve original .deb name on Linux
           staging="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}"
           mkdir -p "$staging"
@@ -145,12 +146,20 @@ jobs:
             cp "target/${{ matrix.target }}/release/mdns_tui_browser.pdb" "$staging/"
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> "$GITHUB_ENV"
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
+            cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
+            mkdir -p "$staging/man/man1"
+            cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
+            tar czf "$staging.tar.gz" "$staging"
+            echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
           else
             cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
             cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
             cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
-            # Include manpage for Unix-like builds (Linux and macOS)
-            if [[ "${{ matrix.os }}" == "ubuntu-latest" || "${{ matrix.os }}" == "macos-latest" ]]; then
+            # Include manpage for Linux builds only
+            if [[ "${{ matrix.os }}" =~ ^ubuntu ]]; then
               mkdir -p "$staging/man/man1"
               cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             fi
@@ -207,21 +216,97 @@ jobs:
             fi
           fi
 
+      - name: 🛠️ Install create-dmg
+        if: contains(matrix.os, 'macos')
+        run: |
+          CREATE_DMG_VERSION="v1.1.0"
+          git clone --depth 1 --branch "$CREATE_DMG_VERSION" https://github.com/create-dmg/create-dmg.git /tmp/create-dmg
+          cd /tmp/create-dmg
+          make
+          sudo cp create-dmg /usr/local/bin/
+          cd -
+          rm -rf /tmp/create-dmg
+
+      - name: 📦 Build DMG
+        if: contains(matrix.os, 'macos')
+        shell: bash
+        run: |
+          DMG_STAGING="mdns-tui-browser-dmg-${VERSION_NAME}-${{ matrix.platform }}"
+          APP_NAME="mDNS-TUI-Browser.app"
+          DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}.dmg"
+          mkdir -p "$DMG_STAGING/$APP_NAME/Contents/MacOS"
+          mkdir -p "$DMG_STAGING/$APP_NAME/Contents/Resources"
+          cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
+          cp LICENSE "$DMG_STAGING/$APP_NAME/Contents/Resources/"
+          # Create a shell script wrapper that launches Terminal with the TUI app
+          cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
+          #!/bin/bash
+          EXE_PATH="$(cd "$(dirname "$0")" && pwd)/mdns-tui-browser"
+          osascript -e 'tell app "Terminal"' -e "do script \"$EXE_PATH; exit\"" -e 'end tell'
+          WRAPPER
+          chmod +x "$DMG_STAGING/$APP_NAME/Contents/MacOS/run"
+          # Set the wrapper as the executable in Info.plist
+          cat > "$DMG_STAGING/$APP_NAME/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>run</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.mdns-tui-browser.app</string>
+            <key>CFBundleName</key>
+            <string>mDNS TUI Browser</string>
+            <key>CFBundleVersion</key>
+            <string>${VERSION_NAME}</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${VERSION_NAME}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.13</string>
+            <key>LSApplicationCategoryType</key>
+            <string>public.app-category.utilities</string>
+            <key>LSBackgroundOnly</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          # Self-sign the app bundle before packaging into DMG
+          codesign --force --deep --sign - "$DMG_STAGING/$APP_NAME"
+          create-dmg --volname "mDNS TUI Browser" \
+                    --window-pos 200 120 \
+                    --window-size 600 400 \
+                    --icon-size 100 \
+                    --icon "$APP_NAME" 150 150 \
+                    --app-drop-link 425 150 \
+                    "$DMG_NAME" \
+                    "$DMG_STAGING/"
+          # Self-sign the DMG (the app inside was already signed during build)
+          codesign --force --sign - "$DMG_NAME"
+          # Clean up DMG staging
+          rm -rf "$DMG_STAGING"
+          echo "DMG_ASSET=$DMG_NAME" >> "$GITHUB_ENV"
+
       - name: 🧮 Compute attestation subjects
-        if: inputs.tagName && contains(matrix.os, 'ubuntu')
+        if: inputs.tagName && (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos'))
         shell: bash
         run: |
           if [ -n "${{ env.IPK_ASSET }}" ]; then
             echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }},${{ env.IPK_ASSET }}" >> "$GITHUB_ENV"
-          else
+          elif [ -n "${{ env.DMG_ASSET }}" ]; then
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DMG_ASSET }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ env.DEB_ASSET }}" ]; then
             echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }}" >> "$GITHUB_ENV"
+          else
+            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }}" >> "$GITHUB_ENV"
           fi
 
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: ${{ matrix.os == 'ubuntu-latest' && env.ATTESTATION_SUBJECTS || env.ASSET }}
+          subject-path: ${{ (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')) && env.ATTESTATION_SUBJECTS || env.ASSET }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
@@ -238,6 +323,7 @@ jobs:
             ${{ env.ASSET }}
             ${{ contains(matrix.os, 'ubuntu') && env.DEB_ASSET || '' }}
             ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
+            ${{ contains(matrix.os, 'macos') && env.DMG_ASSET || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
@@ -261,4 +347,12 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.target }}-ipk
           path: ${{ env.IPK_ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload DMG artifacts
+        if: (!inputs.tagName) && contains(matrix.os, 'macos') && env.DMG_ASSET != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mdns-tui-browser-${{ matrix.target }}-dmg
+          path: ${{ env.DMG_ASSET }}
           retention-days: 30
