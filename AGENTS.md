@@ -57,6 +57,9 @@ typos
 
 # Check GitHub Actions workflows and reusable actions
 actionlint
+
+# Validate renovate configuration
+docker run --rm -v "$(pwd):/repo" -w /repo ghcr.io/renovatebot/renovate:full renovate-config-validator .github/renovate.json5
 ```
 
 ## Code Style Guidelines
@@ -160,12 +163,13 @@ src/
 5. Run `cargo nextest run --profile ci` to run tests
 6. Run `cargo build --release` to build release version
 7. Run `cargo clippy --release -- -D warnings` to ensure no warnings in release
-8. Run `actionlint` to check GitHub Actions workflows if modified
-  9. Test the application manually with `cargo run`
-10. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
-11. Commit only when all checks pass
-12. After committing, push to the repository and create a pull request if applicable
-13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+ 8. Run `actionlint` to check GitHub Actions workflows if modified
+ 9. Run renovate config validator if `.github/renovate.json5` was modified
+10. Test the application manually with `cargo run`
+11. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
+12. Commit only when all checks pass
+13. After committing, push to the repository and create a pull request if applicable
+14. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 
 ## Documentation Maintenance
 
@@ -188,6 +192,7 @@ The manpage should contain only essential usage information without excessive de
 - Release builds use `cargo auditable` for security
 - Typos checked with `typos-cli` configuration in `typos.toml`
 - GitHub Actions workflows validated with `actionlint`
+- Renovate configuration validated with `renovate-config-validator`
 
 ## Common Pitfalls to Avoid
 
