@@ -268,6 +268,10 @@ jobs:
                     --app-drop-link 425 150 \
                     "$DMG_NAME" \
                     "$STAGING/"
+          # Self-sign the app bundle (ad-hoc signing)
+          codesign --force --deep --sign - "$STAGING/$APP_NAME"
+          # Sign the DMG
+          codesign --force --sign - "$DMG_NAME"
           echo "DMG_ASSET=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: 🧮 Compute attestation subjects
