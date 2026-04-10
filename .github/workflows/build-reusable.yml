@@ -242,7 +242,7 @@ jobs:
           SCRIPT=$(mktemp)
           EXE_PATH="$(cd "$(dirname "$0")" && pwd)/mdns-tui-browser"
           printf -v QUOTED_EXE 'quoted form of "%s"' "$EXE_PATH"
-          printf -v SCRIPT_TEXT 'tell app "Terminal" to do script %s\n' "$QUOTED_EXE"
+          printf -v SCRIPT_TEXT 'tell app "Terminal" to do script "exec %s"\n' "$QUOTED_EXE"
           echo "$SCRIPT_TEXT" > "$SCRIPT"
           osascript "$SCRIPT"
           rm -f "$SCRIPT"
