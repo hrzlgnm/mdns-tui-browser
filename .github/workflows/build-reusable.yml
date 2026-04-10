@@ -272,6 +272,8 @@ jobs:
           </dict>
           </plist>
           EOF
+          # Self-sign the app bundle before packaging into DMG
+          codesign --force --deep --sign - "$DMG_STAGING/$APP_NAME"
           create-dmg --volname "mDNS TUI Browser" \
                     --window-pos 200 120 \
                     --window-size 600 400 \
@@ -280,9 +282,7 @@ jobs:
                     --app-drop-link 425 150 \
                     "$DMG_NAME" \
                     "$DMG_STAGING/"
-          # Self-sign the app bundle (ad-hoc signing)
-          codesign --force --deep --sign - "$DMG_STAGING/$APP_NAME"
-          # Sign the DMG
+          # Self-sign the DMG (the app inside was already signed during build)
           codesign --force --sign - "$DMG_NAME"
           # Clean up DMG staging
           rm -rf "$DMG_STAGING"
@@ -306,7 +306,7 @@ jobs:
         if: inputs.tagName
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: ${{ (matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest') && env.ATTESTATION_SUBJECTS || env.ASSET }}
+          subject-path: ${{ (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')) && env.ATTESTATION_SUBJECTS || env.ASSET }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
