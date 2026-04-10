@@ -125,8 +125,8 @@ jobs:
           ACTIONLINT_VERSION="v1.7.12"
 
           # Download checksums file and extract SHA256 for linux_amd64
-          gh release download "$ACTIONLINT_VERSION" --repo rhysd/actionlint --pattern '*checksums*' -D /tmp/actionlint -O checksums.txt
-          EXPECTED_SHA256=$(grep "_linux_amd64.tar.gz" /tmp/actionlint/checksums.txt | awk '{print $1}')
+          gh release download "$ACTIONLINT_VERSION" --repo rhysd/actionlint --pattern '*checksums*' -D /tmp/actionlint
+          EXPECTED_SHA256=$(grep "_linux_amd64.tar.gz" /tmp/actionlint/*checksums*.txt | awk '{print $1}')
 
           # Download actionlint binary
           gh release download "$ACTIONLINT_VERSION" --repo rhysd/actionlint --pattern '*_linux_amd64.tar.gz' -D /tmp/actionlint
