@@ -59,7 +59,7 @@ typos
 actionlint
 
 # Validate renovate configuration
-docker run --rm -v "$(pwd):/repo" -w /repo ghcr.io/renovatebot/renovate:full renovate-config-validator .github/renovate.json5
+docker run --rm --volume=$(pwd):$(pwd):ro --workdir=$(pwd) kokuwaio/renovate-config-validator:latest
 ```
 
 ## Code Style Guidelines
