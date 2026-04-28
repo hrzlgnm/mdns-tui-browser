@@ -83,7 +83,7 @@ jobs:
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
         with:
           crate: cargo-deb
-          version: 3.6.3
+          version: 3.6.4
           locked: true
 
       - name: 🛠️ dependencies
