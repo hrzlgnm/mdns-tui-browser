@@ -2808,7 +2808,9 @@ pub async fn run_tui(
                             }
                             ServiceEvent::ServiceFound(_service_type, fullname) => {
                                 let service_type = fullname.to_string();
-                                if is_sub_type(&service_type) || service_type == MDNS_SD_META_SERVICE {
+                                if is_sub_type(&service_type)
+                                    || service_type == MDNS_SD_META_SERVICE
+                                {
                                     continue; // skip subtypes and meta-services in auto-discovery
                                 }
                                 {
