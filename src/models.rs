@@ -10,6 +10,8 @@ use chrono::{DateTime, Utc};
 use mdns_sd::{ResolvedService, ScopedIp};
 use serde::{Deserialize, Serialize};
 
+pub const MDNS_SD_META_SERVICE: &str = "_services._dns-sd._udp.local.";
+
 pub fn format_ip_for_display(ip: &ScopedIp) -> String {
     match ip {
         ScopedIp::V4(v4) => v4.addr().to_string(),

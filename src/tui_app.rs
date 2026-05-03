@@ -20,8 +20,8 @@ use tokio::sync::RwLock;
 
 use crate::input::InputState;
 use crate::models::{
-    AppOptions, FilterInfo, Metadata, ServiceEntry, SortDirection, SortField, SortInfo, StateDump,
-    current_timestamp_micros, format_ip_for_display, format_service_addrs,
+    AppOptions, FilterInfo, MDNS_SD_META_SERVICE, Metadata, ServiceEntry, SortDirection, SortField,
+    SortInfo, StateDump, current_timestamp_micros, format_ip_for_display, format_service_addrs,
 };
 use crate::popup::PopupState;
 use crate::scroll::ScrollState;
@@ -2793,7 +2793,7 @@ pub async fn run_tui(
         if state.read().await.user_service_types.is_empty() {
             // Browse for all service types
             if let Some(ref mdns_ref) = mdns {
-                let receiver = mdns_ref.browse("_services._dns-sd._udp.local.")?;
+                let receiver = mdns_ref.browse(MDNS_SD_META_SERVICE)?;
 
                 let mdns = mdns.clone();
                 tokio::spawn(async move {
@@ -2810,6 +2810,9 @@ pub async fn run_tui(
                                 let service_type = fullname.to_string();
                                 if is_sub_type(&service_type) {
                                     continue; // skip subtypes in auto-discovery
+                                }
+                                if service_type == MDNS_SD_META_SERVICE {
+                                    continue;
                                 }
                                 {
                                     let mut state = state_clone.write().await;
