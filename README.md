@@ -47,6 +47,23 @@ yay -S mdns-tui-browser
 
 This will install the latest version from the AUR and handle updates automatically with your regular system updates.
 
+### Install using Homebrew (macOS)
+
+You can install `mdns-tui-browser` via Homebrew:
+
+```bash
+# Tap the repository first
+brew tap hrzlgnm/tap
+brew install --cask mdns-tui-browser
+```
+
+Or install directly without tapping:
+```bash
+brew install --cask hrzlgnm/tap/mdns-tui-browser
+```
+
+This will install the latest version from the Homebrew tap and handle updates automatically with `brew upgrade`.
+
 ### Install using winget on Windows
 
 You can install `mdns-tui-browser` from Winget Packages using `winget`:
