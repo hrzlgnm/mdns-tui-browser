@@ -79,8 +79,8 @@ jobs:
           VERSION: ${{ env.VERSION }}
         run: |
           cd homebrew-tap
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git diff --quiet; then
             echo "No changes to commit"
           else
