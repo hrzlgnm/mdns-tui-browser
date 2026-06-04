@@ -70,7 +70,7 @@ jobs:
           CASK_PATH="homebrew-tap/Casks/mdns-tui-browser.rb"
           sed -i "s|^  version \".*\"|  version \"$VERSION\"|" "$CASK_PATH"
           sed -i "s|^  sha256 arm:.*|  sha256 arm:   \"$ARM64_SHA\",|" "$CASK_PATH"
-          sed -i "s|intel: \".*\"|intel: \"$INTEL_SHA\"|" "$CASK_PATH"
+          sed -i "s|^         intel: \".*\"|         intel: \"$INTEL_SHA\"|" "$CASK_PATH"
           cat "$CASK_PATH"
 
       - name: 🚀 Commit and push to tap repo
