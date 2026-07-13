@@ -30,33 +30,50 @@ version-resolver:
 category-template: "### $TITLE"
 categories:
   - title: ":boom: Breaking Changes"
-    label: "breaking-change"
+    when:
+      labels:
+        - "breaking-change"
 
   - title: ":sparkles: New Features"
-    label: "enhancement"
+    when:
+      labels:
+        - "enhancement"
 
   - title: ":bug: Bug Fixes"
-    labels:
-      - "bug"
-      - "bugfix"
+    when:
+      labels:
+        - "bug"
+        - "bugfix"
 
   - title: "🧰 Maintenance"
-    label: "chore"
+    when:
+      labels:
+        - "chore"
 
   - title: ":zap: Performance"
-    label: "performance"
+    when:
+      labels:
+        - "performance"
 
   - title: ":recycle: Refactor"
-    label: "refactor"
+    when:
+      labels:
+        - "refactor"
 
   - title: ":scroll: Documentation"
-    label: "documentation"
+    when:
+      labels:
+        - "documentation"
 
   - title: ":white_check_mark: Test"
-    label: "test"
+    when:
+      labels:
+        - "test"
 
   - title: ":arrow_up: Dependency Updates"
-    label: "dependencies"
+    when:
+      labels:
+        - "dependencies"
     collapse-after: 10
 
 exclude-labels:
