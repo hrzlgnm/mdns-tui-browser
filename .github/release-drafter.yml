@@ -33,11 +33,13 @@ categories:
     when:
       labels:
         - "breaking-change"
+        - "major"
 
   - title: ":sparkles: New Features"
     when:
       labels:
         - "enhancement"
+        - "feature"
 
   - title: ":bug: Bug Fixes"
     when:
