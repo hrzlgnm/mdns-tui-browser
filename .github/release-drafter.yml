@@ -78,8 +78,10 @@ categories:
         - "dependencies"
     collapse-after: 10
 
-exclude-labels:
-  - ignore
+  - type: "pre-exclude"
+    when:
+      labels:
+        - "ignore"
 
 header: |
 
