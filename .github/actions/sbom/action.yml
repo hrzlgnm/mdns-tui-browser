@@ -32,7 +32,7 @@ runs:
 
     - name: 🔍 Scan SBOM
       id: scan
-      uses: anchore/scan-action@0d444ed77d83ee2ba7f5ced0d90d640a1281d762 # v7.3.0
+      uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
       with:
         sbom: "sbom.spdx.json"
         severity-cutoff: medium
