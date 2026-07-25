@@ -69,6 +69,13 @@ jobs:
         with:
           artifact-name: "sbom.${{ matrix.platform }}.spdx.json"
 
+      - name: 📜 Copy SBOM for release
+        if: inputs.tagName
+        shell: bash
+        run: |
+          cp sbom.spdx.json "sbom.spdx-${{ matrix.platform }}.json"
+          echo "PLATFORM_SBOM=sbom.spdx-${{ matrix.platform }}.json" >> "$GITHUB_ENV"
+
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
@@ -309,7 +316,7 @@ jobs:
 
       - name: 🛡️ Attest SBOM
         if: inputs.tagName
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
         with:
           subject-path: ${{ contains(matrix.os, 'windows') && format('target/{0}/release/mdns-tui-browser.exe', matrix.target) || format('target/{0}/release/mdns-tui-browser', matrix.target) }}
           sbom-path: "sbom.spdx.json"
@@ -336,7 +343,7 @@ jobs:
             ${{ contains(matrix.os, 'ubuntu') && env.DEB_ASSET || '' }}
             ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
             ${{ contains(matrix.os, 'macos') && env.DMG_ASSET || '' }}
-            ${{ inputs.tagName && 'sbom.spdx.json' || '' }}
+            ${{ inputs.tagName && env.PLATFORM_SBOM || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)

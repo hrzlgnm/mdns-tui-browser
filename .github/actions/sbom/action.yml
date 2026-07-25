@@ -28,6 +28,7 @@ runs:
         format: "spdx-json"
         output-file: "sbom.spdx.json"
         artifact-name: ${{ inputs.artifact-name }}
+        upload-artifact: false
 
     - name: 🔍 Scan SBOM
       id: scan
@@ -38,13 +39,13 @@ runs:
         cache-db: true
 
     - name: 🔍 Inspect SARIF report
-      if: ${{ runner.os != 'Windows' }}
+      if: ${{ !cancelled() && steps.scan.outputs.sarif != '' && runner.os != 'Windows' }}
       shell: bash
       run: |
         jq . ${{ steps.scan.outputs.sarif }}
 
     - name: 🔍 Inspect SARIF report
-      if: ${{ runner.os == 'Windows' }}
+      if: ${{ !cancelled() && steps.scan.outputs.sarif != '' && runner.os == 'Windows' }}
       shell: pwsh
       run: |
         jq . ${{ steps.scan.outputs.sarif }}
