@@ -119,7 +119,7 @@ Only dependencies were updated.
 
 ### Changed
 
-- refactor: simlify disabling interfaces when using specific ones #267
+- refactor: simplify disabling interfaces when using specific ones #267
 
 ### Fixed
 
@@ -284,7 +284,7 @@ No user-facing changes.
 ### Fixed
 
 - fix: correct help popup color description for sort field #161
-- fix: resolve race condition in ServiceResolved hanlding #163
+- fix: resolve race condition in ServiceResolved handling #163
 
 ## [1.14.12] - 2026-02-09
 
@@ -517,7 +517,7 @@ No user-facing changes.
 
 ### Fixed
 
-- fix: Handle service type removal more thouroughly #21
+- fix: Handle service type removal more thoroughly #21
 - fix: Skip service subtypes in service type enumeration #22
 
 [Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...HEAD
