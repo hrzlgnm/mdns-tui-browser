@@ -206,7 +206,6 @@ No user-facing changes.
 ### Added
 
 - feat: add --load-state option to load and inspect state from JSON file #192
-- feat: add --load-state option to load and inspect state from JSON file #192
 
 ## [1.21.3] - 2026-02-15
 

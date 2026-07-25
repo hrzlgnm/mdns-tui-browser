@@ -337,13 +337,15 @@ def parse_release_body(body):
     pr_numbers = [p for _, p in entries_with_prs if p is not None]
     pr_files = fetch_pr_files_batch(pr_numbers)
 
+    seen = set()
     for entry, pr_num in entries_with_prs:
         if pr_num and pr_num in pr_files:
             if is_ci_only_pr(pr_files[pr_num]):
                 continue
         cat = classify_entry_content(entry)
-        if cat:
+        if cat and entry not in seen:
             categories[cat].append(entry)
+            seen.add(entry)
 
     return categories
 
