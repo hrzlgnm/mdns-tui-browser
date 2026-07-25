@@ -19,7 +19,7 @@ jobs:
       tagName: ${{ steps.version.outputs.tagName }}
     steps:
       - name: 🔄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 1
 
@@ -34,7 +34,7 @@ jobs:
       packages: read
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1@sha256:66b197b3e5526a9c75b5924657217f95ee6918e032eca060c4cc2a01ebfb2cfa
+      image: ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1@sha256:e5ae39eb668858cd3ae79e502bb4b823abe6de49e2687138f48aa6f33ca990c5
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +44,7 @@ jobs:
             generate_script: "./packaging/aur/generate-mdns-tui-browser.sh"
     steps:
       - name: 🔄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 1
 

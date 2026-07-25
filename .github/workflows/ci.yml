@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-slim
 
     steps:
-      - uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d # v6.2.0
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
         with:
           configuration-path: .github/labeler.yml
 
@@ -56,7 +56,7 @@ jobs:
       winget: ${{ steps.filter.outputs.winget }}
     steps:
       - name: 🔄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: 🔍 Check for changes
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
@@ -91,11 +91,11 @@ jobs:
   typos:
     name: 📝 Check typos
     if: always()
-    uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@798dbf3ea5e5da61b778f57e22c3c8a3668f1f68 # v2.3.0
+    uses: hrzlgnm/actions/.github/workflows/typos-reusable.yml@fbe810d0210ab3ae74cab2206e93f3ef155d9169 # v2.3.1
 
   actionlint:
     if: always()
-    uses: hrzlgnm/actions/.github/workflows/actionlint-reusable.yml@798dbf3ea5e5da61b778f57e22c3c8a3668f1f68 # v2.3.0
+    uses: hrzlgnm/actions/.github/workflows/actionlint-reusable.yml@fbe810d0210ab3ae74cab2206e93f3ef155d9169 # v2.3.1
 
   lint:
     permissions:
