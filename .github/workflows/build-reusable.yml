@@ -64,6 +64,11 @@ jobs:
           fetch-depth: ${{ inputs.tagName && '0' || '1' }}
           ref: ${{ inputs.tagName || '' }}
 
+      - name: 📜 Create and 🔍 scan SBOM for vulnerabilities
+        uses: ./.github/actions/sbom
+        with:
+          artifact-name: "sbom.${{ matrix.platform }}.spdx.json"
+
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
@@ -302,6 +307,13 @@ jobs:
             echo "ATTESTATION_SUBJECTS=${{ env.ASSET }}" >> "$GITHUB_ENV"
           fi
 
+      - name: 🛡️ Attest SBOM
+        if: inputs.tagName
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3
+        with:
+          subject-path: ${{ contains(matrix.os, 'windows') && format('target/{0}/release/mdns-tui-browser.exe', matrix.target) || format('target/{0}/release/mdns-tui-browser', matrix.target) }}
+          sbom-path: "sbom.spdx.json"
+
       - name: 🔐 Generate provenance attestation
         if: inputs.tagName
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
@@ -324,6 +336,7 @@ jobs:
             ${{ contains(matrix.os, 'ubuntu') && env.DEB_ASSET || '' }}
             ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
             ${{ contains(matrix.os, 'macos') && env.DMG_ASSET || '' }}
+            ${{ inputs.tagName && 'sbom.spdx.json' || '' }}
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
@@ -355,4 +368,12 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.target }}-dmg
           path: ${{ env.DMG_ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload SBOM artifact
+        if: (!inputs.tagName)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.platform }}
+          path: sbom.spdx.json
           retention-days: 30
