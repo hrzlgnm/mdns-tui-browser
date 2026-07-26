@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Include changelog in all package formats (#477) ([#477](https://github.com/hrzlgnm/mdns-tui-browser/pull/477))
 
+### Changed
+
+- Ignore changelog update changes in release-drafter (#479) ([#479](https://github.com/hrzlgnm/mdns-tui-browser/pull/479))
+
 ## [1.30.19] - 2026-07-26
 
 ### Added
