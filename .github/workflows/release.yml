@@ -125,7 +125,7 @@ jobs:
       - name: 📝 Update CHANGELOG.md
         if: ${{ !inputs.dry-run }}
         run: |
-          git-cliff --output CHANGELOG.md
+          git-cliff --tag "v${{ steps.version.outputs.semantic-version }}" --output CHANGELOG.md
 
       - name: 💾🏷️⬆️ Commit, tag and push
         if: ${{ !inputs.dry-run }}

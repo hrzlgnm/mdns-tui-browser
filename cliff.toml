@@ -99,7 +99,7 @@ commit_parsers = [
     { message = "^Bump version", skip = true },
 ]
 # protect breaking commits from being skipped
-protect_breaking_commits = false
+protect_breaking_commits = true
 # filter out commits that are not matched by a commit_parsers
 filter_commits = true
 # regex for matching tags
