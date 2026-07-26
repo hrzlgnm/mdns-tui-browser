@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reuse data.tar.xz from .deb for .ipk packages (#460) ([#460](https://github.com/hrzlgnm/mdns-tui-browser/pull/460))
 
+- Replace Python changelog script with git-cliff
+
 ## [1.30.18] - 2026-07-26
 
 ### Added
@@ -269,7 +271,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Simlify disabling interfaces when using specific ones (#267) ([#267](https://github.com/hrzlgnm/mdns-tui-browser/pull/267))
+- Simplify disabling interfaces when using specific ones (#267) ([#267](https://github.com/hrzlgnm/mdns-tui-browser/pull/267))
 
 - *(deps)* Update rust crate mdns-sd to v0.18.2 (#269) ([#269](https://github.com/hrzlgnm/mdns-tui-browser/pull/269))
 
@@ -539,7 +541,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Resolve race condition in ServiceResolved hanlding (#163) ([#163](https://github.com/hrzlgnm/mdns-tui-browser/pull/163))
+- Resolve race condition in ServiceResolved handling (#163) ([#163](https://github.com/hrzlgnm/mdns-tui-browser/pull/163))
 
 ## [1.14.13] - 2026-02-09
 
@@ -795,7 +797,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ensure newline in AUR deploy key setup (#79) ([#79](https://github.com/hrzlgnm/mdns-tui-browser/pull/79))
 
-- Add AUR installation instructions and verision badge (#80) ([#80](https://github.com/hrzlgnm/mdns-tui-browser/pull/80))
+- Add AUR installation instructions and version badge (#80) ([#80](https://github.com/hrzlgnm/mdns-tui-browser/pull/80))
 
 ### Fixed
 
@@ -959,7 +961,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update existing entries or push
 
-- Make it cross compileable for aarch64
+- Make it cross compilable for aarch64
 
 - Remove open functionality (#7) ([#7](https://github.com/hrzlgnm/mdns-tui-browser/pull/7))
 
@@ -1013,7 +1015,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate crossterm to 0.29 (#12) ([#12](https://github.com/hrzlgnm/mdns-tui-browser/pull/12))
 
-- Handle service type removal more thouroughly (#21) ([#21](https://github.com/hrzlgnm/mdns-tui-browser/pull/21))
+- Handle service type removal more thoroughly (#21) ([#21](https://github.com/hrzlgnm/mdns-tui-browser/pull/21))
 
 - Skip service subtypes in service type enumeration (#22) ([#22](https://github.com/hrzlgnm/mdns-tui-browser/pull/22))
 

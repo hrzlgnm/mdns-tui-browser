@@ -49,7 +49,13 @@ footer = """
 {% endfor %}\
 """
 # postprocessors to apply to the changelog
-postprocessors = []
+postprocessors = [
+    { pattern = 'Simlify', replace = 'Simplify' },
+    { pattern = 'hanlding', replace = 'handling' },
+    { pattern = 'verision', replace = 'version' },
+    { pattern = 'compileable', replace = 'compilable' },
+    { pattern = 'thouroughly', replace = 'thoroughly' },
+]
 
 [git]
 # parse the commits based on Conventional Commits
