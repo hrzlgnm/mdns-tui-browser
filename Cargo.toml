@@ -9,6 +9,7 @@ description = "A TUI browser for mDNS service discovery"
 maintainer = "hrzlgnm"
 copyright = "Copyright 2026 hrzlgnm"
 license-file = "LICENSE"
+changelog = "CHANGELOG.md"
 depends = "libgcc-s1 (>= 4.2)"
 assets = [
     [

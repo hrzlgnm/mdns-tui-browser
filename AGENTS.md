@@ -168,8 +168,17 @@ src/
 10. Test the application manually with `cargo run`
 11. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
 12. Commit only when all checks pass
-13. After committing, push to the repository and create a pull request if applicable
-14. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
+14. **REQUIRED**: After committing, immediately push the branch and create a pull request - do not wait for the user to ask
+
+## Packaging
+
+### Changelog Inclusion
+When adding or modifying packaging configurations, ensure `CHANGELOG.md` is included:
+- **Debian packages**: Set `changelog = "CHANGELOG.md"` in `Cargo.toml` `[package.metadata.deb]`
+- **AUR packages**: Install `CHANGELOG.md` to `/usr/share/doc/$pkgname/` in the `package()` function
+- **Release archives** (tar.gz/zip): Copy `CHANGELOG.md` into the staging directory in `build-reusable.yml`
+- **macOS DMGs**: Copy `CHANGELOG.md` into the app bundle's `Contents/Resources/`
 
 ## Documentation Maintenance
 
