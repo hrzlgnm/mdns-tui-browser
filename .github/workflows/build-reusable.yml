@@ -29,19 +29,30 @@ jobs:
             target: x86_64-unknown-linux-gnu
             platform: Linux-x86_64
           - os: "ubuntu-latest"
-            symbol: 🐧 aarch64 latest
+            symbol: 🐧 aarch64 glibc
             target: aarch64-unknown-linux-gnu
             platform: Linux-aarch64
-            dependencies: |
-              sudo apt-get update
-              sudo apt-get -y install gcc-aarch64-linux-gnu
+            use_cross: true
           - os: "ubuntu-latest"
-            symbol: 🐧 arm latest
+            symbol: 🐧 arm glibc
             target: arm-unknown-linux-gnueabihf
             platform: Linux-arm
-            dependencies: |
-              sudo apt-get update
-              sudo apt-get -y install gcc-arm-linux-gnueabihf
+            use_cross: true
+          - os: "ubuntu-latest"
+            symbol: 🐧 x86_64 musl
+            target: x86_64-unknown-linux-musl
+            platform: Linux-x86_64-musl
+            use_cross: true
+          - os: "ubuntu-latest"
+            symbol: 🐧 aarch64 musl
+            target: aarch64-unknown-linux-musl
+            platform: Linux-aarch64-musl
+            use_cross: true
+          - os: "ubuntu-latest"
+            symbol: 🐧 arm musl
+            target: arm-unknown-linux-musleabihf
+            platform: Linux-arm-musl
+            use_cross: true
           - os: "macos-latest"
             symbol: 🍏 aarch64 latest
             target: aarch64-apple-darwin
@@ -91,18 +102,20 @@ jobs:
           locked: true
 
       - name: 🛠️📦 cargo-deb
-        if: contains(matrix.os, 'ubuntu')
+        if: contains(matrix.os, 'ubuntu') && !matrix.use_cross
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
         with:
           crate: cargo-deb
           version: 3.7.0
           locked: true
 
-      - name: 🛠️ dependencies
-        if: matrix.dependencies
-        shell: bash
-        run: |
-          ${{ matrix.dependencies }}
+      - name: 🛠️ cross
+        if: matrix.use_cross
+        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        with:
+          crate: cross
+          version: 0.2.5
+          locked: true
 
       - name: 🛠️🚀
         if: (!inputs.tagName)
@@ -114,14 +127,19 @@ jobs:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -n "${{ inputs.tagName }}" ]; then
-            cargo auditable build --release --target ${{ matrix.target }}
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            BUILD_CMD="cross"
           else
-            cargo build --release --target ${{ matrix.target }}
+            BUILD_CMD="cargo"
+          fi
+          if [ -n "${{ inputs.tagName }}" ]; then
+            $BUILD_CMD auditable build --release --target ${{ matrix.target }}
+          else
+            $BUILD_CMD build --release --target ${{ matrix.target }}
           fi
 
       - name: 📦 Build deb package
-        if: contains(matrix.os, 'ubuntu')
+        if: contains(matrix.os, 'ubuntu') && !matrix.use_cross
         shell: bash
         run: |
           if [ -n "${{ inputs.tagName }}" ]; then
