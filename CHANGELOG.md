@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Move changelog comparison links inline with version sections (#481) ([#481](https://github.com/hrzlgnm/mdns-tui-browser/pull/481))
 
+- *(deps)* Update rust crate mdns-sd to v0.20.3 (#484) ([#484](https://github.com/hrzlgnm/mdns-tui-browser/pull/484))
+
 ## [1.30.20] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.19...v1.30.20)
 
 ### Added
