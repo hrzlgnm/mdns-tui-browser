@@ -554,6 +554,9 @@ def main():
     parser.add_argument("--repository", default="hrzlgnm/mdns-tui-browser", help="GitHub repository")
     args = parser.parse_args()
 
+    if args.insert and not args.tag:
+        parser.error("--insert requires --tag")
+
     try:
         if args.tag:
             section = update_single_release(args.tag, args.repository, args.previous_tag)
