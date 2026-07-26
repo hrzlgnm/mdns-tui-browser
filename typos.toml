@@ -1,7 +1,7 @@
 [files]
 ignore-files = true
 ignore-hidden = false
-extend-exclude = [".git/"]
+extend-exclude = [".git/", "cliff.toml"]
 
 [default]
 check-filename = true
@@ -9,9 +9,3 @@ check-filename = true
 [default.extend-words]
 # rattatui crate name
 ratatui = "ratatui"
-# intentionally misspelled words in cliff.toml postprocessors
-Simlify = "Simlify"
-hanlding = "hanlding"
-verision = "verision"
-compileable = "compileable"
-thouroughly = "thouroughly"
