@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.30.20] - 2026-07-26
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...HEAD)
+
+### Changed
+
+- Move changelog comparison links inline with version sections
+
+## [1.30.20] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.19...v1.30.20)
 
 ### Added
 
@@ -15,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ignore changelog update changes in release-drafter (#479) ([#479](https://github.com/hrzlgnm/mdns-tui-browser/pull/479))
 
-## [1.30.19] - 2026-07-26
+## [1.30.19] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.18...v1.30.19)
 
 ### Added
 
@@ -45,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Skip changelog update commits in git-cliff (#476) ([#476](https://github.com/hrzlgnm/mdns-tui-browser/pull/476))
 
-## [1.30.18] - 2026-07-26
+## [1.30.18] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...v1.30.18)
 
 ### Added
 
@@ -67,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Use crate cross for cross compilation and add more platforms (#458) ([#458](https://github.com/hrzlgnm/mdns-tui-browser/pull/458))
 
-## [1.30.17] - 2026-07-17
+## [1.30.17] - 2026-07-17 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.16...v1.30.17)
 
 ### Changed
 
@@ -79,25 +85,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate mdns-sd to v0.20.2 (#442) ([#442](https://github.com/hrzlgnm/mdns-tui-browser/pull/442))
 
-## [1.30.15] - 2026-07-13
+## [1.30.15] - 2026-07-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.14...v1.30.15)
 
 ### Fixed
 
 - Migrate version-resolver labels to version-resolver category syntax (#433) ([#433](https://github.com/hrzlgnm/mdns-tui-browser/pull/433))
 
-## [1.30.14] - 2026-07-13
+## [1.30.14] - 2026-07-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.13...v1.30.14)
 
 ### Fixed
 
 - Migrate exclude-labels to pre-exclude category syntax (#432) ([#432](https://github.com/hrzlgnm/mdns-tui-browser/pull/432))
 
-## [1.30.13] - 2026-07-13
+## [1.30.13] - 2026-07-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.12...v1.30.13)
 
 ### Fixed
 
 - Migrate release-drafter categories to use when.labels syntax (#430) ([#430](https://github.com/hrzlgnm/mdns-tui-browser/pull/430))
 
-## [1.30.12] - 2026-07-13
+## [1.30.12] - 2026-07-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.11...v1.30.12)
 
 ### Added
 
@@ -113,7 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Only retry failed jobs (#427) ([#427](https://github.com/hrzlgnm/mdns-tui-browser/pull/427))
 
-## [1.30.11] - 2026-07-05
+## [1.30.11] - 2026-07-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.10...v1.30.11)
 
 ### Changed
 
@@ -121,19 +127,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate open to v5.3.6 (#415) ([#415](https://github.com/hrzlgnm/mdns-tui-browser/pull/415))
 
-## [1.30.10] - 2026-06-26
+## [1.30.10] - 2026-06-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.9...v1.30.10)
 
 ### Changed
 
 - *(deps)* Update rust crate ratatui to v0.30.2 (#403) ([#403](https://github.com/hrzlgnm/mdns-tui-browser/pull/403))
 
-## [1.30.9] - 2026-06-19
+## [1.30.9] - 2026-06-19 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.8...v1.30.9)
 
 ### Changed
 
 - *(deps)* Update rust crate ratatui to v0.30.1 (#396) ([#396](https://github.com/hrzlgnm/mdns-tui-browser/pull/396))
 
-## [1.30.8] - 2026-06-04
+## [1.30.8] - 2026-06-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.7...v1.30.8)
 
 ### Changed
 
@@ -147,7 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Prevent sed from corrupting arch stanza when updating sha256 (#392) ([#392](https://github.com/hrzlgnm/mdns-tui-browser/pull/392))
 
-## [1.30.7] - 2026-05-19
+## [1.30.7] - 2026-05-19 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.6...v1.30.7)
 
 ### Changed
 
@@ -159,7 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate mdns-sd to v0.19.2 (#377) ([#377](https://github.com/hrzlgnm/mdns-tui-browser/pull/377))
 
-## [1.30.6] - 2026-05-06
+## [1.30.6] - 2026-05-06 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.5...v1.30.6)
 
 ### Added
 
@@ -177,13 +183,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Use correct github-actions[bot] email and user (#364) ([#364](https://github.com/hrzlgnm/mdns-tui-browser/pull/364))
 
-## [1.30.5] - 2026-05-03
+## [1.30.5] - 2026-05-03 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.4...v1.30.5)
 
 ### Fixed
 
 - Ignore meta service as type when browsing (#357) ([#357](https://github.com/hrzlgnm/mdns-tui-browser/pull/357))
 
-## [1.30.4] - 2026-04-20
+## [1.30.4] - 2026-04-20 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.3...v1.30.4)
 
 ### Changed
 
@@ -201,7 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate mdns-sd to v0.19.1 (#348) ([#348](https://github.com/hrzlgnm/mdns-tui-browser/pull/348))
 
-## [1.30.3] - 2026-04-10
+## [1.30.3] - 2026-04-10 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.2...v1.30.3)
 
 ### Added
 
@@ -217,19 +223,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Speed up actionlint job by using native runner instead of Docker container (#326) ([#326](https://github.com/hrzlgnm/mdns-tui-browser/pull/326))
 
-## [1.30.2] - 2026-04-05
+## [1.30.2] - 2026-04-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.1...v1.30.2)
 
 ### Changed
 
 - Switch mdns-sd to published crate 0.19.0 (#314) ([#314](https://github.com/hrzlgnm/mdns-tui-browser/pull/314))
 
-## [1.30.1] - 2026-04-04
+## [1.30.1] - 2026-04-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.0...v1.30.1)
 
 ### Added
 
 - Limit services list to 5 items for larger details view (#311) ([#311](https://github.com/hrzlgnm/mdns-tui-browser/pull/311))
 
-## [1.30.0] - 2026-04-04
+## [1.30.0] - 2026-04-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.2...v1.30.0)
 
 ### Added
 
@@ -243,37 +249,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Enable coderabbit auto reviews (#308) ([#308](https://github.com/hrzlgnm/mdns-tui-browser/pull/308))
 
-## [1.29.2] - 2026-03-19
+## [1.29.2] - 2026-03-19 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.1...v1.29.2)
 
 ### Added
 
 - Add IP-based URLs for HTTP services in get_urls() (#294) ([#294](https://github.com/hrzlgnm/mdns-tui-browser/pull/294))
 
-## [1.29.1] - 2026-03-16
+## [1.29.1] - 2026-03-16 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.0...v1.29.1)
 
 ### Added
 
 - Add URL selection popup for services with multiple URLs (#289) ([#289](https://github.com/hrzlgnm/mdns-tui-browser/pull/289))
 
-## [1.29.0] - 2026-03-16
+## [1.29.0] - 2026-03-16 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.1...v1.29.0)
 
 ### Added
 
 - Add Enter key to open service URL in browser (#287) ([#287](https://github.com/hrzlgnm/mdns-tui-browser/pull/287))
 
-## [1.28.1] - 2026-03-15
+## [1.28.1] - 2026-03-15 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.0...v1.28.1)
 
 ### Fixed
 
 - Spawn browser open in blocking task to avoid blocking event loop (#286) ([#286](https://github.com/hrzlgnm/mdns-tui-browser/pull/286))
 
-## [1.28.0] - 2026-03-15
+## [1.28.0] - 2026-03-15 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.1...v1.28.0)
 
 ### Added
 
 - Make service types panel width dynamic based on content (#285) ([#285](https://github.com/hrzlgnm/mdns-tui-browser/pull/285))
 
-## [1.27.1] - 2026-03-12
+## [1.27.1] - 2026-03-12 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.0...v1.27.1)
 
 ### Changed
 
@@ -283,7 +289,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Render error messages above help popup (#277) ([#277](https://github.com/hrzlgnm/mdns-tui-browser/pull/277))
 
-## [1.27.0] - 2026-03-12
+## [1.27.0] - 2026-03-12 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.3...v1.27.0)
 
 ### Added
 
@@ -293,13 +299,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate clap to v4.5.61 (#275) ([#275](https://github.com/hrzlgnm/mdns-tui-browser/pull/275))
 
-## [1.26.3] - 2026-03-11
+## [1.26.3] - 2026-03-11 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.2...v1.26.3)
 
 ### Changed
 
 - Fix clone step in aur workflow (#271) ([#271](https://github.com/hrzlgnm/mdns-tui-browser/pull/271))
 
-## [1.26.2] - 2026-03-11
+## [1.26.2] - 2026-03-11 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.1...v1.26.2)
 
 ### Changed
 
@@ -321,13 +327,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add explicit permissions to workflows and remove hardcoded ruleset id (#258) ([#258](https://github.com/hrzlgnm/mdns-tui-browser/pull/258))
 
-## [1.26.1] - 2026-03-07
+## [1.26.1] - 2026-03-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.0...v1.26.1)
 
 ### Changed
 
 - Cache cargo-auditable in cache-tools workflow too (#256) ([#256](https://github.com/hrzlgnm/mdns-tui-browser/pull/256))
 
-## [1.26.0] - 2026-03-07
+## [1.26.0] - 2026-03-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.1...v1.26.0)
 
 ### Added
 
@@ -345,7 +351,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Extract user input handling to dedicated module (#254) ([#254](https://github.com/hrzlgnm/mdns-tui-browser/pull/254))
 
-## [1.25.1] - 2026-03-04
+## [1.25.1] - 2026-03-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.0...v1.25.1)
 
 ### Changed
 
@@ -355,7 +361,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Calculate wrapped line count for popup scroll (#244) ([#244](https://github.com/hrzlgnm/mdns-tui-browser/pull/244))
 
-## [1.25.0] - 2026-03-03
+## [1.25.0] - 2026-03-03 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.1...v1.25.0)
 
 ### Added
 
@@ -371,13 +377,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add unit test verifying flapping is recomputed on state load (#238) ([#238](https://github.com/hrzlgnm/mdns-tui-browser/pull/238))
 
-## [1.24.1] - 2026-03-02
+## [1.24.1] - 2026-03-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.0...v1.24.1)
 
 ### Fixed
 
 - Update services flapping status after loading a state dump (#231) ([#231](https://github.com/hrzlgnm/mdns-tui-browser/pull/231))
 
-## [1.24.0] - 2026-03-02
+## [1.24.0] - 2026-03-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.6...v1.24.0)
 
 ### Added
 
@@ -393,13 +399,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Include CLI options in JSON state dump (#228) ([#228](https://github.com/hrzlgnm/mdns-tui-browser/pull/228))
 
-## [1.23.6] - 2026-03-01
+## [1.23.6] - 2026-03-01 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.5...v1.23.6)
 
 ### Changed
 
 - *(deps)* Update rust crate mdns-sd to v0.18.1 (#223) ([#223](https://github.com/hrzlgnm/mdns-tui-browser/pull/223))
 
-## [1.23.5] - 2026-02-28
+## [1.23.5] - 2026-02-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.4...v1.23.5)
 
 ### Changed
 
@@ -413,7 +419,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update attest-build-provenance to actions/attest@v4 (#221) ([#221](https://github.com/hrzlgnm/mdns-tui-browser/pull/221))
 
-## [1.23.4] - 2026-02-26
+## [1.23.4] - 2026-02-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.3...v1.23.4)
 
 ### Changed
 
@@ -427,19 +433,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Preserve key-only TXT records in service properties (#213) ([#213](https://github.com/hrzlgnm/mdns-tui-browser/pull/213))
 
-## [1.23.3] - 2026-02-22
+## [1.23.3] - 2026-02-22 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.2...v1.23.3)
 
 ### Changed
 
 - Build for ubuntu-22.40, too (#201) ([#201](https://github.com/hrzlgnm/mdns-tui-browser/pull/201))
 
-## [1.23.2] - 2026-02-21
+## [1.23.2] - 2026-02-21 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.1...v1.23.2)
 
 ### Fixed
 
 - Add Ctrl+Z to help popup on Unix systems (#200) ([#200](https://github.com/hrzlgnm/mdns-tui-browser/pull/200))
 
-## [1.23.0] - 2026-02-21
+## [1.23.0] - 2026-02-21 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.22.0...v1.23.0)
 
 ### Added
 
@@ -451,7 +457,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Extract terminal handling into own module (#197) ([#197](https://github.com/hrzlgnm/mdns-tui-browser/pull/197))
 
-## [1.22.0] - 2026-02-17
+## [1.22.0] - 2026-02-17 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.3...v1.22.0)
 
 ### Added
 
@@ -463,31 +469,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate clap to v4.5.59 (#191) ([#191](https://github.com/hrzlgnm/mdns-tui-browser/pull/191))
 
-## [1.21.3] - 2026-02-15
+## [1.21.3] - 2026-02-15 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.2...v1.21.3)
 
 ### Fixed
 
 - *(deps)* Update rust crate mdns-sd to 0.18 (#188) ([#188](https://github.com/hrzlgnm/mdns-tui-browser/pull/188))
 
-## [1.21.2] - 2026-02-15
+## [1.21.2] - 2026-02-15 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.1...v1.21.2)
 
 ### Added
 
 - Add version to help popup title (#187) ([#187](https://github.com/hrzlgnm/mdns-tui-browser/pull/187))
 
-## [1.21.1] - 2026-02-14
+## [1.21.1] - 2026-02-14 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.0...v1.21.1)
 
 ### Added
 
 - Show online/offline/total counts in services list header (#185) ([#185](https://github.com/hrzlgnm/mdns-tui-browser/pull/185))
 
-## [1.21.0] - 2026-02-14
+## [1.21.0] - 2026-02-14 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.20.0...v1.21.0)
 
 ### Added
 
 - Add --no-ipv4 and --no-ipv6 CLI options to disable IPv4/IPv6 mDNS discovery (#184) ([#184](https://github.com/hrzlgnm/mdns-tui-browser/pull/184))
 
-## [1.20.0] - 2026-02-13
+## [1.20.0] - 2026-02-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.2...v1.20.0)
 
 ### Added
 
@@ -497,25 +503,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate if-addrs to 0.15 (#182) ([#182](https://github.com/hrzlgnm/mdns-tui-browser/pull/182))
 
-## [1.19.2] - 2026-02-13
-
-### Changed
-
-- Repackage .deb as .ipk for aarch64 and armhf (#179) ([#179](https://github.com/hrzlgnm/mdns-tui-browser/pull/179))
-
-## [1.19.1] - 2026-02-12
+## [1.19.2] - 2026-02-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.2)
 
 ### Changed
 
 - Add .deb packages to Linux releases with attestation (#177) ([#177](https://github.com/hrzlgnm/mdns-tui-browser/pull/177))
 
-## [1.19.0] - 2026-02-12
+- Repackage .deb as .ipk for aarch64 and armhf (#179) ([#179](https://github.com/hrzlgnm/mdns-tui-browser/pull/179))
+
+## [1.19.0] - 2026-02-12 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.18.0...v1.19.0)
 
 ### Added
 
 - Add flapping service detection and visual styling (#176) ([#176](https://github.com/hrzlgnm/mdns-tui-browser/pull/176))
 
-## [1.18.0] - 2026-02-12
+## [1.18.0] - 2026-02-12 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.17.0...v1.18.0)
 
 ### Added
 
@@ -525,7 +527,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cargo set-version already updates Cargo.lock (#174) ([#174](https://github.com/hrzlgnm/mdns-tui-browser/pull/174))
 
-## [1.17.0] - 2026-02-11
+## [1.17.0] - 2026-02-11 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.2...v1.17.0)
 
 ### Added
 
@@ -539,7 +541,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Resolve actionlint warnings and extend documentation (#172) ([#172](https://github.com/hrzlgnm/mdns-tui-browser/pull/172))
 
-## [1.16.2] - 2026-02-11
+## [1.16.2] - 2026-02-11 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.1...v1.16.2)
 
 ### Changed
 
@@ -551,7 +553,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ensure release build uses correct tag ref (#170) ([#170](https://github.com/hrzlgnm/mdns-tui-browser/pull/170))
 
-## [1.16.1] - 2026-02-10
+## [1.16.1] - 2026-02-10 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.0...v1.16.1)
 
 ### Changed
 
@@ -559,7 +561,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add link to desktop app (#167) ([#167](https://github.com/hrzlgnm/mdns-tui-browser/pull/167))
 
-## [1.16.0] - 2026-02-10
+## [1.16.0] - 2026-02-10 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.15.0...v1.16.0)
 
 ### Added
 
@@ -569,7 +571,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cleanup debouncing and reduce debounce time to 1s (#164) ([#164](https://github.com/hrzlgnm/mdns-tui-browser/pull/164))
 
-## [1.15.0] - 2026-02-10
+## [1.15.0] - 2026-02-10 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.13...v1.15.0)
 
 ### Added
 
@@ -579,19 +581,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Resolve race condition in ServiceResolved handling (#163) ([#163](https://github.com/hrzlgnm/mdns-tui-browser/pull/163))
 
-## [1.14.13] - 2026-02-09
+## [1.14.13] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.12...v1.14.13)
 
 ### Fixed
 
 - Correct help popup color description for sort field (#161) ([#161](https://github.com/hrzlgnm/mdns-tui-browser/pull/161))
 
-## [1.14.12] - 2026-02-09
+## [1.14.12] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.11...v1.14.12)
 
 ### Fixed
 
 - Permissions and input evaluation (#160) ([#160](https://github.com/hrzlgnm/mdns-tui-browser/pull/160))
 
-## [1.14.11] - 2026-02-09
+## [1.14.11] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.10...v1.14.11)
 
 ### Fixed
 
@@ -599,85 +601,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Permissions of release workflow (#159) ([#159](https://github.com/hrzlgnm/mdns-tui-browser/pull/159))
 
-## [1.14.10] - 2026-02-09
+## [1.14.10] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.9...v1.14.10)
 
 ### Fixed
 
 - Add missing checkout steps to source-checksums workflow (#155) ([#155](https://github.com/hrzlgnm/mdns-tui-browser/pull/155))
 
-## [1.14.9] - 2026-02-09
+## [1.14.9] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.8...v1.14.9)
 
 ### Added
 
 - Consolidate publish workflow into release workflow (#154) ([#154](https://github.com/hrzlgnm/mdns-tui-browser/pull/154))
 
-## [1.14.8] - 2026-02-09
+## [1.14.8] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.7...v1.14.8)
 
 ### Fixed
 
 - Pass tagName as tag_name to action-gh-release (#153) ([#153](https://github.com/hrzlgnm/mdns-tui-browser/pull/153))
 
-## [1.14.7] - 2026-02-09
+## [1.14.7] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.6...v1.14.7)
 
 ### Fixed
 
 - Pass tagName to source-checksums-reusable workflow (#152) ([#152](https://github.com/hrzlgnm/mdns-tui-browser/pull/152))
 
-## [1.14.6] - 2026-02-09
+## [1.14.6] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.5...v1.14.6)
 
 ### Fixed
 
 - Add tagName input to workflow_call in source checksums workflow (#151) ([#151](https://github.com/hrzlgnm/mdns-tui-browser/pull/151))
 
-## [1.14.5] - 2026-02-09
+## [1.14.5] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.4...v1.14.5)
 
 ### Fixed
 
 - Use GITHUB_TOKEN instead of PAT (#150) ([#150](https://github.com/hrzlgnm/mdns-tui-browser/pull/150))
 
-## [1.14.4] - 2026-02-09
+## [1.14.4] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.3...v1.14.4)
 
 ### Fixed
 
 - Use proper permissions for workflow dispatch (#149) ([#149](https://github.com/hrzlgnm/mdns-tui-browser/pull/149))
 
-## [1.14.3] - 2026-02-09
+## [1.14.3] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.2...v1.14.3)
 
 ### Fixed
 
 - Add manual workflow trigger to bypass GitHub Actions limitation (#148) ([#148](https://github.com/hrzlgnm/mdns-tui-browser/pull/148))
 
-## [1.14.1] - 2026-02-09
+## [1.14.1] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.0...v1.14.1)
 
 ### Fixed
 
 - Perform cargo check --locked to avoid unintended updates (#145) ([#145](https://github.com/hrzlgnm/mdns-tui-browser/pull/145))
 
-## [1.14.0] - 2026-02-09
+## [1.14.0] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.7...v1.14.0)
 
 ### Fixed
 
 - Configure release-drafter to publish the release instead of drafting (#144) ([#144](https://github.com/hrzlgnm/mdns-tui-browser/pull/144))
 
-## [1.13.7] - 2026-02-09
+## [1.13.7] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.6...v1.13.7)
 
 ### Fixed
 
 - Release-drafter configuration to create pre-releases instead of drafts (#143) ([#143](https://github.com/hrzlgnm/mdns-tui-browser/pull/143))
 
-## [1.13.6] - 2026-02-09
+## [1.13.6] - 2026-02-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.5...v1.13.6)
 
 ### Changed
 
 - Replace bump-version and release-drafter workflows with unified release workflow (#140) ([#140](https://github.com/hrzlgnm/mdns-tui-browser/pull/140))
 
-## [1.13.4] - 2026-02-08
+## [1.13.4] - 2026-02-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.3...v1.13.4)
 
 ### Changed
 
 - Reduce metrics fetch interval from 5s to 1s (#137) ([#137](https://github.com/hrzlgnm/mdns-tui-browser/pull/137))
 
-## [1.13.2] - 2026-02-08
+## [1.13.2] - 2026-02-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.1...v1.13.2)
 
 ### Changed
 
@@ -687,7 +689,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Correctly format service types with subtypes in display (#132) ([#132](https://github.com/hrzlgnm/mdns-tui-browser/pull/132))
 
-## [1.13.1] - 2026-02-07
+## [1.13.1] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.0...v1.13.1)
 
 ### Changed
 
@@ -695,7 +697,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Deduplicate ServiceEntry creation in tests (#129) ([#129](https://github.com/hrzlgnm/mdns-tui-browser/pull/129))
 
-## [1.13.0] - 2026-02-07
+## [1.13.0] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.3...v1.13.0)
 
 ### Changed
 
@@ -703,17 +705,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove redundant duration field from ServiceSession (#128) ([#128](https://github.com/hrzlgnm/mdns-tui-browser/pull/128))
 
+## [1.12.2] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.12.2)
+
 ### Fixed
 
 - Skip lastOnlineAt field if redundant with createdAt (#126) ([#126](https://github.com/hrzlgnm/mdns-tui-browser/pull/126))
 
-## [1.12.1] - 2026-02-07
+## [1.12.1] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.0...v1.12.1)
 
 ### Changed
 
 - Update MSRV to 1.88 to allow for security updates (#124) ([#124](https://github.com/hrzlgnm/mdns-tui-browser/pull/124))
 
-## [1.12.0] - 2026-02-07
+## [1.12.0] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.1...v1.12.0)
 
 ### Added
 
@@ -725,19 +729,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add man pages (#119) ([#119](https://github.com/hrzlgnm/mdns-tui-browser/pull/119))
 
-## [1.11.1] - 2026-02-04
+## [1.11.1] - 2026-02-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.0...v1.11.1)
 
 ### Fixed
 
 - Remove underscore prefix from mDNS subtypes in compact format (#116) ([#116](https://github.com/hrzlgnm/mdns-tui-browser/pull/116))
 
-## [1.11.0] - 2026-02-04
+## [1.11.0] - 2026-02-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.10.0...v1.11.0)
 
 ### Added
 
 - Add scrolling to Service Details view (#114) ([#114](https://github.com/hrzlgnm/mdns-tui-browser/pull/114))
 
-## [1.10.0] - 2026-02-04
+## [1.10.0] - 2026-02-04 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.2...v1.10.0)
 
 ### Added
 
@@ -753,7 +757,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add 'enhancement' label to minor version releases (#111) ([#111](https://github.com/hrzlgnm/mdns-tui-browser/pull/111))
 
-## [1.9.2] - 2026-02-03
+## [1.9.2] - 2026-02-03 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.1...v1.9.2)
 
 ### Added
 
@@ -769,7 +773,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add AGENTS.md (#106) ([#106](https://github.com/hrzlgnm/mdns-tui-browser/pull/106))
 
-## [1.9.1] - 2026-02-03
+## [1.9.1] - 2026-02-03 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.0...v1.9.1)
 
 ### Added
 
@@ -779,13 +783,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove superfluous sorting (#96) ([#96](https://github.com/hrzlgnm/mdns-tui-browser/pull/96))
 
-## [1.9.0] - 2026-02-02
+## [1.9.0] - 2026-02-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.1...v1.9.0)
 
 ### Added
 
 - Add CLI argument for additional service types (#92) ([#92](https://github.com/hrzlgnm/mdns-tui-browser/pull/92))
 
-## [1.8.1] - 2026-02-01
+## [1.8.1] - 2026-02-01 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.0...v1.8.1)
 
 ### Changed
 
@@ -795,37 +799,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Alignment of help controls (#91) ([#91](https://github.com/hrzlgnm/mdns-tui-browser/pull/91))
 
-## [1.8.0] - 2026-02-01
+## [1.8.0] - 2026-02-01 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.3...v1.8.0)
 
 ### Added
 
 - Add paging and jump navigation for service types (#89) ([#89](https://github.com/hrzlgnm/mdns-tui-browser/pull/89))
 
-## [1.7.3] - 2026-01-31
+## [1.7.3] - 2026-01-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.2...v1.7.3)
 
 ### Changed
 
 - Disable stripping when building for AUR (#86) ([#86](https://github.com/hrzlgnm/mdns-tui-browser/pull/86))
 
-## [1.7.2] - 2026-01-31
+## [1.7.2] - 2026-01-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.1...v1.7.2)
 
 ### Added
 
 - Ensure the service type is present if a service is discovered (#85) ([#85](https://github.com/hrzlgnm/mdns-tui-browser/pull/85))
 
-## [1.7.1] - 2026-01-31
+## [1.7.1] - 2026-01-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.0...v1.7.1)
 
 ### Added
 
 - Add keyboard shortcut to clear stale service types (#84) ([#84](https://github.com/hrzlgnm/mdns-tui-browser/pull/84))
 
-## [1.7.0] - 2026-01-31
+## [1.7.0] - 2026-01-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.4...v1.7.0)
 
 ### Changed
 
 - Rename remove_service to mark_service_offline and remove unused parameter (#82) ([#82](https://github.com/hrzlgnm/mdns-tui-browser/pull/82))
 
-## [1.6.4] - 2026-01-31
+## [1.6.4] - 2026-01-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.3...v1.6.4)
 
 ### Changed
 
@@ -837,7 +841,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Service removal metric double counting (#81) ([#81](https://github.com/hrzlgnm/mdns-tui-browser/pull/81))
 
-## [1.6.3] - 2026-01-31
+## [1.6.3] - 2026-01-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.2...v1.6.3)
 
 ### Changed
 
@@ -847,7 +851,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Deploy to AUR when release becomes latest (#76) ([#76](https://github.com/hrzlgnm/mdns-tui-browser/pull/76))
 
-## [1.6.2] - 2026-01-30
+## [1.6.2] - 2026-01-30 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.1...v1.6.2)
 
 ### Changed
 
@@ -857,31 +861,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Prevent selection reset when clearing empty filter (#74) ([#74](https://github.com/hrzlgnm/mdns-tui-browser/pull/74))
 
-## [1.6.1] - 2026-01-30
+## [1.6.1] - 2026-01-30 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.0...v1.6.1)
 
 ### Added
 
 - Add services_updated metric and improve service management (#72) ([#72](https://github.com/hrzlgnm/mdns-tui-browser/pull/72))
 
-## [1.6.0] - 2026-01-30
+## [1.6.0] - 2026-01-30 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.5.0...v1.6.0)
 
 ### Added
 
 - Add GitHub build provenance and cargo auditable for releases (#70) ([#70](https://github.com/hrzlgnm/mdns-tui-browser/pull/70))
 
-## [1.5.0] - 2026-01-30
+## [1.5.0] - 2026-01-30 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.2...v1.5.0)
 
 ### Added
 
 - Quick filter functionality (#69) ([#69](https://github.com/hrzlgnm/mdns-tui-browser/pull/69))
 
-## [1.4.2] - 2026-01-30
+## [1.4.2] - 2026-01-30 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.1...v1.4.2)
 
 ### Added
 
 - Add sorting of services in services view (#68) ([#68](https://github.com/hrzlgnm/mdns-tui-browser/pull/68))
 
-## [1.4.1] - 2026-01-30
+## [1.4.1] - 2026-01-30 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.0...v1.4.1)
 
 ### Added
 
@@ -891,7 +895,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rename dead/alive to offline/online (#67) ([#67](https://github.com/hrzlgnm/mdns-tui-browser/pull/67))
 
-## [1.4.0] - 2026-01-29
+## [1.4.0] - 2026-01-29 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.1...v1.4.0)
 
 ### Added
 
@@ -901,7 +905,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate clap to v4.5.56 (#61) ([#61](https://github.com/hrzlgnm/mdns-tui-browser/pull/61))
 
-## [1.3.1] - 2026-01-29
+## [1.3.1] - 2026-01-29 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.0...v1.3.1)
 
 ### Changed
 
@@ -913,7 +917,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Scroll the services view correctly after clearing dead services (#59) ([#59](https://github.com/hrzlgnm/mdns-tui-browser/pull/59))
 
-## [1.3.0] - 2026-01-28
+## [1.3.0] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.1...v1.3.0)
 
 ### Added
 
@@ -927,13 +931,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ignore key release events on windows to prevent duplicate events (#41) ([#41](https://github.com/hrzlgnm/mdns-tui-browser/pull/41))
 
-## [1.2.1] - 2026-01-28
+## [1.2.1] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.0...v1.2.1)
 
 ### Changed
 
 - Major scrolling keybinding overhaul also handle Ctrl+C (#40) ([#40](https://github.com/hrzlgnm/mdns-tui-browser/pull/40))
 
-## [1.2.0] - 2026-01-28
+## [1.2.0] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.5...v1.2.0)
 
 ### Changed
 
@@ -943,13 +947,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Don't remove service types if those are still used (#39) ([#39](https://github.com/hrzlgnm/mdns-tui-browser/pull/39))
 
-## [1.1.5] - 2026-01-28
+## [1.1.5] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.4...v1.1.5)
 
 ### Fixed
 
 - Handle terminal resize events (#36) ([#36](https://github.com/hrzlgnm/mdns-tui-browser/pull/36))
 
-## [1.1.4] - 2026-01-28
+## [1.1.4] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.3...v1.1.4)
 
 ### Changed
 
@@ -959,31 +963,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate flume to 0.12 (#35) ([#35](https://github.com/hrzlgnm/mdns-tui-browser/pull/35))
 
-## [1.1.3] - 2026-01-28
+## [1.1.3] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.2...v1.1.3)
 
 ### Changed
 
 - Fix archiving debug symbols (#31) ([#31](https://github.com/hrzlgnm/mdns-tui-browser/pull/31))
 
-## [1.1.2] - 2026-01-28
+## [1.1.2] - 2026-01-28 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.1...v1.1.2)
 
 ### Changed
 
 - Split debug info (#30) ([#30](https://github.com/hrzlgnm/mdns-tui-browser/pull/30))
 
-## [1.1.1] - 2026-01-27
+## [1.1.1] - 2026-01-27 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.0...v1.1.1)
 
 ### Changed
 
 - Configure profile for release optimizations (#29) ([#29](https://github.com/hrzlgnm/mdns-tui-browser/pull/29))
 
-## [1.1.0] - 2026-01-27
+## [1.1.0] - 2026-01-27 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.1...v1.1.0)
 
 ### Changed
 
 - Cleanup naming of release assets and release name (#28) ([#28](https://github.com/hrzlgnm/mdns-tui-browser/pull/28))
 
-## [1.0.1] - 2026-01-27
+## [1.0.1] - 2026-01-27 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.0...v1.0.1)
 
 ### Changed
 
@@ -1052,225 +1056,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handle service type removal more thoroughly (#21) ([#21](https://github.com/hrzlgnm/mdns-tui-browser/pull/21))
 
 - Skip service subtypes in service type enumeration (#22) ([#22](https://github.com/hrzlgnm/mdns-tui-browser/pull/22))
-
-[1.30.20]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.19...v1.30.20
-
-[1.30.19]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.18...v1.30.19
-
-[1.30.18]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...v1.30.18
-
-[1.30.17]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.16...v1.30.17
-
-[1.30.15]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.14...v1.30.15
-
-[1.30.14]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.13...v1.30.14
-
-[1.30.13]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.12...v1.30.13
-
-[1.30.12]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.11...v1.30.12
-
-[1.30.11]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.10...v1.30.11
-
-[1.30.10]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.9...v1.30.10
-
-[1.30.9]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.8...v1.30.9
-
-[1.30.8]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.7...v1.30.8
-
-[1.30.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.6...v1.30.7
-
-[1.30.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.5...v1.30.6
-
-[1.30.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.4...v1.30.5
-
-[1.30.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.3...v1.30.4
-
-[1.30.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.2...v1.30.3
-
-[1.30.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.1...v1.30.2
-
-[1.30.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.0...v1.30.1
-
-[1.30.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.2...v1.30.0
-
-[1.29.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.1...v1.29.2
-
-[1.29.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.0...v1.29.1
-
-[1.29.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.1...v1.29.0
-
-[1.28.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.0...v1.28.1
-
-[1.28.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.1...v1.28.0
-
-[1.27.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.0...v1.27.1
-
-[1.27.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.3...v1.27.0
-
-[1.26.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.2...v1.26.3
-
-[1.26.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.1...v1.26.2
-
-[1.26.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.0...v1.26.1
-
-[1.26.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.1...v1.26.0
-
-[1.25.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.0...v1.25.1
-
-[1.25.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.1...v1.25.0
-
-[1.24.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.0...v1.24.1
-
-[1.24.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.6...v1.24.0
-
-[1.23.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.5...v1.23.6
-
-[1.23.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.4...v1.23.5
-
-[1.23.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.3...v1.23.4
-
-[1.23.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.2...v1.23.3
-
-[1.23.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.1...v1.23.2
-
-[1.23.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.22.0...v1.23.0
-
-[1.22.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.3...v1.22.0
-
-[1.21.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.2...v1.21.3
-
-[1.21.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.1...v1.21.2
-
-[1.21.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.0...v1.21.1
-
-[1.21.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.20.0...v1.21.0
-
-[1.20.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.2...v1.20.0
-
-[1.19.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.1...v1.19.2
-
-[1.19.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.1
-
-[1.19.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.18.0...v1.19.0
-
-[1.18.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.17.0...v1.18.0
-
-[1.17.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.2...v1.17.0
-
-[1.16.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.1...v1.16.2
-
-[1.16.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.0...v1.16.1
-
-[1.16.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.15.0...v1.16.0
-
-[1.15.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.13...v1.15.0
-
-[1.14.13]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.12...v1.14.13
-
-[1.14.12]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.11...v1.14.12
-
-[1.14.11]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.10...v1.14.11
-
-[1.14.10]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.9...v1.14.10
-
-[1.14.9]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.8...v1.14.9
-
-[1.14.8]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.7...v1.14.8
-
-[1.14.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.6...v1.14.7
-
-[1.14.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.5...v1.14.6
-
-[1.14.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.4...v1.14.5
-
-[1.14.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.3...v1.14.4
-
-[1.14.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.2...v1.14.3
-
-[1.14.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.0...v1.14.1
-
-[1.14.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.7...v1.14.0
-
-[1.13.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.6...v1.13.7
-
-[1.13.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.5...v1.13.6
-
-[1.13.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.3...v1.13.4
-
-[1.13.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.1...v1.13.2
-
-[1.13.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.0...v1.13.1
-
-[1.13.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.13.0
-
-[1.12.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.0...v1.12.1
-
-[1.12.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.1...v1.12.0
-
-[1.11.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.0...v1.11.1
-
-[1.11.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.10.0...v1.11.0
-
-[1.10.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.2...v1.10.0
-
-[1.9.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.1...v1.9.2
-
-[1.9.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.0...v1.9.1
-
-[1.9.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.1...v1.9.0
-
-[1.8.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.0...v1.8.1
-
-[1.8.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.3...v1.8.0
-
-[1.7.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.2...v1.7.3
-
-[1.7.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.1...v1.7.2
-
-[1.7.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.0...v1.7.1
-
-[1.7.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.4...v1.7.0
-
-[1.6.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.3...v1.6.4
-
-[1.6.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.2...v1.6.3
-
-[1.6.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.1...v1.6.2
-
-[1.6.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.0...v1.6.1
-
-[1.6.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.5.0...v1.6.0
-
-[1.5.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.2...v1.5.0
-
-[1.4.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.1...v1.4.2
-
-[1.4.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.0...v1.4.1
-
-[1.4.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.1...v1.4.0
-
-[1.3.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.0...v1.3.1
-
-[1.3.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.1...v1.3.0
-
-[1.2.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.0...v1.2.1
-
-[1.2.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.5...v1.2.0
-
-[1.1.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.4...v1.1.5
-
-[1.1.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.3...v1.1.4
-
-[1.1.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.2...v1.1.3
-
-[1.1.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.1...v1.1.2
-
-[1.1.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.0...v1.1.1
-
-[1.1.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.1...v1.1.0
-
-[1.0.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.0...v1.0.1
-
-[Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...HEAD
 
 
