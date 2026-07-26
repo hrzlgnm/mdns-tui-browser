@@ -115,28 +115,17 @@ jobs:
               "${RULESET}" \
               --input -
 
-      - name: 🐍 Setup Python
-        if: ${{ !inputs.dry-run }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - name: 🔧 Install git-cliff
+        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
         with:
-          python-version: "3.x"
+          crate: git-cliff
+          version: 2.13.1
+          locked: true
 
       - name: 📝 Update CHANGELOG.md
         if: ${{ !inputs.dry-run }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREV_TAG=$(gh release list --limit 10 --json tagName,isPrerelease,isDraft \
-            --jq '[.[] | select(.isPrerelease == false and .isDraft == false)] | .[0].tagName')
-          if [ -z "$PREV_TAG" ]; then
-            echo "Error: no previous stable release found" >&2
-            exit 1
-          fi
-          python3 generate_changelog.py \
-            --tag "v${{ steps.version.outputs.semantic-version }}" \
-            --previous-tag "$PREV_TAG" \
-            --insert
+          git-cliff --output CHANGELOG.md
 
       - name: 💾🏷️⬆️ Commit, tag and push
         if: ${{ !inputs.dry-run }}

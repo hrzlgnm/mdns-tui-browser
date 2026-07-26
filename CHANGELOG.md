@@ -7,696 +7,1230 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
 ### Changed
 
-### Fixed
+- Reuse data.tar.xz from .deb for .ipk packages (#460) ([#460](https://github.com/hrzlgnm/mdns-tui-browser/pull/460))
 
-
-[Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.18...HEAD
 ## [1.30.18] - 2026-07-26
 
 ### Added
 
-- feat: integrate changelog generation into release workflow #459
-- feat: SBOM including attestation and grype scanning in release #455
+- SBOM including attestation and grype scanning in release (#455) ([#455](https://github.com/hrzlgnm/mdns-tui-browser/pull/455))
+
+- Integrate changelog generation into release workflow (#459) ([#459](https://github.com/hrzlgnm/mdns-tui-browser/pull/459))
 
 ### Changed
 
-- chore: use crate cross for cross compilation and add more platforms #458
+- *(deps)* Update rust crate serde to v1.0.229 (#445) ([#445](https://github.com/hrzlgnm/mdns-tui-browser/pull/445))
 
-[1.30.18]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...v1.30.18
+- *(deps)* Update rust crate clap to v4.6.3 (#448) ([#448](https://github.com/hrzlgnm/mdns-tui-browser/pull/448))
+
+- *(deps)* Update rust crate tokio to v1.53.1 (#451) ([#451](https://github.com/hrzlgnm/mdns-tui-browser/pull/451))
+
+- *(deps)* Update rust crate serde_json to v1.0.151 (#450) ([#450](https://github.com/hrzlgnm/mdns-tui-browser/pull/450))
+
+- Add changelog generation tooling (#454) ([#454](https://github.com/hrzlgnm/mdns-tui-browser/pull/454))
+
+- Use crate cross for cross compilation and add more platforms (#458) ([#458](https://github.com/hrzlgnm/mdns-tui-browser/pull/458))
 
 ## [1.30.17] - 2026-07-17
 
-Only dependencies were updated.
+### Changed
 
-[1.30.17]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.16...v1.30.17
+- Update workflow name to reflect the actual purpose (#435) ([#435](https://github.com/hrzlgnm/mdns-tui-browser/pull/435))
 
-## [1.30.16] - 2026-07-13
+- *(deps)* Update rust crate clap to v4.6.2 (#439) ([#439](https://github.com/hrzlgnm/mdns-tui-browser/pull/439))
 
-Only dependencies were updated.
+- *(deps)* Update rust crate tokio to v1.53.0 (#443) ([#443](https://github.com/hrzlgnm/mdns-tui-browser/pull/443))
 
-[1.30.16]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.11...v1.30.16
+- *(deps)* Update rust crate mdns-sd to v0.20.2 (#442) ([#442](https://github.com/hrzlgnm/mdns-tui-browser/pull/442))
+
+## [1.30.15] - 2026-07-13
+
+### Fixed
+
+- Migrate version-resolver labels to version-resolver category syntax (#433) ([#433](https://github.com/hrzlgnm/mdns-tui-browser/pull/433))
+
+## [1.30.14] - 2026-07-13
+
+### Fixed
+
+- Migrate exclude-labels to pre-exclude category syntax (#432) ([#432](https://github.com/hrzlgnm/mdns-tui-browser/pull/432))
+
+## [1.30.13] - 2026-07-13
+
+### Fixed
+
+- Migrate release-drafter categories to use when.labels syntax (#430) ([#430](https://github.com/hrzlgnm/mdns-tui-browser/pull/430))
+
+## [1.30.12] - 2026-07-13
+
+### Added
+
+- Add daily retry workflow for failed CI on PRs (#424) ([#424](https://github.com/hrzlgnm/mdns-tui-browser/pull/424))
+
+- Use retry-failed-ci reusable workflow (#429) ([#429](https://github.com/hrzlgnm/mdns-tui-browser/pull/429))
+
+### Changed
+
+- *(deps)* Update rust crate open to v5.4.0 (#423) ([#423](https://github.com/hrzlgnm/mdns-tui-browser/pull/423))
+
+### Fixed
+
+- Only retry failed jobs (#427) ([#427](https://github.com/hrzlgnm/mdns-tui-browser/pull/427))
 
 ## [1.30.11] - 2026-07-05
 
-Only dependencies were updated.
+### Changed
 
-[1.30.11]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.10...v1.30.11
+- *(deps)* Update rust crate mdns-sd to v0.20.1 (#413) ([#413](https://github.com/hrzlgnm/mdns-tui-browser/pull/413))
+
+- *(deps)* Update rust crate open to v5.3.6 (#415) ([#415](https://github.com/hrzlgnm/mdns-tui-browser/pull/415))
 
 ## [1.30.10] - 2026-06-26
 
-Only dependencies were updated.
+### Changed
 
-[1.30.10]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.9...v1.30.10
+- *(deps)* Update rust crate ratatui to v0.30.2 (#403) ([#403](https://github.com/hrzlgnm/mdns-tui-browser/pull/403))
 
 ## [1.30.9] - 2026-06-19
 
-Only dependencies were updated.
+### Changed
 
-[1.30.9]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.8...v1.30.9
+- *(deps)* Update rust crate ratatui to v0.30.1 (#396) ([#396](https://github.com/hrzlgnm/mdns-tui-browser/pull/396))
 
 ## [1.30.8] - 2026-06-04
 
-Only dependencies were updated.
+### Changed
 
-[1.30.8]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.7...v1.30.8
+- *(deps)* Update rust crate serde_json to v1.0.150 (#380) ([#380](https://github.com/hrzlgnm/mdns-tui-browser/pull/380))
+
+- *(deps)* Update rust crate chrono to v0.4.45 (#391) ([#391](https://github.com/hrzlgnm/mdns-tui-browser/pull/391))
+
+### Fixed
+
+- *(deps)* Update rust crate mdns-sd to 0.20 (#383) ([#383](https://github.com/hrzlgnm/mdns-tui-browser/pull/383))
+
+- Prevent sed from corrupting arch stanza when updating sha256 (#392) ([#392](https://github.com/hrzlgnm/mdns-tui-browser/pull/392))
 
 ## [1.30.7] - 2026-05-19
 
-Only dependencies were updated.
+### Changed
 
-[1.30.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.6...v1.30.7
+- *(deps)* Update rust crate tokio to v1.52.3 (#366) ([#366](https://github.com/hrzlgnm/mdns-tui-browser/pull/366))
+
+- *(deps)* Update rust crate nix to v0.31.3 (#370) ([#370](https://github.com/hrzlgnm/mdns-tui-browser/pull/370))
+
+- *(deps)* Update rust crate open to v5.3.5 (#371) ([#371](https://github.com/hrzlgnm/mdns-tui-browser/pull/371))
+
+- *(deps)* Update rust crate mdns-sd to v0.19.2 (#377) ([#377](https://github.com/hrzlgnm/mdns-tui-browser/pull/377))
 
 ## [1.30.6] - 2026-05-06
 
-Only dependencies were updated.
+### Added
 
-[1.30.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.5...v1.30.6
+- Add homebrew tap release automation workflow (#361) ([#361](https://github.com/hrzlgnm/mdns-tui-browser/pull/361))
+
+### Changed
+
+- *(deps)* Update rust crate tokio to v1.52.2 (#359) ([#359](https://github.com/hrzlgnm/mdns-tui-browser/pull/359))
+
+### Fixed
+
+- Checkout tap repo within workspace directory (#362) ([#362](https://github.com/hrzlgnm/mdns-tui-browser/pull/362))
+
+- Strip v prefix and correct sed patterns for homebrew workflow (#363) ([#363](https://github.com/hrzlgnm/mdns-tui-browser/pull/363))
+
+- Use correct github-actions[bot] email and user (#364) ([#364](https://github.com/hrzlgnm/mdns-tui-browser/pull/364))
 
 ## [1.30.5] - 2026-05-03
 
 ### Fixed
 
-- fix: ignore meta service as type when browsing #357
-
-[1.30.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.4...v1.30.5
+- Ignore meta service as type when browsing (#357) ([#357](https://github.com/hrzlgnm/mdns-tui-browser/pull/357))
 
 ## [1.30.4] - 2026-04-20
 
-Only dependencies were updated.
+### Changed
 
-[1.30.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.3...v1.30.4
+- Switch to actionlint from hrzlgnm/actions (#330) ([#330](https://github.com/hrzlgnm/mdns-tui-browser/pull/330))
+
+- Update instructions to validate renovate config (#332) ([#332](https://github.com/hrzlgnm/mdns-tui-browser/pull/332))
+
+- *(deps)* Update rust crate tokio to v1.52.0 (#340) ([#340](https://github.com/hrzlgnm/mdns-tui-browser/pull/340))
+
+- *(deps)* Update rust crate clap to v4.6.1 (#343) ([#343](https://github.com/hrzlgnm/mdns-tui-browser/pull/343))
+
+- *(deps)* Update rust crate tokio to v1.52.1 (#344) ([#344](https://github.com/hrzlgnm/mdns-tui-browser/pull/344))
+
+- *(deps)* Update rust crate open to v5.3.4 (#346) ([#346](https://github.com/hrzlgnm/mdns-tui-browser/pull/346))
+
+- *(deps)* Update rust crate mdns-sd to v0.19.1 (#348) ([#348](https://github.com/hrzlgnm/mdns-tui-browser/pull/348))
 
 ## [1.30.3] - 2026-04-10
 
-Only dependencies were updated.
+### Added
 
-[1.30.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.2...v1.30.3
+- Add DMG build support for macOS releases (#323) ([#323](https://github.com/hrzlgnm/mdns-tui-browser/pull/323))
+
+### Changed
+
+- *(deps)* Update rust crate tokio to v1.51.1 (#317) ([#317](https://github.com/hrzlgnm/mdns-tui-browser/pull/317))
+
+- Fix renovate config (#328) ([#328](https://github.com/hrzlgnm/mdns-tui-browser/pull/328))
+
+### Fixed
+
+- Speed up actionlint job by using native runner instead of Docker container (#326) ([#326](https://github.com/hrzlgnm/mdns-tui-browser/pull/326))
 
 ## [1.30.2] - 2026-04-05
 
-Only dependencies were updated.
+### Changed
 
-[1.30.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.1...v1.30.2
+- Switch mdns-sd to published crate 0.19.0 (#314) ([#314](https://github.com/hrzlgnm/mdns-tui-browser/pull/314))
 
 ## [1.30.1] - 2026-04-04
 
 ### Added
 
-- feat: set mdns ip check interval to 1s #307
-- feat: add interface info to addresses #309
-- feat: limit services list to 5 items for larger details view #311
+- Limit services list to 5 items for larger details view (#311) ([#311](https://github.com/hrzlgnm/mdns-tui-browser/pull/311))
 
-[1.30.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.2...v1.30.1
+## [1.30.0] - 2026-04-04
+
+### Added
+
+- Set mdns ip check interval to 1s (#307) ([#307](https://github.com/hrzlgnm/mdns-tui-browser/pull/307))
+
+- Add interface info to addresses (#309) ([#309](https://github.com/hrzlgnm/mdns-tui-browser/pull/309))
+
+### Changed
+
+- *(deps)* Update rust crate tokio to v1.51.0 (#306) ([#306](https://github.com/hrzlgnm/mdns-tui-browser/pull/306))
+
+- Enable coderabbit auto reviews (#308) ([#308](https://github.com/hrzlgnm/mdns-tui-browser/pull/308))
 
 ## [1.29.2] - 2026-03-19
 
 ### Added
 
-- feat: add IP-based URLs for HTTP services in get_urls() #294
-
-[1.29.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.1...v1.29.2
+- Add IP-based URLs for HTTP services in get_urls() (#294) ([#294](https://github.com/hrzlgnm/mdns-tui-browser/pull/294))
 
 ## [1.29.1] - 2026-03-16
 
 ### Added
 
-- feat: add URL selection popup for services with multiple URLs #289
-
-[1.29.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.0...v1.29.1
+- Add URL selection popup for services with multiple URLs (#289) ([#289](https://github.com/hrzlgnm/mdns-tui-browser/pull/289))
 
 ## [1.29.0] - 2026-03-16
 
 ### Added
 
-- feat: add Enter key to open service URL in browser #287
-
-[1.29.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.1...v1.29.0
+- Add Enter key to open service URL in browser (#287) ([#287](https://github.com/hrzlgnm/mdns-tui-browser/pull/287))
 
 ## [1.28.1] - 2026-03-15
 
 ### Fixed
 
-- fix: spawn browser detached task to avoid blocking event loop #286
-
-[1.28.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.0...v1.28.1
+- Spawn browser open in blocking task to avoid blocking event loop (#286) ([#286](https://github.com/hrzlgnm/mdns-tui-browser/pull/286))
 
 ## [1.28.0] - 2026-03-15
 
 ### Added
 
-- feat: make service types panel width dynamic based on content #285
-
-[1.28.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.1...v1.28.0
+- Make service types panel width dynamic based on content (#285) ([#285](https://github.com/hrzlgnm/mdns-tui-browser/pull/285))
 
 ## [1.27.1] - 2026-03-12
 
+### Changed
+
+- *(deps)* Update rust crate clap to v4.6.0 (#276) ([#276](https://github.com/hrzlgnm/mdns-tui-browser/pull/276))
+
 ### Fixed
 
-- fix: render error messages above help popup #277
-
-[1.27.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.0...v1.27.1
+- Render error messages above help popup (#277) ([#277](https://github.com/hrzlgnm/mdns-tui-browser/pull/277))
 
 ## [1.27.0] - 2026-03-12
 
-Only dependencies were updated.
+### Added
 
-[1.27.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.3...v1.27.0
+- Add keybind to open release notes from help popup (#273) ([#273](https://github.com/hrzlgnm/mdns-tui-browser/pull/273))
+
+### Changed
+
+- *(deps)* Update rust crate clap to v4.5.61 (#275) ([#275](https://github.com/hrzlgnm/mdns-tui-browser/pull/275))
 
 ## [1.26.3] - 2026-03-11
 
-Only dependencies were updated.
+### Changed
 
-[1.26.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.2...v1.26.3
+- Fix clone step in aur workflow (#271) ([#271](https://github.com/hrzlgnm/mdns-tui-browser/pull/271))
 
 ## [1.26.2] - 2026-03-11
 
 ### Changed
 
-- refactor: simplify disabling interfaces when using specific ones #267
+- Simlify disabling interfaces when using specific ones (#267) ([#267](https://github.com/hrzlgnm/mdns-tui-browser/pull/267))
+
+- *(deps)* Update rust crate mdns-sd to v0.18.2 (#269) ([#269](https://github.com/hrzlgnm/mdns-tui-browser/pull/269))
 
 ### Fixed
 
-- fix: documentation block for run_tui #268
+- Address issues reported by actionlint (#259) ([#259](https://github.com/hrzlgnm/mdns-tui-browser/pull/259))
 
-[1.26.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.1...v1.26.2
+- Documentation block for run_tui (#268) ([#268](https://github.com/hrzlgnm/mdns-tui-browser/pull/268))
+
+### Miscellaneous
+
+- Add actionlint validation step to CI workflow (#262) ([#262](https://github.com/hrzlgnm/mdns-tui-browser/pull/262))
+
+### Security
+
+- Add explicit permissions to workflows and remove hardcoded ruleset id (#258) ([#258](https://github.com/hrzlgnm/mdns-tui-browser/pull/258))
 
 ## [1.26.1] - 2026-03-07
 
+### Changed
+
+- Cache cargo-auditable in cache-tools workflow too (#256) ([#256](https://github.com/hrzlgnm/mdns-tui-browser/pull/256))
+
+## [1.26.0] - 2026-03-07
+
 ### Added
 
-- feat: add flapping filter keyword #255
+- Add flapping filter keyword (#255) ([#255](https://github.com/hrzlgnm/mdns-tui-browser/pull/255))
 
 ### Changed
 
-- refactor: extract user input handling to dedicated module #254
+- Cached install komac and cargo-edit using cargo-install (#247) ([#247](https://github.com/hrzlgnm/mdns-tui-browser/pull/247))
 
-[1.26.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.1...v1.26.1
+- Pass winget token via env to komac (#249) ([#249](https://github.com/hrzlgnm/mdns-tui-browser/pull/249))
+
+- Cache-tools job after build (#251) ([#251](https://github.com/hrzlgnm/mdns-tui-browser/pull/251))
+
+- Run lint and tests before cache-tools (#252) ([#252](https://github.com/hrzlgnm/mdns-tui-browser/pull/252))
+
+- Extract user input handling to dedicated module (#254) ([#254](https://github.com/hrzlgnm/mdns-tui-browser/pull/254))
 
 ## [1.25.1] - 2026-03-04
 
+### Changed
+
+- Consolidate winget jobs to install komac only once (#240) ([#240](https://github.com/hrzlgnm/mdns-tui-browser/pull/240))
+
 ### Fixed
 
-- fix: calculate wrapped line count for popup scroll #244
-
-[1.25.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.0...v1.25.1
+- Calculate wrapped line count for popup scroll (#244) ([#244](https://github.com/hrzlgnm/mdns-tui-browser/pull/244))
 
 ## [1.25.0] - 2026-03-03
 
 ### Added
 
-- feat: add ability to browse new service types at runtime #239
+- Add ability to browse new service types at runtime (#239) ([#239](https://github.com/hrzlgnm/mdns-tui-browser/pull/239))
 
-[1.25.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.1...v1.25.0
+### Changed
+
+- Collapse if conditions where applicable (#233) ([#233](https://github.com/hrzlgnm/mdns-tui-browser/pull/233))
+
+- Agents should never suppress warnings (#235) ([#235](https://github.com/hrzlgnm/mdns-tui-browser/pull/235))
+
+- *(deps)* Update rust crate tokio to v1.50.0 (#237) ([#237](https://github.com/hrzlgnm/mdns-tui-browser/pull/237))
+
+- Add unit test verifying flapping is recomputed on state load (#238) ([#238](https://github.com/hrzlgnm/mdns-tui-browser/pull/238))
 
 ## [1.24.1] - 2026-03-02
 
 ### Fixed
 
-- fix: update services flapping status after loading a state dump #231
-
-[1.24.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.0...v1.24.1
+- Update services flapping status after loading a state dump (#231) ([#231](https://github.com/hrzlgnm/mdns-tui-browser/pull/231))
 
 ## [1.24.0] - 2026-03-02
 
 ### Added
 
-- feat: remove --no-debounce option and improve flap detection #230
-- feat: regression test for non null interfaces round-trip #229
+- Remove --no-debounce option and improve flap detection (#230) ([#230](https://github.com/hrzlgnm/mdns-tui-browser/pull/230))
+
+### Changed
+
+- Increase collapse limit for dependency updates (#227) ([#227](https://github.com/hrzlgnm/mdns-tui-browser/pull/227))
+
+- Regression test for non null interfaces round-trip (#229) ([#229](https://github.com/hrzlgnm/mdns-tui-browser/pull/229))
 
 ### Fixed
 
-- fix: include CLI options in JSON state dump #228
-
-[1.24.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.6...v1.24.0
+- Include CLI options in JSON state dump (#228) ([#228](https://github.com/hrzlgnm/mdns-tui-browser/pull/228))
 
 ## [1.23.6] - 2026-03-01
 
-Only dependencies were updated.
+### Changed
 
-[1.23.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.5...v1.23.6
+- *(deps)* Update rust crate mdns-sd to v0.18.1 (#223) ([#223](https://github.com/hrzlgnm/mdns-tui-browser/pull/223))
 
 ## [1.23.5] - 2026-02-28
 
 ### Changed
 
-- refactor: extract models to separate module #214
-- refactor: extract popup and scroll modules from tui_app #217
+- Extract models to separate module (#214) ([#214](https://github.com/hrzlgnm/mdns-tui-browser/pull/214))
 
-[1.23.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.4...v1.23.5
+- Extract popup and scroll modules from tui_app (#217) ([#217](https://github.com/hrzlgnm/mdns-tui-browser/pull/217))
+
+- *(deps)* Update rust crate nix to v0.31.2 (#220) ([#220](https://github.com/hrzlgnm/mdns-tui-browser/pull/220))
+
+### Miscellaneous
+
+- Update attest-build-provenance to actions/attest@v4 (#221) ([#221](https://github.com/hrzlgnm/mdns-tui-browser/pull/221))
 
 ## [1.23.4] - 2026-02-26
 
+### Changed
+
+- Move manpage to docs directory (#202) ([#202](https://github.com/hrzlgnm/mdns-tui-browser/pull/202))
+
+- Replace allowing dead code by conditional compilation (#203) ([#203](https://github.com/hrzlgnm/mdns-tui-browser/pull/203))
+
+- *(deps)* Update rust crate chrono to v0.4.44 (#206) ([#206](https://github.com/hrzlgnm/mdns-tui-browser/pull/206))
+
 ### Fixed
 
-- fix: preserve key-only TXT records in service properties #213
-
-[1.23.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.3...v1.23.4
+- Preserve key-only TXT records in service properties (#213) ([#213](https://github.com/hrzlgnm/mdns-tui-browser/pull/213))
 
 ## [1.23.3] - 2026-02-22
 
-No user-facing changes.
+### Changed
 
-[1.23.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.2...v1.23.3
+- Build for ubuntu-22.40, too (#201) ([#201](https://github.com/hrzlgnm/mdns-tui-browser/pull/201))
 
 ## [1.23.2] - 2026-02-21
 
 ### Fixed
 
-- fix: add Ctrl+Z to help popup on Unix systems #200
+- Add Ctrl+Z to help popup on Unix systems (#200) ([#200](https://github.com/hrzlgnm/mdns-tui-browser/pull/200))
 
-[1.23.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.1...v1.23.2
-
-## [1.23.1] - 2026-02-21
+## [1.23.0] - 2026-02-21
 
 ### Added
 
-- feat: add Ctrl+Z suspend support on Unix systems #198
+- Add Ctrl+Z suspend support on Unix systems (#198) ([#198](https://github.com/hrzlgnm/mdns-tui-browser/pull/198))
 
 ### Changed
 
-- refactor: extract terminal handling into own module #197
+- *(deps)* Update rust crate clap to v4.5.60 (#194) ([#194](https://github.com/hrzlgnm/mdns-tui-browser/pull/194))
 
-[1.23.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.22.0...v1.23.1
+- Extract terminal handling into own module (#197) ([#197](https://github.com/hrzlgnm/mdns-tui-browser/pull/197))
 
 ## [1.22.0] - 2026-02-17
 
 ### Added
 
-- feat: add --load-state option to load and inspect state from JSON file #192
+- Add --load-state option to load and inspect state from JSON file (#192) ([#192](https://github.com/hrzlgnm/mdns-tui-browser/pull/192))
 
-[1.22.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.3...v1.22.0
+### Changed
+
+- Add demo video to README (#189) ([#189](https://github.com/hrzlgnm/mdns-tui-browser/pull/189))
+
+- *(deps)* Update rust crate clap to v4.5.59 (#191) ([#191](https://github.com/hrzlgnm/mdns-tui-browser/pull/191))
 
 ## [1.21.3] - 2026-02-15
 
-Only dependencies were updated.
+### Fixed
 
-[1.21.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.2...v1.21.3
+- *(deps)* Update rust crate mdns-sd to 0.18 (#188) ([#188](https://github.com/hrzlgnm/mdns-tui-browser/pull/188))
 
 ## [1.21.2] - 2026-02-15
 
 ### Added
 
-- feat: add version to help popup title #187
-
-[1.21.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.1...v1.21.2
+- Add version to help popup title (#187) ([#187](https://github.com/hrzlgnm/mdns-tui-browser/pull/187))
 
 ## [1.21.1] - 2026-02-14
 
 ### Added
 
-- feat: show online/offline/total counts in services list header #185
-
-[1.21.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.0...v1.21.1
+- Show online/offline/total counts in services list header (#185) ([#185](https://github.com/hrzlgnm/mdns-tui-browser/pull/185))
 
 ## [1.21.0] - 2026-02-14
 
 ### Added
 
-- feat: add --no-ipv4 and --no-ipv6 CLI options to disable IPv4/IPv6 mDNS discovery #184
-
-[1.21.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.20.0...v1.21.0
+- Add --no-ipv4 and --no-ipv6 CLI options to disable IPv4/IPv6 mDNS discovery (#184) ([#184](https://github.com/hrzlgnm/mdns-tui-browser/pull/184))
 
 ## [1.20.0] - 2026-02-13
 
 ### Added
 
-- feat: add --interfaces CLI argument for interface selection #180
+- Add --interfaces CLI argument for interface selection (#180) ([#180](https://github.com/hrzlgnm/mdns-tui-browser/pull/180))
 
-[1.20.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.2...v1.20.0
+### Fixed
+
+- *(deps)* Update rust crate if-addrs to 0.15 (#182) ([#182](https://github.com/hrzlgnm/mdns-tui-browser/pull/182))
 
 ## [1.19.2] - 2026-02-13
 
-No user-facing changes.
+### Changed
 
-[1.19.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.1...v1.19.2
+- Add .deb packages to Linux releases with attestation (#177) ([#177](https://github.com/hrzlgnm/mdns-tui-browser/pull/177))
 
-## [1.19.1] - 2026-02-12
-
-No user-facing changes.
-
-[1.19.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.1
+- Repackage .deb as .ipk for aarch64 and armhf (#179) ([#179](https://github.com/hrzlgnm/mdns-tui-browser/pull/179))
 
 ## [1.19.0] - 2026-02-12
 
 ### Added
 
-- feat: add flapping service detection and visual styling #176
-
-[1.19.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.18.0...v1.19.0
+- Add flapping service detection and visual styling (#176) ([#176](https://github.com/hrzlgnm/mdns-tui-browser/pull/176))
 
 ## [1.18.0] - 2026-02-12
 
 ### Added
 
-- feat: extend quickfilter with online/offline special keywords #175
+- Extend quickfilter with online/offline special keywords (#175) ([#175](https://github.com/hrzlgnm/mdns-tui-browser/pull/175))
 
-[1.18.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.17.0...v1.18.0
+### Changed
+
+- Cargo set-version already updates Cargo.lock (#174) ([#174](https://github.com/hrzlgnm/mdns-tui-browser/pull/174))
 
 ## [1.17.0] - 2026-02-11
 
 ### Added
 
-- feat: add --no-debounce CLI option to disable flapping service debouncing #173
+- Add --no-debounce CLI option to disable flapping service debouncing (#173) ([#173](https://github.com/hrzlgnm/mdns-tui-browser/pull/173))
 
-[1.17.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.2...v1.17.0
+### Changed
+
+- *(deps)* Update rust crate clap to v4.5.58 (#171) ([#171](https://github.com/hrzlgnm/mdns-tui-browser/pull/171))
+
+### Fixed
+
+- Resolve actionlint warnings and extend documentation (#172) ([#172](https://github.com/hrzlgnm/mdns-tui-browser/pull/172))
 
 ## [1.16.2] - 2026-02-11
 
-Only dependencies were updated.
+### Changed
 
-[1.16.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.1...v1.16.2
+- Publish to winget-pkgs on release (#117) ([#117](https://github.com/hrzlgnm/mdns-tui-browser/pull/117))
+
+- Add winget installation instructions (#169) ([#169](https://github.com/hrzlgnm/mdns-tui-browser/pull/169))
+
+### Fixed
+
+- Ensure release build uses correct tag ref (#170) ([#170](https://github.com/hrzlgnm/mdns-tui-browser/pull/170))
 
 ## [1.16.1] - 2026-02-10
 
-No user-facing changes.
+### Changed
 
-[1.16.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.0...v1.16.1
+- Update --service type option description (#166) ([#166](https://github.com/hrzlgnm/mdns-tui-browser/pull/166))
+
+- Add link to desktop app (#167) ([#167](https://github.com/hrzlgnm/mdns-tui-browser/pull/167))
 
 ## [1.16.0] - 2026-02-10
 
 ### Added
 
-- feat: enhance filter display with persistent bordered status #165
+- Enhance filter display with persistent bordered status (#165) ([#165](https://github.com/hrzlgnm/mdns-tui-browser/pull/165))
 
-[1.16.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.15.0...v1.16.0
+### Changed
+
+- Cleanup debouncing and reduce debounce time to 1s (#164) ([#164](https://github.com/hrzlgnm/mdns-tui-browser/pull/164))
 
 ## [1.15.0] - 2026-02-10
 
 ### Added
 
-- feat: implement 2-second service debouncing for flapping services #162
+- Implement 2-second service debouncing for flapping services (#162) ([#162](https://github.com/hrzlgnm/mdns-tui-browser/pull/162))
 
 ### Fixed
 
-- fix: correct help popup color description for sort field #161
-- fix: resolve race condition in ServiceResolved handling #163
+- Resolve race condition in ServiceResolved hanlding (#163) ([#163](https://github.com/hrzlgnm/mdns-tui-browser/pull/163))
 
-[1.15.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.12...v1.15.0
+## [1.14.13] - 2026-02-09
+
+### Fixed
+
+- Correct help popup color description for sort field (#161) ([#161](https://github.com/hrzlgnm/mdns-tui-browser/pull/161))
 
 ## [1.14.12] - 2026-02-09
 
-Only dependencies were updated.
+### Fixed
 
-[1.14.12]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.5...v1.14.12
+- Permissions and input evaluation (#160) ([#160](https://github.com/hrzlgnm/mdns-tui-browser/pull/160))
 
-## [1.13.5] - 2026-02-09
-
-Only dependencies were updated.
-
-[1.13.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.4...v1.13.5
-
-## [1.13.4] - 2026-02-08
-
-No user-facing changes.
-
-[1.13.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.3...v1.13.4
-
-## [1.13.3] - 2026-02-08
-
-Only dependencies were updated.
-
-[1.13.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.2...v1.13.3
-
-## [1.13.2] - 2026-02-08
+## [1.14.11] - 2026-02-09
 
 ### Fixed
 
-- fix: Correctly format service types with subtypes in display #132
+- Move reusable workflows to separate jobs (#158) ([#158](https://github.com/hrzlgnm/mdns-tui-browser/pull/158))
 
-[1.13.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.1...v1.13.2
+- Permissions of release workflow (#159) ([#159](https://github.com/hrzlgnm/mdns-tui-browser/pull/159))
+
+## [1.14.10] - 2026-02-09
+
+### Fixed
+
+- Add missing checkout steps to source-checksums workflow (#155) ([#155](https://github.com/hrzlgnm/mdns-tui-browser/pull/155))
+
+## [1.14.9] - 2026-02-09
+
+### Added
+
+- Consolidate publish workflow into release workflow (#154) ([#154](https://github.com/hrzlgnm/mdns-tui-browser/pull/154))
+
+## [1.14.8] - 2026-02-09
+
+### Fixed
+
+- Pass tagName as tag_name to action-gh-release (#153) ([#153](https://github.com/hrzlgnm/mdns-tui-browser/pull/153))
+
+## [1.14.7] - 2026-02-09
+
+### Fixed
+
+- Pass tagName to source-checksums-reusable workflow (#152) ([#152](https://github.com/hrzlgnm/mdns-tui-browser/pull/152))
+
+## [1.14.6] - 2026-02-09
+
+### Fixed
+
+- Add tagName input to workflow_call in source checksums workflow (#151) ([#151](https://github.com/hrzlgnm/mdns-tui-browser/pull/151))
+
+## [1.14.5] - 2026-02-09
+
+### Fixed
+
+- Use GITHUB_TOKEN instead of PAT (#150) ([#150](https://github.com/hrzlgnm/mdns-tui-browser/pull/150))
+
+## [1.14.4] - 2026-02-09
+
+### Fixed
+
+- Use proper permissions for workflow dispatch (#149) ([#149](https://github.com/hrzlgnm/mdns-tui-browser/pull/149))
+
+## [1.14.3] - 2026-02-09
+
+### Fixed
+
+- Add manual workflow trigger to bypass GitHub Actions limitation (#148) ([#148](https://github.com/hrzlgnm/mdns-tui-browser/pull/148))
+
+## [1.14.1] - 2026-02-09
+
+### Fixed
+
+- Perform cargo check --locked to avoid unintended updates (#145) ([#145](https://github.com/hrzlgnm/mdns-tui-browser/pull/145))
+
+## [1.14.0] - 2026-02-09
+
+### Fixed
+
+- Configure release-drafter to publish the release instead of drafting (#144) ([#144](https://github.com/hrzlgnm/mdns-tui-browser/pull/144))
+
+## [1.13.7] - 2026-02-09
+
+### Fixed
+
+- Release-drafter configuration to create pre-releases instead of drafts (#143) ([#143](https://github.com/hrzlgnm/mdns-tui-browser/pull/143))
+
+## [1.13.6] - 2026-02-09
+
+### Changed
+
+- Replace bump-version and release-drafter workflows with unified release workflow (#140) ([#140](https://github.com/hrzlgnm/mdns-tui-browser/pull/140))
+
+## [1.13.4] - 2026-02-08
+
+### Changed
+
+- Reduce metrics fetch interval from 5s to 1s (#137) ([#137](https://github.com/hrzlgnm/mdns-tui-browser/pull/137))
+
+## [1.13.2] - 2026-02-08
+
+### Changed
+
+- Refactor tests (#133) ([#133](https://github.com/hrzlgnm/mdns-tui-browser/pull/133))
+
+### Fixed
+
+- Correctly format service types with subtypes in display (#132) ([#132](https://github.com/hrzlgnm/mdns-tui-browser/pull/132))
 
 ## [1.13.1] - 2026-02-07
 
 ### Changed
 
-- refactor: Deduplicate ServiceEntry creation in tests #129
+- Align documentation with current CLI output and add date requirement (#130) ([#130](https://github.com/hrzlgnm/mdns-tui-browser/pull/130))
 
-[1.13.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.0...v1.13.1
+- Deduplicate ServiceEntry creation in tests (#129) ([#129](https://github.com/hrzlgnm/mdns-tui-browser/pull/129))
 
 ## [1.13.0] - 2026-02-07
 
 ### Changed
 
-- refactor: Remove redundant duration field from ServiceSession #128
+- Don't scream the project name in man page (#127) ([#127](https://github.com/hrzlgnm/mdns-tui-browser/pull/127))
+
+- Remove redundant duration field from ServiceSession (#128) ([#128](https://github.com/hrzlgnm/mdns-tui-browser/pull/128))
+
+## [1.12.2] - 2026-02-07
 
 ### Fixed
 
-- fix: Skip lastOnlineAt field if redundant with createdAt #126
-
-[1.13.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.13.0
+- Skip lastOnlineAt field if redundant with createdAt (#126) ([#126](https://github.com/hrzlgnm/mdns-tui-browser/pull/126))
 
 ## [1.12.1] - 2026-02-07
 
-Only dependencies were updated.
+### Changed
 
-[1.12.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.0...v1.12.1
+- Update MSRV to 1.88 to allow for security updates (#124) ([#124](https://github.com/hrzlgnm/mdns-tui-browser/pull/124))
 
 ## [1.12.0] - 2026-02-07
 
 ### Added
 
-- feat: Add detailed timing tracking for mDNS services #122
-- feat: Dump state to JSON with Ctrl+J #123
+- Add detailed timing tracking for mDNS services (#122) ([#122](https://github.com/hrzlgnm/mdns-tui-browser/pull/122))
 
-[1.12.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.1...v1.12.0
+- Dump state to JSON with Ctrl+J (#123) ([#123](https://github.com/hrzlgnm/mdns-tui-browser/pull/123))
+
+### Changed
+
+- Add man pages (#119) ([#119](https://github.com/hrzlgnm/mdns-tui-browser/pull/119))
 
 ## [1.11.1] - 2026-02-04
 
 ### Fixed
 
-- fix: remove underscore prefix from mDNS subtypes in compact format #116
-
-[1.11.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.0...v1.11.1
+- Remove underscore prefix from mDNS subtypes in compact format (#116) ([#116](https://github.com/hrzlgnm/mdns-tui-browser/pull/116))
 
 ## [1.11.0] - 2026-02-04
 
 ### Added
 
-- feat: add scrolling to Service Details view #114
-
-[1.11.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.10.0...v1.11.0
+- Add scrolling to Service Details view (#114) ([#114](https://github.com/hrzlgnm/mdns-tui-browser/pull/114))
 
 ## [1.10.0] - 2026-02-04
 
 ### Added
 
-- feat: enhance service type autocomplete with compact subtype support #113
+- Enhance service type autocomplete with compact subtype support (#113) ([#113](https://github.com/hrzlgnm/mdns-tui-browser/pull/113))
 
-[1.10.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.2...v1.10.0
+### Changed
+
+- Remove version extraction step from release drafter (#108) ([#108](https://github.com/hrzlgnm/mdns-tui-browser/pull/108))
+
+- Configure version resolver in release drafter (#107) ([#107](https://github.com/hrzlgnm/mdns-tui-browser/pull/107))
+
+- Remove Release Drafter trigger from bump version workflow (#110) ([#110](https://github.com/hrzlgnm/mdns-tui-browser/pull/110))
+
+- Add 'enhancement' label to minor version releases (#111) ([#111](https://github.com/hrzlgnm/mdns-tui-browser/pull/111))
 
 ## [1.9.2] - 2026-02-03
 
 ### Added
 
-- feat: Allow subtypes via command line #104
+- Allow subtypes via command line (#104) ([#104](https://github.com/hrzlgnm/mdns-tui-browser/pull/104))
 
 ### Changed
 
-- refactor: Deduplicate scroll behavior across subviews #98
+- Clarify custom service discovery and examples (#97) ([#97](https://github.com/hrzlgnm/mdns-tui-browser/pull/97))
 
-[1.9.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.1...v1.9.2
+- Deduplicate scroll behavior across subviews (#98) ([#98](https://github.com/hrzlgnm/mdns-tui-browser/pull/98))
+
+- *(deps)* Update rust crate clap to v4.5.57 (#101) ([#101](https://github.com/hrzlgnm/mdns-tui-browser/pull/101))
+
+- Add AGENTS.md (#106) ([#106](https://github.com/hrzlgnm/mdns-tui-browser/pull/106))
 
 ## [1.9.1] - 2026-02-03
 
 ### Added
 
-- feat: Only browse user types if requested via cli #94
+- Only browse user types if requested via cli (#94) ([#94](https://github.com/hrzlgnm/mdns-tui-browser/pull/94))
 
-[1.9.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.0...v1.9.1
+### Changed
+
+- Remove superfluous sorting (#96) ([#96](https://github.com/hrzlgnm/mdns-tui-browser/pull/96))
 
 ## [1.9.0] - 2026-02-02
 
 ### Added
 
-- feat: Add CLI argument for additional service types #92
-
-[1.9.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.1...v1.9.0
+- Add CLI argument for additional service types (#92) ([#92](https://github.com/hrzlgnm/mdns-tui-browser/pull/92))
 
 ## [1.8.1] - 2026-02-01
 
+### Changed
+
+- Clippy runs on tests, too (#90) ([#90](https://github.com/hrzlgnm/mdns-tui-browser/pull/90))
+
 ### Fixed
 
-- fix: Alignment of help controls #91
-
-[1.8.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.0...v1.8.1
+- Alignment of help controls (#91) ([#91](https://github.com/hrzlgnm/mdns-tui-browser/pull/91))
 
 ## [1.8.0] - 2026-02-01
 
 ### Added
 
-- feat: Add paging and jump navigation for service types #89
-
-[1.8.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.3...v1.8.0
+- Add paging and jump navigation for service types (#89) ([#89](https://github.com/hrzlgnm/mdns-tui-browser/pull/89))
 
 ## [1.7.3] - 2026-01-31
 
-No user-facing changes.
+### Changed
 
-[1.7.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.2...v1.7.3
+- Disable stripping when building for AUR (#86) ([#86](https://github.com/hrzlgnm/mdns-tui-browser/pull/86))
 
 ## [1.7.2] - 2026-01-31
 
 ### Added
 
-- feat: Ensure the service type is present if a service is discovered #85
-
-[1.7.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.1...v1.7.2
+- Ensure the service type is present if a service is discovered (#85) ([#85](https://github.com/hrzlgnm/mdns-tui-browser/pull/85))
 
 ## [1.7.1] - 2026-01-31
 
 ### Added
 
-- feat: Add keyboard shortcut to clear stale service types #84
-
-[1.7.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.0...v1.7.1
+- Add keyboard shortcut to clear stale service types (#84) ([#84](https://github.com/hrzlgnm/mdns-tui-browser/pull/84))
 
 ## [1.7.0] - 2026-01-31
 
 ### Changed
 
-- refactor: rename remove_service to mark_service_offline and remove unused parameter #82
-
-[1.7.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.4...v1.7.0
+- Rename remove_service to mark_service_offline and remove unused parameter (#82) ([#82](https://github.com/hrzlgnm/mdns-tui-browser/pull/82))
 
 ## [1.6.4] - 2026-01-31
 
+### Changed
+
+- Ensure newline in AUR deploy key setup (#79) ([#79](https://github.com/hrzlgnm/mdns-tui-browser/pull/79))
+
+- Add AUR installation instructions and verision badge (#80) ([#80](https://github.com/hrzlgnm/mdns-tui-browser/pull/80))
+
 ### Fixed
 
-- fix: service removal metric double counting #81
-
-[1.6.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.3...v1.6.4
+- Service removal metric double counting (#81) ([#81](https://github.com/hrzlgnm/mdns-tui-browser/pull/81))
 
 ## [1.6.3] - 2026-01-31
 
-No user-facing changes.
+### Changed
 
-[1.6.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.2...v1.6.3
+- Enforce safe Rust only policy (#75) ([#75](https://github.com/hrzlgnm/mdns-tui-browser/pull/75))
+
+- Publish source checksums on release (#77) ([#77](https://github.com/hrzlgnm/mdns-tui-browser/pull/77))
+
+- Deploy to AUR when release becomes latest (#76) ([#76](https://github.com/hrzlgnm/mdns-tui-browser/pull/76))
 
 ## [1.6.2] - 2026-01-30
 
+### Changed
+
+- Update Controls section in README.md (#73) ([#73](https://github.com/hrzlgnm/mdns-tui-browser/pull/73))
+
 ### Fixed
 
-- fix: prevent selection reset when clearing empty filter #74
-
-[1.6.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.1...v1.6.2
+- Prevent selection reset when clearing empty filter (#74) ([#74](https://github.com/hrzlgnm/mdns-tui-browser/pull/74))
 
 ## [1.6.1] - 2026-01-30
 
 ### Added
 
-- feat: Add services_updated metric and improve service management #72
-
-[1.6.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.0...v1.6.1
+- Add services_updated metric and improve service management (#72) ([#72](https://github.com/hrzlgnm/mdns-tui-browser/pull/72))
 
 ## [1.6.0] - 2026-01-30
 
 ### Added
 
-- feat: Add GitHub build provenance and cargo auditable for releases #70
-
-[1.6.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.5.0...v1.6.0
+- Add GitHub build provenance and cargo auditable for releases (#70) ([#70](https://github.com/hrzlgnm/mdns-tui-browser/pull/70))
 
 ## [1.5.0] - 2026-01-30
 
 ### Added
 
-- feat: Add sorting of services in services view #68
-- feat: Quick filter functionality #69
+- Quick filter functionality (#69) ([#69](https://github.com/hrzlgnm/mdns-tui-browser/pull/69))
 
-[1.5.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.1...v1.5.0
+## [1.4.2] - 2026-01-30
+
+### Added
+
+- Add sorting of services in services view (#68) ([#68](https://github.com/hrzlgnm/mdns-tui-browser/pull/68))
 
 ## [1.4.1] - 2026-01-30
 
 ### Added
 
-- feat: Add service lifetime tracking with timestamps #62
-- feat: Comprehensive ServiceDaemon and application metrics #64
+- Comprehensive ServiceDaemon and application metrics (#64) ([#64](https://github.com/hrzlgnm/mdns-tui-browser/pull/64))
 
 ### Changed
 
-- refactor: Rename dead/alive to offline/online #67
+- Rename dead/alive to offline/online (#67) ([#67](https://github.com/hrzlgnm/mdns-tui-browser/pull/67))
 
-[1.4.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.1...v1.4.1
+## [1.4.0] - 2026-01-29
+
+### Added
+
+- Add service lifetime tracking with timestamps (#62) ([#62](https://github.com/hrzlgnm/mdns-tui-browser/pull/62))
+
+### Changed
+
+- *(deps)* Update rust crate clap to v4.5.56 (#61) ([#61](https://github.com/hrzlgnm/mdns-tui-browser/pull/61))
 
 ## [1.3.1] - 2026-01-29
 
+### Changed
+
+- Update documentation (#52) ([#52](https://github.com/hrzlgnm/mdns-tui-browser/pull/52))
+
+- Add Badges to README (#54) ([#54](https://github.com/hrzlgnm/mdns-tui-browser/pull/54))
+
 ### Fixed
 
-- fix: Scroll the services view correctly after clearing dead services #59
-
-[1.3.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.0...v1.3.1
+- Scroll the services view correctly after clearing dead services (#59) ([#59](https://github.com/hrzlgnm/mdns-tui-browser/pull/59))
 
 ## [1.3.0] - 2026-01-28
 
 ### Added
 
-- feat: help popup and allow for clearing dead services #42
+- Help popup and allow for clearing dead services (#42) ([#42](https://github.com/hrzlgnm/mdns-tui-browser/pull/42))
 
 ### Changed
 
-- refactor: Move key handling code to AppState #43
+- Move key handling code to AppState (#43) ([#43](https://github.com/hrzlgnm/mdns-tui-browser/pull/43))
 
 ### Fixed
 
-- fix: Ignore key release events on windows to prevent duplicate events #41
-
-[1.3.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.1...v1.3.0
+- Ignore key release events on windows to prevent duplicate events (#41) ([#41](https://github.com/hrzlgnm/mdns-tui-browser/pull/41))
 
 ## [1.2.1] - 2026-01-28
 
 ### Changed
 
-- refactor: Major scrolling keybinding overhaul also handle Ctrl+C #40
-
-[1.2.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.0...v1.2.1
+- Major scrolling keybinding overhaul also handle Ctrl+C (#40) ([#40](https://github.com/hrzlgnm/mdns-tui-browser/pull/40))
 
 ## [1.2.0] - 2026-01-28
 
+### Changed
+
+- Rename workflow to 'Reusable build workflow' (#37) ([#37](https://github.com/hrzlgnm/mdns-tui-browser/pull/37))
+
 ### Fixed
 
-- fix: handle terminal resize events #36
-- fix: Don't remove service types if those are still used #39
+- Don't remove service types if those are still used (#39) ([#39](https://github.com/hrzlgnm/mdns-tui-browser/pull/39))
 
-[1.2.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.4...v1.2.0
+## [1.1.5] - 2026-01-28
+
+### Fixed
+
+- Handle terminal resize events (#36) ([#36](https://github.com/hrzlgnm/mdns-tui-browser/pull/36))
 
 ## [1.1.4] - 2026-01-28
 
-Only dependencies were updated.
-
-[1.1.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.3...v1.1.4
-
-## [1.1.3] - 2026-01-28
-
-No user-facing changes.
-
-[1.1.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.0...v1.1.3
-
-## [1.1.0] - 2026-01-27
-
-No user-facing changes.
-
-[1.1.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.1...v1.1.0
-
-## [1.0.1] - 2026-01-27
-
-### Added
-
-- feat: remove open functionality #7
-- feat: add vim like navigation #9
-- feat: display all services by default #10
-- feat: handle service type removal and service removal #13
-- feat: Add host field and count indicators to services #18
-- feat: blazingly fast caching and redundant information removal #11
-
 ### Changed
 
-- refactor: Rename All Services to All Types for better clarity #20
+- Only rerender if changes wer received (#34) ([#34](https://github.com/hrzlgnm/mdns-tui-browser/pull/34))
 
 ### Fixed
 
-- fix: Handle service type removal more thoroughly #21
-- fix: Skip service subtypes in service type enumeration #22
+- *(deps)* Update rust crate flume to 0.12 (#35) ([#35](https://github.com/hrzlgnm/mdns-tui-browser/pull/35))
+
+## [1.1.3] - 2026-01-28
+
+### Changed
+
+- Fix archiving debug symbols (#31) ([#31](https://github.com/hrzlgnm/mdns-tui-browser/pull/31))
+
+## [1.1.2] - 2026-01-28
+
+### Changed
+
+- Split debug info (#30) ([#30](https://github.com/hrzlgnm/mdns-tui-browser/pull/30))
+
+## [1.1.1] - 2026-01-27
+
+### Changed
+
+- Configure profile for release optimizations (#29) ([#29](https://github.com/hrzlgnm/mdns-tui-browser/pull/29))
+
+## [1.1.0] - 2026-01-27
+
+### Changed
+
+- Cleanup naming of release assets and release name (#28) ([#28](https://github.com/hrzlgnm/mdns-tui-browser/pull/28))
+
+## [1.0.1] - 2026-01-27
+
+### Changed
+
+- Simplify release publish workflow and update tag template (#27) ([#27](https://github.com/hrzlgnm/mdns-tui-browser/pull/27))
+
+## [1.0.0] - 2026-01-27
+
+### Added
+
+- Update existing entries or push
+
+- Make it cross compileable for aarch64
+
+- Remove open functionality (#7) ([#7](https://github.com/hrzlgnm/mdns-tui-browser/pull/7))
+
+- Add vim like navigation (#9) ([#9](https://github.com/hrzlgnm/mdns-tui-browser/pull/9))
+
+- Display all services by default (#10) ([#10](https://github.com/hrzlgnm/mdns-tui-browser/pull/10))
+
+- Blazingly fast caching and redundant information removal (#11) ([#11](https://github.com/hrzlgnm/mdns-tui-browser/pull/11))
+
+- Handle service type removal and service removal (#13) ([#13](https://github.com/hrzlgnm/mdns-tui-browser/pull/13))
+
+- Add host field and count indicators to services (#18) ([#18](https://github.com/hrzlgnm/mdns-tui-browser/pull/18))
+
+### Changed
+
+- Cargo clippy fix
+
+- Steal renovate config from mdns-browser
+
+- Rename project from mDNS Service Browser to mDNS TUI Browser (#5) ([#5](https://github.com/hrzlgnm/mdns-tui-browser/pull/5))
+
+- Ci (#4) ([#4](https://github.com/hrzlgnm/mdns-tui-browser/pull/4))
+
+- Configure coderabbit (#8) ([#8](https://github.com/hrzlgnm/mdns-tui-browser/pull/8))
+
+- Temporary disable dependency dashboard (#14) ([#14](https://github.com/hrzlgnm/mdns-tui-browser/pull/14))
+
+- Enable dependency dashboard again and remove unused extends (#15) ([#15](https://github.com/hrzlgnm/mdns-tui-browser/pull/15))
+
+- Add multi-architecture build support to GitHub Actions (#17) ([#17](https://github.com/hrzlgnm/mdns-tui-browser/pull/17))
+
+- Add ARM 32-bit cross-compilation support review (#19) ([#19](https://github.com/hrzlgnm/mdns-tui-browser/pull/19))
+
+- Rename All Services to All Types for better clarity (#20) ([#20](https://github.com/hrzlgnm/mdns-tui-browser/pull/20))
+
+- Add CI publishing workflows (#23) ([#23](https://github.com/hrzlgnm/mdns-tui-browser/pull/23))
+
+- Extract version from Cargo.toml (#24) ([#24](https://github.com/hrzlgnm/mdns-tui-browser/pull/24))
+
+- *(ci)* Attempt to fix bump version workflow (#25) ([#25](https://github.com/hrzlgnm/mdns-tui-browser/pull/25))
+
+- Fix build-reusable workflow (#26) ([#26](https://github.com/hrzlgnm/mdns-tui-browser/pull/26))
+
+### Fixed
+
+- Selecting items with mouse
+
+- *(deps)* Update rust crate crossterm to 0.29 (#2) ([#2](https://github.com/hrzlgnm/mdns-tui-browser/pull/2))
+
+- *(deps)* Update rust crate ratatui to 0.30 (#3) ([#3](https://github.com/hrzlgnm/mdns-tui-browser/pull/3))
+
+- *(deps)* Update rust crate crossterm to 0.29 (#12) ([#12](https://github.com/hrzlgnm/mdns-tui-browser/pull/12))
+
+- Handle service type removal more thouroughly (#21) ([#21](https://github.com/hrzlgnm/mdns-tui-browser/pull/21))
+
+- Skip service subtypes in service type enumeration (#22) ([#22](https://github.com/hrzlgnm/mdns-tui-browser/pull/22))
+
+[1.30.18]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...v1.30.18
+
+[1.30.17]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.16...v1.30.17
+
+[1.30.15]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.14...v1.30.15
+
+[1.30.14]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.13...v1.30.14
+
+[1.30.13]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.12...v1.30.13
+
+[1.30.12]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.11...v1.30.12
+
+[1.30.11]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.10...v1.30.11
+
+[1.30.10]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.9...v1.30.10
+
+[1.30.9]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.8...v1.30.9
+
+[1.30.8]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.7...v1.30.8
+
+[1.30.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.6...v1.30.7
+
+[1.30.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.5...v1.30.6
+
+[1.30.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.4...v1.30.5
+
+[1.30.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.3...v1.30.4
+
+[1.30.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.2...v1.30.3
+
+[1.30.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.1...v1.30.2
+
+[1.30.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.0...v1.30.1
+
+[1.30.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.2...v1.30.0
+
+[1.29.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.1...v1.29.2
+
+[1.29.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.29.0...v1.29.1
+
+[1.29.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.1...v1.29.0
+
+[1.28.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.28.0...v1.28.1
+
+[1.28.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.1...v1.28.0
+
+[1.27.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.27.0...v1.27.1
+
+[1.27.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.3...v1.27.0
+
+[1.26.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.2...v1.26.3
+
+[1.26.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.1...v1.26.2
+
+[1.26.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.26.0...v1.26.1
+
+[1.26.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.1...v1.26.0
+
+[1.25.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.25.0...v1.25.1
+
+[1.25.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.1...v1.25.0
+
+[1.24.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.24.0...v1.24.1
+
+[1.24.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.6...v1.24.0
+
+[1.23.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.5...v1.23.6
+
+[1.23.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.4...v1.23.5
+
+[1.23.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.3...v1.23.4
+
+[1.23.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.2...v1.23.3
+
+[1.23.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.23.1...v1.23.2
+
+[1.23.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.22.0...v1.23.0
+
+[1.22.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.3...v1.22.0
+
+[1.21.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.2...v1.21.3
+
+[1.21.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.1...v1.21.2
+
+[1.21.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.0...v1.21.1
+
+[1.21.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.20.0...v1.21.0
+
+[1.20.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.2...v1.20.0
+
+[1.19.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.2
+
+[1.19.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.18.0...v1.19.0
+
+[1.18.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.17.0...v1.18.0
+
+[1.17.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.2...v1.17.0
+
+[1.16.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.1...v1.16.2
+
+[1.16.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.16.0...v1.16.1
+
+[1.16.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.15.0...v1.16.0
+
+[1.15.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.13...v1.15.0
+
+[1.14.13]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.12...v1.14.13
+
+[1.14.12]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.11...v1.14.12
+
+[1.14.11]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.10...v1.14.11
+
+[1.14.10]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.9...v1.14.10
+
+[1.14.9]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.8...v1.14.9
+
+[1.14.8]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.7...v1.14.8
+
+[1.14.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.6...v1.14.7
+
+[1.14.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.5...v1.14.6
+
+[1.14.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.4...v1.14.5
+
+[1.14.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.3...v1.14.4
+
+[1.14.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.2...v1.14.3
+
+[1.14.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.14.0...v1.14.1
+
+[1.14.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.7...v1.14.0
+
+[1.13.7]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.6...v1.13.7
+
+[1.13.6]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.5...v1.13.6
+
+[1.13.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.3...v1.13.4
+
+[1.13.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.1...v1.13.2
+
+[1.13.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.0...v1.13.1
+
+[1.13.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.3...v1.13.0
+
+[1.12.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.12.2
+
+[1.12.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.0...v1.12.1
+
+[1.12.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.1...v1.12.0
+
+[1.11.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.11.0...v1.11.1
+
+[1.11.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.10.0...v1.11.0
+
+[1.10.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.2...v1.10.0
+
+[1.9.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.1...v1.9.2
+
+[1.9.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.9.0...v1.9.1
+
+[1.9.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.1...v1.9.0
+
+[1.8.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.8.0...v1.8.1
+
+[1.8.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.3...v1.8.0
+
+[1.7.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.2...v1.7.3
+
+[1.7.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.1...v1.7.2
+
+[1.7.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.7.0...v1.7.1
+
+[1.7.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.4...v1.7.0
+
+[1.6.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.3...v1.6.4
+
+[1.6.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.2...v1.6.3
+
+[1.6.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.1...v1.6.2
+
+[1.6.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.6.0...v1.6.1
+
+[1.6.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.5.0...v1.6.0
+
+[1.5.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.2...v1.5.0
+
+[1.4.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.1...v1.4.2
+
+[1.4.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.4.0...v1.4.1
+
+[1.4.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.1...v1.4.0
+
+[1.3.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.3.0...v1.3.1
+
+[1.3.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.1...v1.3.0
+
+[1.2.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.2.0...v1.2.1
+
+[1.2.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.5...v1.2.0
+
+[1.1.5]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.4...v1.1.5
+
+[1.1.4]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.3...v1.1.4
+
+[1.1.3]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.2...v1.1.3
+
+[1.1.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.1...v1.1.2
+
+[1.1.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.1.0...v1.1.1
+
+[1.1.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.1...v1.1.0
+
+[1.0.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.0...v1.0.1
+
+[Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.18...HEAD
+
+
