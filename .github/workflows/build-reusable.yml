@@ -83,9 +83,11 @@ jobs:
       - name: 📜 Copy SBOM for release
         if: inputs.tagName
         shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          cp sbom.spdx.json "sbom.spdx-${{ matrix.platform }}.json"
-          echo "PLATFORM_SBOM=sbom.spdx-${{ matrix.platform }}.json" >> "$GITHUB_ENV"
+          cp sbom.spdx.json "sbom.spdx-${PLATFORM}.json"
+          echo "PLATFORM_SBOM=sbom.spdx-${PLATFORM}.json" >> "$GITHUB_ENV"
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
@@ -102,7 +104,7 @@ jobs:
           locked: true
 
       - name: 🛠️📦 cargo-deb
-        if: contains(matrix.os, 'ubuntu') && !matrix.use_cross
+        if: contains(matrix.os, 'ubuntu')
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
         with:
           crate: cargo-deb
@@ -126,30 +128,37 @@ jobs:
         env:
           RUSTFLAGS: "-D warnings"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tagName }}
+          TARGET: ${{ matrix.target }}
+          USE_CROSS: ${{ matrix.use_cross }}
         run: |
-          if [ "${{ matrix.use_cross }}" = "true" ]; then
+          if [ "$USE_CROSS" = "true" ]; then
             BUILD_CMD="cross"
           else
             BUILD_CMD="cargo"
           fi
-          if [ -n "${{ inputs.tagName }}" ]; then
-            $BUILD_CMD auditable build --release --target ${{ matrix.target }}
+          if [ -n "$TAG_NAME" ] && [ "$USE_CROSS" != "true" ]; then
+            $BUILD_CMD auditable build --release --target "$TARGET"
           else
-            $BUILD_CMD build --release --target ${{ matrix.target }}
+            $BUILD_CMD build --release --target "$TARGET"
           fi
 
       - name: 📦 Build deb package
-        if: contains(matrix.os, 'ubuntu') && !matrix.use_cross
+        if: contains(matrix.os, 'ubuntu')
         shell: bash
+        env:
+          TAG_NAME: ${{ inputs.tagName }}
+          TARGET: ${{ matrix.target }}
+          OS: ${{ matrix.os }}
         run: |
-          if [ -n "${{ inputs.tagName }}" ]; then
-            cargo --locked auditable deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
+          if [ -n "$TAG_NAME" ]; then
+            cargo --locked auditable deb --no-build -p mdns-tui-browser --target "$TARGET"
           else
-            cargo --locked deb --no-build -p mdns-tui-browser --target ${{ matrix.target }}
+            cargo --locked deb --no-build -p mdns-tui-browser --target "$TARGET"
           fi
           # Rename deb to avoid conflicts between ubuntu-latest and ubuntu-22.04
-          if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
-            cd "target/${{ matrix.target }}/debian" || exit 1
+          if [ "$OS" = "ubuntu-22.04" ]; then
+            cd "target/$TARGET/debian" || exit 1
             for deb_file in *.deb; do
               [ -f "$deb_file" ] || continue
               new_name="${deb_file%.deb}-glibc2.35.deb"
@@ -159,50 +168,55 @@ jobs:
 
       - name: 📦 Build archive
         shell: bash
+        env:
+          TAG_NAME: ${{ inputs.tagName }}
+          TARGET: ${{ matrix.target }}
+          OS: ${{ matrix.os }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          if [ -n "${{ inputs.tagName }}" ]; then
-            VERSION_NAME="${{ inputs.tagName }}"
+          if [ -n "$TAG_NAME" ]; then
+            VERSION_NAME="$TAG_NAME"
           else
             VERSION_NAME="$VERSION"
           fi
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           # Use platform for tarball, but preserve original .deb name on Linux
-          staging="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}"
+          staging="mdns-tui-browser-${VERSION_NAME}-${PLATFORM}"
           mkdir -p "$staging"
           cp LICENSE "$staging/"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp "target/${{ matrix.target }}/release/mdns-tui-browser.exe" "$staging/"
-            cp "target/${{ matrix.target }}/release/mdns_tui_browser.pdb" "$staging/"
+          if [ "$OS" = "windows-latest" ]; then
+            cp "target/$TARGET/release/mdns-tui-browser.exe" "$staging/"
+            cp "target/$TARGET/release/mdns_tui_browser.pdb" "$staging/"
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> "$GITHUB_ENV"
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
-            cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
-            cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
+          elif [ "$OS" = "macos-latest" ]; then
+            cp "target/$TARGET/release/mdns-tui-browser" "$staging/"
+            cp "target/$TARGET/release/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/$TARGET/release/mdns-tui-browser.dSYM" "$staging/" || true
             mkdir -p "$staging/man/man1"
             cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
           else
-            cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$staging/"
-            cp "target/${{ matrix.target }}/release/mdns-tui-browser.dwp" "$staging/" || true
-            cp -LR "target/${{ matrix.target }}/release/mdns-tui-browser.dSYM" "$staging/" || true
+            cp "target/$TARGET/release/mdns-tui-browser" "$staging/"
+            cp "target/$TARGET/release/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/$TARGET/release/mdns-tui-browser.dSYM" "$staging/" || true
             # Include manpage for Linux builds only
-            if [[ "${{ matrix.os }}" =~ ^ubuntu ]]; then
+            if [[ "$OS" =~ ^ubuntu ]]; then
               mkdir -p "$staging/man/man1"
               cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             fi
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
             # Copy .deb file if it exists (Linux builds only)
-            if find "target/${{ matrix.target }}/debian" -name '*.deb' -print -quit 2>/dev/null | grep -q .; then
-              DEB_FILE=$(find "target/${{ matrix.target }}/debian" -name '*.deb' -print -quit)
+            if find "target/$TARGET/debian" -name '*.deb' -print -quit 2>/dev/null | grep -q .; then
+              DEB_FILE=$(find "target/$TARGET/debian" -name '*.deb' -print -quit)
               cp "$DEB_FILE" .
               DEB_NAME=$(basename "$DEB_FILE")
               echo "DEB_ASSET=$DEB_NAME" >> "$GITHUB_ENV"
               # Convert .deb to .ipk for aarch64 and armhf (OpenWrt)
-              if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" || "${{ matrix.target }}" == "arm-unknown-linux-gnueabihf" ]]; then
+              if [[ "$TARGET" == "aarch64-unknown-linux-gnu" || "$TARGET" == "arm-unknown-linux-gnueabihf" ]]; then
                 TEMP_DIR=$(mktemp -d)
                 DEB_ABS_PATH="$GITHUB_WORKSPACE/$DEB_FILE"
                 cp "$DEB_ABS_PATH" "$TEMP_DIR/"
@@ -216,7 +230,7 @@ jobs:
                 # Update control file for OpenWrt
                 ARCH_MAP_ARM64="aarch64"
                 ARCH_MAP_ARMHF="armv7ahf-vfp"
-                if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+                if [[ "$TARGET" == "aarch64-unknown-linux-gnu" ]]; then
                   TARGET_ARCH="$ARCH_MAP_ARM64"
                 else
                   TARGET_ARCH="$ARCH_MAP_ARMHF"
@@ -260,13 +274,16 @@ jobs:
       - name: 📦 Build DMG
         if: contains(matrix.os, 'macos')
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          DMG_STAGING="mdns-tui-browser-dmg-${VERSION_NAME}-${{ matrix.platform }}"
+          DMG_STAGING="mdns-tui-browser-dmg-${VERSION_NAME}-${PLATFORM}"
           APP_NAME="mDNS-TUI-Browser.app"
-          DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${{ matrix.platform }}.dmg"
+          DMG_NAME="mdns-tui-browser-${VERSION_NAME}-${PLATFORM}.dmg"
           mkdir -p "$DMG_STAGING/$APP_NAME/Contents/MacOS"
           mkdir -p "$DMG_STAGING/$APP_NAME/Contents/Resources"
-          cp "target/${{ matrix.target }}/release/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
+          cp "target/$TARGET/release/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
           cp LICENSE "$DMG_STAGING/$APP_NAME/Contents/Resources/"
           # Create a shell script wrapper that launches Terminal with the TUI app
           cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
@@ -321,15 +338,20 @@ jobs:
       - name: 🧮 Compute attestation subjects
         if: inputs.tagName && (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos'))
         shell: bash
+        env:
+          ASSET: ${{ env.ASSET }}
+          DEB_ASSET: ${{ env.DEB_ASSET }}
+          IPK_ASSET: ${{ env.IPK_ASSET }}
+          DMG_ASSET: ${{ env.DMG_ASSET }}
         run: |
-          if [ -n "${{ env.IPK_ASSET }}" ]; then
-            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }},${{ env.IPK_ASSET }}" >> "$GITHUB_ENV"
-          elif [ -n "${{ env.DMG_ASSET }}" ]; then
-            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DMG_ASSET }}" >> "$GITHUB_ENV"
-          elif [ -n "${{ env.DEB_ASSET }}" ]; then
-            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }},${{ env.DEB_ASSET }}" >> "$GITHUB_ENV"
+          if [ -n "$IPK_ASSET" ]; then
+            echo "ATTESTATION_SUBJECTS=${ASSET},${DEB_ASSET},${IPK_ASSET}" >> "$GITHUB_ENV"
+          elif [ -n "$DMG_ASSET" ]; then
+            echo "ATTESTATION_SUBJECTS=${ASSET},${DMG_ASSET}" >> "$GITHUB_ENV"
+          elif [ -n "$DEB_ASSET" ]; then
+            echo "ATTESTATION_SUBJECTS=${ASSET},${DEB_ASSET}" >> "$GITHUB_ENV"
           else
-            echo "ATTESTATION_SUBJECTS=${{ env.ASSET }}" >> "$GITHUB_ENV"
+            echo "ATTESTATION_SUBJECTS=${ASSET}" >> "$GITHUB_ENV"
           fi
 
       - name: 🛡️ Attest SBOM
