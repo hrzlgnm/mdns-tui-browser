@@ -44,6 +44,13 @@ jobs:
           version: 0.7.5
           locked: true
 
+      - name: 🔧 Install cross
+        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        with:
+          crate: cross
+          version: 0.2.5
+          locked: true
+
   cache-tools-platforms:
     strategy:
       fail-fast: false
