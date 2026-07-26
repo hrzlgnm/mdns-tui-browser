@@ -27,6 +27,25 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_ADMIN_TOKEN }}
 
+      - name: 🔍 Get default branch protection ruleset
+        id: ruleset
+        shell: bash
+        run: |
+          RULESET="repos/${{ github.repository }}/rulesets/${{ secrets.RULESET_ID }}"
+          echo "result=${RULESET}" >> "$GITHUB_OUTPUT"
+
+      - name: ⏳ Temporary disable ruleset enforcement
+        run: |
+          RULESET="${{ steps.ruleset.outputs.result }}"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "${RULESET}" | jq '.enforcement = "disabled"' | \
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "${RULESET}" \
+              --input -
+
       - name: 🔧 Install git-cliff
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
         with:
@@ -51,3 +70,16 @@ jobs:
             by running `git-cliff` without a version tag.
           labels: chore
           delete-branch: true
+
+      - name: 👮 Re-enable enforcement of rules
+        if: always()
+        run: |
+          RULESET="${{ steps.ruleset.outputs.result }}"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "${RULESET}" | jq '.enforcement = "active"' | \
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "${RULESET}" \
+              --input -
