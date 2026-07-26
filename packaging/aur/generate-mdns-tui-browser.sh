@@ -41,6 +41,7 @@ package() {
     install -Dm755 "\${srcdir}/\${_builddir}/target/release/mdns-tui-browser" "\$pkgdir"/usr/bin/mdns-tui-browser
     install -Dm644 "\${srcdir}/\${_builddir}"/LICENSE "\$pkgdir"/usr/share/licenses/\$pkgname/LICENSE
     install -Dm644 "\${srcdir}/\${_builddir}"/README.md "\$pkgdir"/usr/share/doc/\$pkgname/README.md
+    install -Dm644 "\${srcdir}/\${_builddir}"/CHANGELOG.md "\$pkgdir"/usr/share/doc/\$pkgname/CHANGELOG.md
     install -Dm644 "\${srcdir}/\${_builddir}"/docs/mdns-tui-browser.1 "\$pkgdir"/usr/share/man/man1/mdns-tui-browser.1
 }
 EOF

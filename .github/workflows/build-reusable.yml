@@ -190,6 +190,7 @@ jobs:
           staging="mdns-tui-browser-${VERSION_NAME}-${PLATFORM}"
           mkdir -p "$staging"
           cp LICENSE "$staging/"
+          cp CHANGELOG.md "$staging/"
           if [ "$OS" = "windows-latest" ]; then
             cp "target/$TARGET/release/mdns-tui-browser.exe" "$staging/"
             cp "target/$TARGET/release/mdns_tui_browser.pdb" "$staging/"
@@ -277,6 +278,7 @@ jobs:
           mkdir -p "$DMG_STAGING/$APP_NAME/Contents/Resources"
           cp "target/$TARGET/release/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
           cp LICENSE "$DMG_STAGING/$APP_NAME/Contents/Resources/"
+          cp CHANGELOG.md "$DMG_STAGING/$APP_NAME/Contents/Resources/"
           # Create a shell script wrapper that launches Terminal with the TUI app
           cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
           #!/bin/bash
