@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Move changelog comparison links inline with version sections
+- Move changelog comparison links inline with version sections (#481) ([#481](https://github.com/hrzlgnm/mdns-tui-browser/pull/481))
 
 ## [1.30.20] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.19...v1.30.20)
 
@@ -503,13 +503,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate if-addrs to 0.15 (#182) ([#182](https://github.com/hrzlgnm/mdns-tui-browser/pull/182))
 
-## [1.19.2] - 2026-02-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.2)
+## [1.19.2] - 2026-02-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.1...v1.19.2)
+
+### Changed
+
+- Repackage .deb as .ipk for aarch64 and armhf (#179) ([#179](https://github.com/hrzlgnm/mdns-tui-browser/pull/179))
+
+## [1.19.1] - 2026-02-12 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.1)
 
 ### Changed
 
 - Add .deb packages to Linux releases with attestation (#177) ([#177](https://github.com/hrzlgnm/mdns-tui-browser/pull/177))
-
-- Repackage .deb as .ipk for aarch64 and armhf (#179) ([#179](https://github.com/hrzlgnm/mdns-tui-browser/pull/179))
 
 ## [1.19.0] - 2026-02-12 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.18.0...v1.19.0)
 
@@ -697,15 +701,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Deduplicate ServiceEntry creation in tests (#129) ([#129](https://github.com/hrzlgnm/mdns-tui-browser/pull/129))
 
-## [1.13.0] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.3...v1.13.0)
+## [1.13.0] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.13.0)
 
 ### Changed
 
 - Don't scream the project name in man page (#127) ([#127](https://github.com/hrzlgnm/mdns-tui-browser/pull/127))
 
 - Remove redundant duration field from ServiceSession (#128) ([#128](https://github.com/hrzlgnm/mdns-tui-browser/pull/128))
-
-## [1.12.2] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.12.2)
 
 ### Fixed
 
