@@ -11,7 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reuse data.tar.xz from .deb for .ipk packages (#460) ([#460](https://github.com/hrzlgnm/mdns-tui-browser/pull/460))
 
-- Replace Python changelog script with git-cliff
+- Replace Python changelog script with git-cliff (#462) ([#462](https://github.com/hrzlgnm/mdns-tui-browser/pull/462))
+
+- Add workflow to keep Unreleased changelog section up to date (#463) ([#463](https://github.com/hrzlgnm/mdns-tui-browser/pull/463))
+
+### Fixed
+
+- Use GH_ADMIN_TOKEN for changelog workflow PR creation (#464) ([#464](https://github.com/hrzlgnm/mdns-tui-browser/pull/464))
+
+- Pass GH_ADMIN_TOKEN to checkout for git push permissions (#465) ([#465](https://github.com/hrzlgnm/mdns-tui-browser/pull/465))
+
+- Use GH_CONTENT_WRITE token for changelog workflow (#467) ([#467](https://github.com/hrzlgnm/mdns-tui-browser/pull/467))
 
 ## [1.30.18] - 2026-07-26
 
@@ -469,9 +479,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Add .deb packages to Linux releases with attestation (#177) ([#177](https://github.com/hrzlgnm/mdns-tui-browser/pull/177))
-
 - Repackage .deb as .ipk for aarch64 and armhf (#179) ([#179](https://github.com/hrzlgnm/mdns-tui-browser/pull/179))
+
+## [1.19.1] - 2026-02-12
+
+### Changed
+
+- Add .deb packages to Linux releases with attestation (#177) ([#177](https://github.com/hrzlgnm/mdns-tui-browser/pull/177))
 
 ## [1.19.0] - 2026-02-12
 
@@ -666,8 +680,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Don't scream the project name in man page (#127) ([#127](https://github.com/hrzlgnm/mdns-tui-browser/pull/127))
 
 - Remove redundant duration field from ServiceSession (#128) ([#128](https://github.com/hrzlgnm/mdns-tui-browser/pull/128))
-
-## [1.12.2] - 2026-02-07
 
 ### Fixed
 
@@ -1109,7 +1121,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [1.20.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.2...v1.20.0
 
-[1.19.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.2
+[1.19.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.1...v1.19.2
+
+[1.19.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.19.0...v1.19.1
 
 [1.19.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.18.0...v1.19.0
 
@@ -1161,9 +1175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [1.13.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.13.0...v1.13.1
 
-[1.13.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.3...v1.13.0
-
-[1.12.2]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.12.2
+[1.13.0]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.13.0
 
 [1.12.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.0...v1.12.1
 
