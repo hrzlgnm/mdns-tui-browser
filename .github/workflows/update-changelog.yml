@@ -71,6 +71,8 @@ jobs:
               --label chore
           fi
 
+          gh pr merge "$BRANCH" --auto --squash
+
       - name: 🧹 Cleanup SSH signing key
         if: always()
         run: rm -f ~/.ssh/id_ed25519_signing
