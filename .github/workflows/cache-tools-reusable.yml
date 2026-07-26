@@ -51,6 +51,13 @@ jobs:
           version: 0.2.5
           locked: true
 
+      - name: 🔧 Install git-cliff
+        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        with:
+          crate: git-cliff
+          version: 2.13.1
+          locked: true
+
   cache-tools-platforms:
     strategy:
       fail-fast: false
