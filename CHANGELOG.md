@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add workflow to keep Unreleased changelog section up to date (#463) ([#463](https://github.com/hrzlgnm/mdns-tui-browser/pull/463))
 
+- Update unreleased changelog (#471) ([#471](https://github.com/hrzlgnm/mdns-tui-browser/pull/471))
+
 ### Fixed
 
 - Use GH_ADMIN_TOKEN for changelog workflow PR creation (#464) ([#464](https://github.com/hrzlgnm/mdns-tui-browser/pull/464))
