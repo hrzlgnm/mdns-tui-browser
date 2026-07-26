@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.30.20] - 2026-07-26
 
 ### Added
 
@@ -1053,6 +1053,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Skip service subtypes in service type enumeration (#22) ([#22](https://github.com/hrzlgnm/mdns-tui-browser/pull/22))
 
+[1.30.20]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.19...v1.30.20
+
 [1.30.19]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.18...v1.30.19
 
 [1.30.18]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...v1.30.18
@@ -1269,6 +1271,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [1.0.1]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.0.0...v1.0.1
 
-[Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.19...HEAD
+[Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...HEAD
 
 
