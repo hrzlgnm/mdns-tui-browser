@@ -53,6 +53,11 @@ jobs:
             target: arm-unknown-linux-musleabihf
             platform: Linux-arm-musl
             use_cross: true
+          - os: "ubuntu-latest"
+            symbol: 🐧 riscv64 glibc
+            target: riscv64gc-unknown-linux-gnu
+            platform: Linux-riscv64
+            use_cross: true
           - os: "macos-latest"
             symbol: 🍏 aarch64 latest
             target: aarch64-apple-darwin
