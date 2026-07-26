@@ -13,6 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+
+[Unreleased]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.18...HEAD
+## [1.30.18] - 2026-07-26
+
+### Added
+
+- feat: integrate changelog generation into release workflow #459
+- feat: SBOM including attestation and grype scanning in release #455
+
+### Changed
+
+- chore: use crate cross for cross compilation and add more platforms #458
+
+[1.30.18]: https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.17...v1.30.18
+
 ## [1.30.17] - 2026-07-17
 
 Only dependencies were updated.
