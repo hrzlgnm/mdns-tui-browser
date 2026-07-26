@@ -93,6 +93,7 @@ commit_parsers = [
     { message = "^chore\\(version", skip = true },
     { message = "^chore\\(android", skip = true },
     { message = "^chore\\(test", skip = true },
+    { message = "^chore: update unreleased changelog", skip = true },
     { message = "^chore", group = "Changed" },
     { message = "^security", group = "Security" },
     { message = "^GHSA-", group = "Security" },
