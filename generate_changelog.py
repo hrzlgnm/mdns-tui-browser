@@ -419,22 +419,16 @@ def generate_full_changelog(repository="hrzlgnm/mdns-tui-browser"):
                 note = "No user-facing changes."
         versions.append((version, date, categories, tag, note))
 
-    link_defs = []
     for i, (version, date, categories, tag, note) in enumerate(versions):
-        section = build_changelog_section(version, date, categories, note=note)
+        prev_tag = versions[i + 1][3] if i + 1 < len(versions) else None
+        section = build_changelog_section(version, date, categories,
+                                          prev_tag, tag, repository, note=note)
         if section:
             lines.append(section.rstrip())
             lines.append("")
-        if i + 1 < len(versions):
-            prev_tag = versions[i + 1][3]
-            link_defs.append(f"[{version}]: https://github.com/{repository}/compare/{prev_tag}...{tag}")
-        else:
-            link_defs.append(f"[{version}]: https://github.com/{repository}/releases/tag/{tag}")
 
     if versions:
         lines.append(f"[Unreleased]: https://github.com/{repository}/compare/{versions[0][3]}...HEAD")
-    for link in link_defs:
-        lines.append(link)
 
     return "\n".join(lines)
 
@@ -527,16 +521,33 @@ def insert_section_into_changelog(section, repository="hrzlgnm/mdns-tui-browser"
     section_lines = section.rstrip().split("\n")
     new_lines = lines[:insert_idx] + section_lines + [""] + lines[insert_idx:]
 
-    # Update Unreleased comparison link from the new section
+    # Update or add Unreleased comparison link
+    new_tag = None
     for line in section_lines:
         m = re.search(r'\[([0-9]+\.[0-9]+\.[0-9]+)\]:.*compare/([^)]+)\.\.\.([^)]+)', line)
         if m:
             new_tag = m.group(3)
-            for idx, ln in enumerate(new_lines):
-                if ln.startswith("[Unreleased]:"):
-                    new_lines[idx] = f"[Unreleased]: https://github.com/{repository}/compare/{new_tag}...HEAD"
-                    break
             break
+
+    if new_tag:
+        unreleased_link = f"[Unreleased]: https://github.com/{repository}/compare/{new_tag}...HEAD"
+        for idx, ln in enumerate(new_lines):
+            if ln.startswith("[Unreleased]:"):
+                new_lines[idx] = unreleased_link
+                break
+        else:
+            # No existing [Unreleased] link, add it after the section
+            for idx, ln in enumerate(new_lines):
+                if ln.startswith("## [Unreleased]"):
+                    # Find end of Unreleased section (next ## [ or end)
+                    insert_at = len(new_lines)
+                    for j in range(idx + 1, len(new_lines)):
+                        if new_lines[j].startswith("## ["):
+                            insert_at = j
+                            break
+                    new_lines.insert(insert_at, unreleased_link)
+                    new_lines.insert(insert_at, "")
+                    break
 
     with open("CHANGELOG.md", "w") as f:
         f.write("\n".join(new_lines))
