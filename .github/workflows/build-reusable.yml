@@ -227,11 +227,9 @@ jobs:
                 cp "$DEB_ABS_PATH" "$TEMP_DIR/"
                 cd "$TEMP_DIR" || exit 1
                 ar x "$(basename "$DEB_FILE")"
-                # Discover actual archive filenames using pattern matching
+                # Discover archive filenames
                 DATA_TAR=$(find . -name 'data.tar.*' -print -quit)
                 CONTROL_TAR=$(find . -name 'control.tar.*' -print -quit)
-                tar -xf "$DATA_TAR"
-                tar -xf "$CONTROL_TAR"
                 # Update control file for OpenWrt
                 ARCH_MAP_ARM64="aarch64"
                 ARCH_MAP_ARMHF="armv7ahf-vfp"
@@ -240,23 +238,12 @@ jobs:
                 else
                   TARGET_ARCH="$ARCH_MAP_ARMHF"
                 fi
-                sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" "$TEMP_DIR/control"
-                sed -i 's/libgcc-s1/libgcc1/g' "$TEMP_DIR/control"
-                # Create .ipk package - preserve control.tar.gz metadata
-                mkdir -p "$TEMP_DIR/data"
-                DATA_TAR=$(find . -name 'data.tar.*' -print -quit)
-                tar -xf "$DATA_TAR" -C "$TEMP_DIR/data"
-                cd "$TEMP_DIR/data" || exit 1
-                tar -czf ../data.tar.gz .
-                cd "$TEMP_DIR" || exit 1
-                # Re-create control.tar.gz from extracted directory to preserve metadata
                 mkdir -p tmp_control
-                CONTROL_TAR=$(find . -name 'control.tar.*' -print -quit)
                 tar -xf "$CONTROL_TAR" -C tmp_control
                 sed -i "s/^Architecture: .*/Architecture: $TARGET_ARCH/" tmp_control/control
                 sed -i 's/libgcc-s1/libgcc1/g' tmp_control/control
                 tar -C tmp_control -czf control.tar.gz .
-                ar cr "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" debian-binary control.tar.gz data.tar.gz
+                ar cr "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" debian-binary control.tar.gz "$DATA_TAR"
                 cp "$TEMP_DIR/mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" "$GITHUB_WORKSPACE/"
                 echo "IPK_ASSET=mdns-tui-browser_${VERSION_NAME}_${TARGET_ARCH}.ipk" >> "$GITHUB_ENV"
                 cd "$GITHUB_WORKSPACE" || exit 1
