@@ -75,6 +75,7 @@ jobs:
               - 'src-tauri/Cargo.toml'
               - 'Cargo.toml'
               - 'Cargo.lock'
+              - 'Cross.toml'
             lint:
               - '.github/workflows/lint-reusable.yml'
             tests:
