@@ -61,7 +61,7 @@ jobs:
           git commit -S -m "chore(version): update unreleased changelog"
           git push --force-with-lease origin "$BRANCH"
 
-          if ! gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = "0" ]; then
             gh pr create \
               --title "chore: update unreleased changelog" \
               --body "Automated update of the \`[Unreleased]\` section in \`CHANGELOG.md\`.
