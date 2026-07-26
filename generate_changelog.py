@@ -6,7 +6,8 @@
 
 Usage:
   python3 generate_changelog.py                     # Full regeneration
-  python3 generate_changelog.py --tag v1.9.0        # Incremental update
+  python3 generate_changelog.py --tag v1.9.0        # Incremental update (print section)
+  python3 generate_changelog.py --tag v1.9.0 --insert  # Incremental update (insert into CHANGELOG.md)
 """
 
 import json
@@ -105,7 +106,7 @@ def update_pr_labels_if_needed(pr):
         return
 
     labels = {label["name"].lower() for label in pr.get("labels", [])}
-    if "chore" in labels:
+    if "chore" in labels or "dependencies" in labels:
         return
 
     pr_number = pr["number"]
@@ -118,10 +119,14 @@ def fetch_merged_prs(prev_tag, current_tag):
     prev_date_str = fetch_release_date(prev_tag)
     curr_date_str = fetch_release_date(current_tag)
 
-    if not prev_date_str or not curr_date_str:
-        if prev_tag:
-            prev_date_str = run_optional(["git", "log", "-1", "--format=%ai", prev_tag])
+    # Fall back to git commit date when release doesn't exist yet
+    if not prev_date_str and prev_tag:
+        prev_date_str = run_optional(["git", "log", "-1", "--format=%ai", prev_tag])
+    if not curr_date_str:
         curr_date_str = run_optional(["git", "log", "-1", "--format=%ai", current_tag])
+    # Fall back to current time when tag doesn't exist yet (pre-release)
+    if not curr_date_str:
+        curr_date_str = datetime.now(timezone.utc).isoformat()
 
     prev_date = parse_date_to_aware(prev_date_str)
     curr_date = parse_date_to_aware(curr_date_str)
@@ -138,7 +143,8 @@ def fetch_merged_prs(prev_tag, current_tag):
 
     prs = json.loads(raw)
     return [
-        pr for pr in prs
+        {**pr, "files": [f["path"] if isinstance(f, dict) else f for f in pr.get("files", [])]}
+        for pr in prs
         if parse_date_to_aware(pr["mergedAt"]) is not None
         and prev_date <= parse_date_to_aware(pr["mergedAt"]) <= curr_date
     ]
@@ -433,25 +439,32 @@ def generate_full_changelog(repository="hrzlgnm/mdns-tui-browser"):
     return "\n".join(lines)
 
 
-def update_single_release(tag, repository):
+def update_single_release(tag, repository, previous_tag=None):
     """Incremental update for a single release using PR labels."""
     version = strip_version_prefix(tag)
     date = parse_date(fetch_release_date(tag))
+    # Fall back to today's date when release doesn't exist yet
+    if date == "Unknown":
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     print(f"Processing {tag} ({date})", file=sys.stderr)
 
-    # Find previous release
-    releases = fetch_releases()
-    tag_names = [r["tagName"] for r in releases]
-    try:
-        idx = tag_names.index(tag)
-        if idx + 1 >= len(tag_names):
-            print("No previous release found", file=sys.stderr)
+    if previous_tag:
+        prev_tag = previous_tag
+        print(f"Using provided previous tag: {prev_tag}", file=sys.stderr)
+    else:
+        # Find previous release
+        releases = fetch_releases()
+        tag_names = [r["tagName"] for r in releases]
+        try:
+            idx = tag_names.index(tag)
+            if idx + 1 >= len(tag_names):
+                print("No previous release found", file=sys.stderr)
+                return None
+            prev_tag = tag_names[idx + 1]
+        except ValueError:
+            print(f"Tag {tag} not found", file=sys.stderr)
             return None
-        prev_tag = tag_names[idx + 1]
-    except ValueError:
-        print(f"Tag {tag} not found", file=sys.stderr)
-        return None
 
     # Fetch PRs merged between releases
     prs = fetch_merged_prs(prev_tag, tag)
@@ -471,8 +484,8 @@ def update_single_release(tag, repository):
             entry = f"{pr['title']} #{pr['number']}"
             categories[cat].append(entry)
 
-    # Also check release body for security entries
-    body = fetch_release_body(tag)
+    # Also check release body for security entries (may not exist yet)
+    body = fetch_release_body(tag) or ""
     for line in body.split("\n"):
         stripped = line.strip()
         if stripped.startswith("- GHSA-") or stripped.startswith("- security:"):
@@ -534,17 +547,26 @@ def insert_section_into_changelog(section, repository="hrzlgnm/mdns-tui-browser"
 def main():
     parser = argparse.ArgumentParser(description="Generate CHANGELOG.md")
     parser.add_argument("--tag", help="Release tag for incremental update (e.g., v1.9.0)")
+    parser.add_argument("--insert", action="store_true",
+                        help="Insert section into CHANGELOG.md (requires --tag)")
+    parser.add_argument("--previous-tag", dest="previous_tag",
+                        help="Previous release tag (e.g., v1.9.0). Used with --tag to skip release list lookup.")
     parser.add_argument("--repository", default="hrzlgnm/mdns-tui-browser", help="GitHub repository")
     args = parser.parse_args()
 
     try:
         if args.tag:
-            section = update_single_release(args.tag, args.repository)
-            if section:
-                print(section)
-            else:
+            section = update_single_release(args.tag, args.repository, args.previous_tag)
+            if not section:
                 print("Error: could not generate section", file=sys.stderr)
                 sys.exit(1)
+            if args.insert:
+                if insert_section_into_changelog(section, args.repository):
+                    print("Changelog updated", file=sys.stderr)
+                else:
+                    sys.exit(1)
+            else:
+                print(section)
         else:
             changelog = generate_full_changelog(args.repository)
             with open("CHANGELOG.md", "w") as f:

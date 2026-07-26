@@ -115,6 +115,25 @@ jobs:
               "${RULESET}" \
               --input -
 
+      - name: 🐍 Setup Python
+        if: ${{ !inputs.dry-run }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.x"
+
+      - name: 📝 Update CHANGELOG.md
+        if: ${{ !inputs.dry-run }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(gh release list --limit 10 --json tagName,isPrerelease,isDraft \
+            --jq '[.[] | select(.isPrerelease == false and .isDraft == false)] | .[1].tagName')
+          python3 generate_changelog.py \
+            --tag "v${{ steps.version.outputs.semantic-version }}" \
+            --previous-tag "$PREV_TAG" \
+            --insert
+
       - name: 💾🏷️⬆️ Commit, tag and push
         if: ${{ !inputs.dry-run }}
         run: |

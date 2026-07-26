@@ -6,8 +6,6 @@ name: Update Changelog
 on:
   push:
     branches: [main]
-  release:
-    types: [published]
 
 concurrency:
   group: update-changelog
