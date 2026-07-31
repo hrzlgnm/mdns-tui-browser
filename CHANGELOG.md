@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.21...HEAD)
+
+### Changed
+
+- *(deps)* Update rust crate clap to v4.6.5 (#492) ([#492](https://github.com/hrzlgnm/mdns-tui-browser/pull/492))
+
 ## [1.30.21] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...v1.30.21)
 
 ### Changed
