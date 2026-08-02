@@ -381,7 +381,7 @@ jobs:
           done
           if [ "${#ASSETS[@]}" -eq 0 ]; then
             echo "No release assets to upload for this platform"
-            exit 0
+            exit 1
           fi
           gh release upload "$TAG_NAME" "${ASSETS[@]}" --clobber
 
