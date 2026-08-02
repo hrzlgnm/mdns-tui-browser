@@ -363,21 +363,27 @@ jobs:
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          name: mDNS TUI Browser Release ${{ inputs.tagName }}
-          tag_name: ${{ inputs.tagName }}
-          append_body: true
-          make_latest: false
-          generate_release_notes: false
-          files: |
-            ${{ env.ASSET }}
-            ${{ contains(matrix.os, 'ubuntu') && env.DEB_ASSET || '' }}
-            ${{ matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET || '' }}
-            ${{ contains(matrix.os, 'macos') && env.DMG_ASSET || '' }}
-            ${{ inputs.tagName && env.PLATFORM_SBOM || '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tagName }}
+          ASSET: ${{ env.ASSET }}
+          DEB_ASSET: ${{ env.DEB_ASSET }}
+          IPK_ASSET: ${{ env.IPK_ASSET }}
+          DMG_ASSET: ${{ env.DMG_ASSET }}
+          PLATFORM_SBOM: ${{ env.PLATFORM_SBOM }}
+        run: |
+          ASSETS=()
+          for file in "$ASSET" "$DEB_ASSET" "$IPK_ASSET" "$DMG_ASSET" "$PLATFORM_SBOM"; do
+            if [ -n "$file" ] && [ -f "$file" ]; then
+              ASSETS+=("$file")
+            fi
+          done
+          if [ "${#ASSETS[@]}" -eq 0 ]; then
+            echo "No release assets to upload for this platform"
+            exit 0
+          fi
+          gh release upload "$TAG_NAME" "${ASSETS[@]}" --clobber
 
       - name: 📦 Upload artifacts
         if: (!inputs.tagName)
