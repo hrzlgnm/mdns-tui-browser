@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.21...HEAD)
+## [1.31.0] - 2026-08-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.21...v1.31.0)
+
+### Added
+
+- *(release)* Publish drafts and upload assets with gh (#506) ([#506](https://github.com/hrzlgnm/mdns-tui-browser/pull/506))
 
 ### Changed
 
@@ -14,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Create changelog PR as verified github-actions bot (#497) ([#497](https://github.com/hrzlgnm/mdns-tui-browser/pull/497))
 
 - Include dependencies in changelog (#503) ([#503](https://github.com/hrzlgnm/mdns-tui-browser/pull/503))
+
+- Make the typos digest ignore pattern more broader (#505) ([#505](https://github.com/hrzlgnm/mdns-tui-browser/pull/505))
 
 ### Dependencies
 
