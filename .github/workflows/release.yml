@@ -157,19 +157,9 @@ jobs:
 
       - name: 🧹 Delete pre-existing draft releases
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
-        shell: bash
-        run: |
-          set -o pipefail
-          DRAFT_IDS=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq '[.[] | select(.draft == true) | .id] | join(" ")')
-          if [ -z "$DRAFT_IDS" ]; then
-            echo "No pre-existing draft releases to delete"
-          else
-            echo "Deleting pre-existing draft releases: $DRAFT_IDS"
-            for id in $DRAFT_IDS; do
-              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$id" && echo "Deleted draft release id=$id"
-            done
-          fi
+        uses: hugo19941994/delete-draft-releases@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🗒️ Generate release notes with release-drafter
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
