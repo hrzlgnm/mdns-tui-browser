@@ -58,10 +58,10 @@ jobs:
           branch-name: chore/update-changelog
           branch-push-force: true
 
-      - name: 🔁 Create or update Pull Request
+      - name: 🔁 Create Pull Request
         if: steps.changes.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_CONTENT_WRITE }}
         run: |
           BRANCH="chore/update-changelog"
           if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = "0" ]; then
@@ -74,4 +74,8 @@ jobs:
               --label ignore
           fi
 
-          gh pr merge "$BRANCH" --auto --squash
+      - name: 🔁 Enable auto-merge
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge chore/update-changelog --auto --squash
