@@ -155,6 +155,22 @@ jobs:
         run: |
           rm -f ~/.ssh/id_ed25519_signing
 
+      - name: 🧹 Delete pre-existing draft releases
+        if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          DRAFT_IDS=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '[.[] | select(.draft == true) | .id] | join(" ")')
+          if [ -z "$DRAFT_IDS" ]; then
+            echo "No pre-existing draft releases to delete"
+          else
+            echo "Deleting pre-existing draft releases: $DRAFT_IDS"
+            for id in $DRAFT_IDS; do
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$id" && echo "Deleted draft release id=$id"
+            done
+          fi
+
       - name: 🗒️ Generate release notes with release-drafter
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
         uses: release-drafter/release-drafter@34d80673e067bdc0c24568d3af899c216adcfaa9 # v7.7.0
