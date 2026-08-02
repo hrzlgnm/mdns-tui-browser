@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.32.2] - 2026-08-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.1...v1.32.2)
+
+### Fixed
+
+- *(release)* Delete draft releases with an action instead of gh (#509) ([#509](https://github.com/hrzlgnm/mdns-tui-browser/pull/509))
+
 ## [1.32.1] - 2026-08-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.0...v1.32.1)
 
 ### Fixed
