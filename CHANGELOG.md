@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate clap to v4.6.5 (#492) ([#492](https://github.com/hrzlgnm/mdns-tui-browser/pull/492))
 
+- *(ci)* Run changelog update on a nightly schedule (#494) ([#494](https://github.com/hrzlgnm/mdns-tui-browser/pull/494))
+
 ## [1.30.21] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...v1.30.21)
 
 ### Changed
