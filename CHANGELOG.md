@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(ci)* Run changelog update on a nightly schedule (#494) ([#494](https://github.com/hrzlgnm/mdns-tui-browser/pull/494))
 
+- Create changelog PR as verified github-actions bot (#497) ([#497](https://github.com/hrzlgnm/mdns-tui-browser/pull/497))
+
+### Fixed
+
+- Use PAT to create changelog PR (#498) ([#498](https://github.com/hrzlgnm/mdns-tui-browser/pull/498))
+
 ## [1.30.21] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...v1.30.21)
 
 ### Changed
