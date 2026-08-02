@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.31.0] - 2026-08-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.21...v1.31.0)
+## [1.32.0] - 2026-08-02 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.21...v1.32.0)
 
 ### Added
 
@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use PAT to create changelog PR (#498) ([#498](https://github.com/hrzlgnm/mdns-tui-browser/pull/498))
 
 - Revert changelog PR to github-actions bot author (#500) ([#500](https://github.com/hrzlgnm/mdns-tui-browser/pull/500))
+
+- *(release)* Delete pre-existing draft releases before drafting (#507) ([#507](https://github.com/hrzlgnm/mdns-tui-browser/pull/507))
 
 ## [1.30.21] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...v1.30.21)
 
