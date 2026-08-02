@@ -28,6 +28,7 @@ permissions:
 
 jobs:
   release:
+    name: 📝 Draft a new release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.semantic-version }}
@@ -133,7 +134,7 @@ jobs:
           git add -A
           git commit -S -m "Bump version to ${{ steps.version.outputs.semantic-version }}"
           git push
-          git tag -s -a v${{ steps.version.outputs.semantic-version }} -m "mDNS TUI Browser Release v${{ steps.version.outputs.semantic-version }}"
+          git tag -s -a v${{ steps.version.outputs.semantic-version }} -m "mDNS TUI Browser v${{ steps.version.outputs.semantic-version }}"
           git push --tags
 
       - name: 👮 Re-enable enforcement of rules
@@ -160,7 +161,6 @@ jobs:
         with:
           tag: v${{ steps.version.outputs.semantic-version }}
           name: mDNS TUI Browser v${{ steps.version.outputs.semantic-version }}
-          prerelease: true
           latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
