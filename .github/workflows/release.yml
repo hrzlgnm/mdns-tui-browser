@@ -157,7 +157,7 @@ jobs:
 
       - name: 🧹 Delete pre-existing draft releases
         if: ${{ !inputs.dry-run && steps.version.outputs.semantic-version != '' }}
-        uses: hugo19941994/delete-draft-releases@v3.0.0
+        uses: hugo19941994/delete-draft-releases@3f19a25abf2ce87850c2268938f98f14e4d3d1f1 # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
