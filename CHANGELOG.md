@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Lock file maintenance (#512) ([#512](https://github.com/hrzlgnm/mdns-tui-browser/pull/512))
 
+- *(deps)* Update hrzlgnm/actions action to v2.5.5 (#514) ([#514](https://github.com/hrzlgnm/mdns-tui-browser/pull/514))
+
+- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 2e59a58 (#515) ([#515](https://github.com/hrzlgnm/mdns-tui-browser/pull/515))
+
 ### Fixed
 
 - *(release)* Fail on missing assets to upload to the release (#511) ([#511](https://github.com/hrzlgnm/mdns-tui-browser/pull/511))
