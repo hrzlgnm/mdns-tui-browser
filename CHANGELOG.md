@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.2...HEAD)
+## [1.32.3] - 2026-08-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.2...v1.32.3)
 
 ### Dependencies
 
@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(deps)* Update dependency cargo-nextest to v0.9.143 (#518) ([#518](https://github.com/hrzlgnm/mdns-tui-browser/pull/518))
 
 - *(deps)* Update dtolnay/rust-toolchain digest to 4360b52 (#519) ([#519](https://github.com/hrzlgnm/mdns-tui-browser/pull/519))
+
+- *(deps)* Update dorny/paths-filter action to v4.0.3 (#521) ([#521](https://github.com/hrzlgnm/mdns-tui-browser/pull/521))
+
+- *(deps)* Update rust crate open to v5.4.1 (#522) ([#522](https://github.com/hrzlgnm/mdns-tui-browser/pull/522))
 
 ### Fixed
 
