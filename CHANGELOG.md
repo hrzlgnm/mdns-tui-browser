@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 2e59a58 (#515) ([#515](https://github.com/hrzlgnm/mdns-tui-browser/pull/515))
 
+- *(deps)* Update actions/attest digest to 1e69f48 (#517) ([#517](https://github.com/hrzlgnm/mdns-tui-browser/pull/517))
+
+- *(deps)* Update dependency cargo-nextest to v0.9.143 (#518) ([#518](https://github.com/hrzlgnm/mdns-tui-browser/pull/518))
+
+- *(deps)* Update dtolnay/rust-toolchain digest to 4360b52 (#519) ([#519](https://github.com/hrzlgnm/mdns-tui-browser/pull/519))
+
 ### Fixed
 
 - *(release)* Fail on missing assets to upload to the release (#511) ([#511](https://github.com/hrzlgnm/mdns-tui-browser/pull/511))
