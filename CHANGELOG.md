@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to de0c834 (#523) ([#523](https://github.com/hrzlgnm/mdns-tui-browser/pull/523))
 
+- *(deps)* Update swatinem/rust-cache digest to 6323deb (#525) ([#525](https://github.com/hrzlgnm/mdns-tui-browser/pull/525))
+
 ## [1.32.3] - 2026-08-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.2...v1.32.3)
 
 ### Dependencies
