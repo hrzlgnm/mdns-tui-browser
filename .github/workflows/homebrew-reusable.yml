@@ -22,20 +22,23 @@ jobs:
         id: release-info
         uses: ./.github/actions/latest-release-info
 
-      - name: 🛠️ Determine download URLs and compute SHA256
+      - name: 🛠️ Determine download URLs and fetch SHA256 digests
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ steps.release-info.outputs.tagName }}
           VERSION: ${{ steps.release-info.outputs.version }}
         run: |
+          set -o errexit
           INTEL_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg"
           ARM64_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg"
 
-          curl -fsSL -o intel.dmg "$INTEL_URL"
-          curl -fsSL -o arm64.dmg "$ARM64_URL"
+          ASSETS=$(gh api "repos/hrzlgnm/mdns-tui-browser/releases/tags/${TAG_NAME}")
 
-          INTEL_SHA=$(sha256sum intel.dmg | awk '{print $1}')
-          ARM64_SHA=$(sha256sum arm64.dmg | awk '{print $1}')
+          INTEL_SHA=$(jq -er --arg name "mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg" \
+            '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' <<< "$ASSETS")
+          ARM64_SHA=$(jq -er --arg name "mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg" \
+            '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' <<< "$ASSETS")
 
           {
             echo "INTEL_SHA=$INTEL_SHA"
@@ -49,8 +52,6 @@ jobs:
           echo "Intel SHA256: $INTEL_SHA"
           echo "Apple Silicon URL: $ARM64_URL"
           echo "Apple Silicon SHA256: $ARM64_SHA"
-
-          rm -f intel.dmg arm64.dmg
 
       - name: 🔄 Checkout Homebrew Tap
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
