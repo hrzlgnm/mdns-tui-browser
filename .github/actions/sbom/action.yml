@@ -28,7 +28,6 @@ runs:
         format: "spdx-json"
         output-file: "sbom.spdx.json"
         artifact-name: ${{ inputs.artifact-name }}
-        upload-artifact: false
 
     - name: 🔍 Scan SBOM
       id: scan
