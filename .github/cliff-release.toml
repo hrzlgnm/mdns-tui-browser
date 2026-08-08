@@ -59,10 +59,15 @@ split_commits = false
 # regex for parsing and grouping commits
 commit_parsers = [
     { message = "^feat!", group = "Breaking" },
+    { message = "^feat\\(.*\\)!", group = "Breaking" },
     { message = "^fix!", group = "Breaking" },
+    { message = "^fix\\(.*\\)!", group = "Breaking" },
     { message = "^refactor!", group = "Breaking" },
+    { message = "^refactor\\(.*\\)!", group = "Breaking" },
     { message = "^perf!", group = "Breaking" },
+    { message = "^perf\\(.*\\)!", group = "Breaking" },
     { message = "^chore!", group = "Breaking" },
+    { message = "^chore\\(.*\\)!", group = "Breaking" },
     { message = "^\\w+\\(ci\\)", group = "Maintenance" },
     { message = "^feat", group = "Added" },
     { message = "^fix\\(deps\\)", group = "Dependencies" },
