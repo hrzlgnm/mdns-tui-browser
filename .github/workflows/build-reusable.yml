@@ -85,20 +85,30 @@ jobs:
         with:
           artifact-name: "sbom.${{ matrix.platform }}.spdx.json"
 
-      - name: 📜 Copy SBOM for release
-        if: inputs.tagName
-        shell: bash
-        env:
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          cp sbom.spdx.json "sbom.spdx-${PLATFORM}.json"
-          echo "PLATFORM_SBOM=sbom.spdx-${PLATFORM}.json" >> "$GITHUB_ENV"
-
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
           targets: ${{ matrix.target }}
           save-cache: ${{ inputs.branch == 'main' }}
+
+      - name: 🎯 Sync version from tag
+        if: inputs.tagName
+        uses: ./.github/actions/sync-version
+        with:
+          tagName: ${{ inputs.tagName }}
+
+      - name: 📥 Download versioned changelog
+        if: inputs.tagName
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: changelog
+          path: changelog-artifact
+
+      - name: 📝 Replace CHANGELOG.md with the versioned changelog
+        if: inputs.tagName
+        shell: bash
+        run: |
+          cp changelog-artifact/CHANGELOG.md CHANGELOG.md
 
       - name: 🛠️🔐 cargo-auditable
         if: inputs.tagName
@@ -371,10 +381,9 @@ jobs:
           DEB_ASSET: ${{ env.DEB_ASSET }}
           IPK_ASSET: ${{ env.IPK_ASSET }}
           DMG_ASSET: ${{ env.DMG_ASSET }}
-          PLATFORM_SBOM: ${{ env.PLATFORM_SBOM }}
         run: |
           ASSETS=()
-          for file in "$ASSET" "$DEB_ASSET" "$IPK_ASSET" "$DMG_ASSET" "$PLATFORM_SBOM"; do
+          for file in "$ASSET" "$DEB_ASSET" "$IPK_ASSET" "$DMG_ASSET"; do
             if [ -n "$file" ] && [ -f "$file" ]; then
               ASSETS+=("$file")
             fi
@@ -415,12 +424,4 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.target }}-dmg
           path: ${{ env.DMG_ASSET }}
-          retention-days: 30
-
-      - name: 📦 Upload SBOM artifact
-        if: (!inputs.tagName)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: sbom-${{ matrix.platform }}
-          path: sbom.spdx.json
           retention-days: 30
