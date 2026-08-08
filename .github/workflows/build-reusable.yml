@@ -171,12 +171,18 @@ jobs:
           else
             cargo --locked deb --no-build -p mdns-tui-browser --target "$TARGET"
           fi
-          # Rename deb to avoid conflicts between ubuntu-latest and ubuntu-22.04
+          # Rename deb to avoid conflicts between ubuntu-latest and ubuntu-22.04, and glibc vs musl
+          SUFFIX=""
           if [ "$OS" = "ubuntu-22.04" ]; then
+            SUFFIX="-glibc2.35"
+          elif [[ "$TARGET" == *"-musl"* ]]; then
+            SUFFIX="-musl"
+          fi
+          if [ -n "$SUFFIX" ]; then
             cd "target/$TARGET/debian" || exit 1
             for deb_file in *.deb; do
               [ -f "$deb_file" ] || continue
-              new_name="${deb_file%.deb}-glibc2.35.deb"
+              new_name="${deb_file%.deb}${SUFFIX}.deb"
               mv "$deb_file" "$new_name"
             done
           fi
