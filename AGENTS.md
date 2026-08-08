@@ -173,6 +173,21 @@ src/
 
 ## Packaging
 
+### AUR Packaging Tests
+Run these commands from the repository root:
+
+```bash
+# Test source and binary packages
+~/.local/bin/test-aur-local --variant=both
+
+# Test one package variant
+~/.local/bin/test-aur-local --variant=source
+~/.local/bin/test-aur-local --variant=bin
+```
+
+- Use `--no-build` only for generator and lint smoke tests; omit it to test package creation and installation.
+- Use `--no-install` to skip installing the `-bin` package, and `--no-cleanup` or `--keep-dir=<path>` to retain build artifacts for debugging.
+
 ### Changelog Inclusion
 When adding or modifying packaging configurations, ensure `CHANGELOG.md` is included:
 - **Debian packages**: Set `changelog = "CHANGELOG.md"` in `Cargo.toml` `[package.metadata.deb]`
