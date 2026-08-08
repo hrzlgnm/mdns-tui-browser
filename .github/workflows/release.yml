@@ -16,6 +16,7 @@ jobs:
   validate_release_tag:
     runs-on: ubuntu-slim
     name: ✅ Validate release tag
+    permissions: {}
     steps:
       - name: 🏷️ Validate tag matches vX.Y.Z
         shell: bash
