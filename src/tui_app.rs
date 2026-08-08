@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
-use mdns_sd::{IfKind, ServiceDaemon, ServiceEvent};
+use mdns_sd::{Error, IfKind, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -32,6 +32,8 @@ const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MAX_SERVICES_LIST_SIZE: usize = 5;
+const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
+const BROWSE_RETRY_ATTEMPTS: usize = 100;
 
 // Flapping service colors (color-blind friendly)
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
@@ -176,6 +178,7 @@ struct AppState {
     apply_service_type: bool,
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
+    pending_service_types: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
     disable_ipv4: bool,
     disable_ipv6: bool,
@@ -205,6 +208,7 @@ impl Clone for AppState {
             apply_service_type: self.apply_service_type,
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
+            pending_service_types: self.pending_service_types.clone(),
             status_message: self.status_message.clone(),
             disable_ipv4: self.disable_ipv4,
             disable_ipv6: self.disable_ipv6,
@@ -243,6 +247,7 @@ impl AppState {
             apply_service_type: false,
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
+            pending_service_types: HashSet::new(),
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
             disable_ipv4,
             disable_ipv6,
@@ -502,6 +507,28 @@ impl AppState {
             self.invalidate_cache_and_validate();
         }
         removed
+    }
+
+    // Reservation helpers for the interactive "add service type" flow. These
+    // track in-flight browses so the same type cannot be submitted twice while
+    // a browse is already pending.
+    fn reserve_service_type(&mut self, service_type: &str) -> bool {
+        if self.service_types.iter().any(|t| t == service_type)
+            || self.user_service_types.contains(service_type)
+            || self.pending_service_types.contains(service_type)
+        {
+            return false;
+        }
+        self.pending_service_types.insert(service_type.to_string())
+    }
+
+    fn clear_pending_service_type(&mut self, service_type: &str) {
+        self.pending_service_types.remove(service_type);
+    }
+
+    fn commit_service_type(&mut self, service_type: &str) {
+        self.pending_service_types.remove(service_type);
+        self.add_service_type(service_type);
     }
 
     // JSON state dump functionality
@@ -1700,16 +1727,16 @@ fn is_sub_type(service_type: &str) -> bool {
     service_type.contains("_sub.")
 }
 
-fn start_browsing_service_type(
+async fn start_browsing_service_type(
     mdns: &ServiceDaemon,
     service_type: &str,
     state: Arc<RwLock<AppState>>,
     notification_sender: flume::Sender<Notification>,
 ) -> Result<(), mdns_sd::Error> {
-    let service_receiver = mdns.browse(service_type)?;
+    let service_receiver = browse_with_retry(mdns, service_type).await?;
 
     let state_inner = Arc::clone(&state);
-    let notification_sender_inner = notification_sender.clone();
+    let notification_sender_inner = notification_sender;
 
     tokio::spawn(async move {
         while let Ok(service_event) = service_receiver.recv_async().await {
@@ -1738,14 +1765,72 @@ fn start_browsing_service_type(
     Ok(())
 }
 
-fn handle_browse_failure(
+async fn browse_with_retry(
+    daemon: &ServiceDaemon,
+    service_type: &str,
+) -> Result<mdns_sd::Receiver<ServiceEvent>, Error> {
+    let mut attempts = 0;
+    loop {
+        match daemon.browse(service_type) {
+            Ok(rx) => return Ok(rx),
+            Err(Error::Again) if attempts < BROWSE_RETRY_ATTEMPTS => {
+                attempts += 1;
+                tokio::time::sleep(BROWSE_RETRY_DELAY).await;
+            }
+            Err(e) => {
+                eprintln!("[mdns] giving up browsing {service_type} after {attempts} retries: {e}");
+                return Err(e);
+            }
+        }
+    }
+}
+
+fn spawn_service_type_browse(
+    mdns: ServiceDaemon,
+    service_type: String,
+    state: Arc<RwLock<AppState>>,
+    notification_sender: flume::Sender<Notification>,
+    failure_metric_key: &'static str,
+    display_failure: bool,
+) {
+    tokio::spawn(async move {
+        if let Err(e) = start_browsing_service_type(
+            &mdns,
+            &service_type,
+            Arc::clone(&state),
+            notification_sender.clone(),
+        )
+        .await
+        {
+            eprintln!("[mdns] giving up browsing {service_type}: {e}");
+            let mut state = state.write().await;
+            handle_browse_failure(
+                &service_type,
+                &mut state,
+                notification_sender,
+                failure_metric_key,
+                display_failure,
+                &e,
+            )
+            .await;
+        }
+    });
+}
+
+async fn handle_browse_failure(
     service_type: &str,
     state: &mut AppState,
     notification_sender: flume::Sender<Notification>,
     failure_metric_key: &str,
+    display_failure: bool,
+    error: &Error,
 ) {
     state.remove_service_type(service_type);
     state.update_metric(failure_metric_key);
+    if display_failure {
+        let msg = format!("Failed to browse {}: {}", service_type, error);
+        *state.status_message.lock().await = msg;
+    }
     let _ = notification_sender.send(Notification::ServiceChanged);
 }
 
@@ -2738,22 +2823,14 @@ pub async fn run_tui(
                     state_write.update_metric("user_service_types_added");
                     let _ = notification_sender_clone.send(Notification::ServiceChanged);
                     if let Some(ref mdns_ref) = mdns {
-                        match start_browsing_service_type(
-                            mdns_ref,
-                            service_type,
+                        spawn_service_type_browse(
+                            mdns_ref.clone(),
+                            service_type.clone(),
                             Arc::clone(&state_clone),
                             notification_sender_clone.clone(),
-                        ) {
-                            Ok(_) => {} // Successfully started browsing
-                            Err(_) => {
-                                handle_browse_failure(
-                                    service_type,
-                                    &mut state_write,
-                                    notification_sender_clone.clone(),
-                                    "user_requested_service_browse_failures",
-                                );
-                            }
-                        }
+                            "user_requested_service_browse_failures",
+                            true,
+                        );
                     }
                 }
             }
@@ -2793,7 +2870,7 @@ pub async fn run_tui(
         if state.read().await.user_service_types.is_empty() {
             // Browse for all service types
             if let Some(ref mdns_ref) = mdns {
-                let receiver = mdns_ref.browse(MDNS_SD_META_SERVICE)?;
+                let receiver = browse_with_retry(mdns_ref, MDNS_SD_META_SERVICE).await?;
 
                 let mdns = mdns.clone();
                 tokio::spawn(async move {
@@ -2820,22 +2897,14 @@ pub async fn run_tui(
                                         let _ = notification_sender_clone
                                             .send(Notification::ServiceChanged);
                                         if let Some(ref mdns_ref) = mdns {
-                                            match start_browsing_service_type(
-                                                mdns_ref,
-                                                &service_type,
+                                            spawn_service_type_browse(
+                                                mdns_ref.clone(),
+                                                service_type.clone(),
                                                 Arc::clone(&state_clone),
                                                 notification_sender_clone.clone(),
-                                            ) {
-                                                Ok(_) => {} // Successfully started browsing
-                                                Err(_) => {
-                                                    handle_browse_failure(
-                                                        &service_type,
-                                                        &mut state,
-                                                        notification_sender_clone.clone(),
-                                                        "discovered_service_browse_failures",
-                                                    );
-                                                }
-                                            }
+                                                "discovered_service_browse_failures",
+                                                false,
+                                            );
                                         }
                                     }
                                 }
@@ -2926,30 +2995,62 @@ pub async fn run_tui(
                                         }
                                         let _ = notification_sender.send(Notification::ServiceChanged);
                                     } else if let Some(ref mdns_ref) = mdns {
-                                        match start_browsing_service_type(
-                                            mdns_ref,
-                                            &normalized,
-                                            state_arc,
-                                            notification_sender.clone(),
-                                        ) {
-                                            Ok(_) => {
-                                                state.add_service_type(&normalized);
-                                                if state.user_service_types.insert(normalized.clone()) {
-                                                    state.update_metric("user_service_types_added");
+                                        // Reserve the normalized service type atomically before
+                                        // spawning the browse task, preventing duplicate in-flight
+                                        // browse submissions for the same type.
+                                        if state.reserve_service_type(&normalized) {
+                                            let mdns_inner = mdns_ref.clone();
+                                            let normalized_inner = normalized.clone();
+                                            let state_arc_inner = Arc::clone(&state_arc);
+                                            let sender_inner = notification_sender.clone();
+                                            tokio::spawn(async move {
+                                                match start_browsing_service_type(
+                                                    &mdns_inner,
+                                                    &normalized_inner,
+                                                    state_arc_inner.clone(),
+                                                    sender_inner.clone(),
+                                                )
+                                                .await
+                                                {
+                                                    Ok(_) => {
+                                                        let mut state =
+                                                            state_arc_inner.write().await;
+                                                        state.commit_service_type(
+                                                            &normalized_inner,
+                                                        );
+                                                        if state
+                                                            .user_service_types
+                                                            .insert(normalized_inner.clone())
+                                                        {
+                                                            state.update_metric(
+                                                                "user_service_types_added",
+                                                            );
+                                                        }
+                                                        let _ = sender_inner
+                                                            .send(Notification::ServiceChanged);
+                                                    }
+                                                    Err(e) => {
+                                                        let mut state =
+                                                            state_arc_inner.write().await;
+                                                        // Remove only the pending reservation so a
+                                                        // failed browse cannot remove a type that a
+                                                        // concurrent successful browse already
+                                                        // committed into service_types.
+                                                        state.clear_pending_service_type(
+                                                            &normalized_inner,
+                                                        );
+                                                        handle_browse_failure(
+                                                            &normalized_inner,
+                                                            &mut state,
+                                                            sender_inner,
+                                                            "user_requested_service_browse_failures",
+                                                            true,
+                                                            &e,
+                                                        )
+                                                        .await;
+                                                    }
                                                 }
-                                                let _ = notification_sender.send(Notification::ServiceChanged);
-                                            }
-                                            Err(e) => {
-                                                handle_browse_failure(
-                                                    &normalized,
-                                                    &mut state,
-                                                    notification_sender.clone(),
-                                                    "user_requested_service_browse_failures",
-                                                );
-                                                let msg =
-                                                    format!("Failed to browse {}: {}", normalized, e);
-                                                *state.status_message.lock().await = msg;
-                                            }
+                                            });
                                         }
                                     }
                                 }
