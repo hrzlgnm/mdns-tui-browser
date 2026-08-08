@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.3...HEAD)
 
+### Changed
+
+- Use GitHub API digest for homebrew checksums (#528) ([#528](https://github.com/hrzlgnm/mdns-tui-browser/pull/528))
+
+- *(ci)* Auto-approve workflow runs of github-actions[bot] PRs (#529) ([#529](https://github.com/hrzlgnm/mdns-tui-browser/pull/529))
+
 ### Dependencies
 
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to de0c834 (#523) ([#523](https://github.com/hrzlgnm/mdns-tui-browser/pull/523))
 
 - *(deps)* Update swatinem/rust-cache digest to 6323deb (#525) ([#525](https://github.com/hrzlgnm/mdns-tui-browser/pull/525))
+
+- *(deps)* Update rust crate clap to v4.6.6 (#526) ([#526](https://github.com/hrzlgnm/mdns-tui-browser/pull/526))
 
 ## [1.32.3] - 2026-08-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.2...v1.32.3)
 
