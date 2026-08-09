@@ -5,13 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.3...HEAD)
+## [1.33.1] - 2026-08-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.33.0...v1.33.1)
+
+### Added
+
+- *(aur)* Add local helper to test AUR packaging against latest release (#537) ([#537](https://github.com/hrzlgnm/mdns-tui-browser/pull/537))
+
+### Changed
+
+- Document AUR packaging tests (#540) ([#540](https://github.com/hrzlgnm/mdns-tui-browser/pull/540))
+
+### Dependencies
+
+- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to a767676 (#536) ([#536](https://github.com/hrzlgnm/mdns-tui-browser/pull/536))
+
+### Fixed
+
+- Retry browse when mdns-sd command queue is full (#535) ([#535](https://github.com/hrzlgnm/mdns-tui-browser/pull/535))
+
+## [1.33.0] - 2026-08-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.3...v1.33.0)
 
 ### Changed
 
 - Use GitHub API digest for homebrew checksums (#528) ([#528](https://github.com/hrzlgnm/mdns-tui-browser/pull/528))
-
-- *(ci)* Auto-approve workflow runs of github-actions[bot] PRs (#529) ([#529](https://github.com/hrzlgnm/mdns-tui-browser/pull/529))
 
 ### Dependencies
 
@@ -20,6 +36,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(deps)* Update swatinem/rust-cache digest to 6323deb (#525) ([#525](https://github.com/hrzlgnm/mdns-tui-browser/pull/525))
 
 - *(deps)* Update rust crate clap to v4.6.6 (#526) ([#526](https://github.com/hrzlgnm/mdns-tui-browser/pull/526))
+
+### Fixed
+
+- *(aur)* Sync cargo version to pkgver before build (#532) ([#532](https://github.com/hrzlgnm/mdns-tui-browser/pull/532))
+
+- *(release)* Order release notes sections consistently (#533) ([#533](https://github.com/hrzlgnm/mdns-tui-browser/pull/533))
+
+### Maintenance
+
+- *(ci)* Auto-approve workflow runs of github-actions[bot] PRs (#529) ([#529](https://github.com/hrzlgnm/mdns-tui-browser/pull/529))
+
+- *(ci)* Publish releases on tag push (#531) ([#531](https://github.com/hrzlgnm/mdns-tui-browser/pull/531))
+
+- *(ci)* Disambiguate musl deb filenames to prevent upload race (#534) ([#534](https://github.com/hrzlgnm/mdns-tui-browser/pull/534))
 
 ## [1.32.3] - 2026-08-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.32.2...v1.32.3)
 
@@ -67,8 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- *(ci)* Run changelog update on a nightly schedule (#494) ([#494](https://github.com/hrzlgnm/mdns-tui-browser/pull/494))
-
 - Create changelog PR as verified github-actions bot (#497) ([#497](https://github.com/hrzlgnm/mdns-tui-browser/pull/497))
 
 - Include dependencies in changelog (#503) ([#503](https://github.com/hrzlgnm/mdns-tui-browser/pull/503))
@@ -96,6 +124,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Revert changelog PR to github-actions bot author (#500) ([#500](https://github.com/hrzlgnm/mdns-tui-browser/pull/500))
 
 - *(release)* Delete pre-existing draft releases before drafting (#507) ([#507](https://github.com/hrzlgnm/mdns-tui-browser/pull/507))
+
+### Maintenance
+
+- *(ci)* Run changelog update on a nightly schedule (#494) ([#494](https://github.com/hrzlgnm/mdns-tui-browser/pull/494))
 
 ## [1.30.21] - 2026-07-26 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.30.20...v1.30.21)
 
@@ -699,7 +731,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Documentation block for run_tui (#268) ([#268](https://github.com/hrzlgnm/mdns-tui-browser/pull/268))
 
-### Miscellaneous
+### Maintenance
 
 - Add actionlint validation step to CI workflow (#262) ([#262](https://github.com/hrzlgnm/mdns-tui-browser/pull/262))
 
@@ -833,7 +865,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Pin actions/attest action to 59d8942 (#222) ([#222](https://github.com/hrzlgnm/mdns-tui-browser/pull/222))
 
-### Miscellaneous
+### Maintenance
 
 - Update attest-build-provenance to actions/attest@v4 (#221) ([#221](https://github.com/hrzlgnm/mdns-tui-browser/pull/221))
 
@@ -900,6 +932,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(deps)* Update rust crate clap to v4.5.60 (#194) ([#194](https://github.com/hrzlgnm/mdns-tui-browser/pull/194))
 
 - *(deps)* Update dependency cargo-nextest to v0.9.128 (#196) ([#196](https://github.com/hrzlgnm/mdns-tui-browser/pull/196))
+
+### Maintenance
+
+- *(ci)* Use environment variables for shell command interpolation (#195) ([#195](https://github.com/hrzlgnm/mdns-tui-browser/pull/195))
 
 ## [1.22.0] - 2026-02-17 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.21.3...v1.22.0)
 
@@ -1195,13 +1231,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update hrzlgnm/actions action to v1.6.6 (#131) ([#131](https://github.com/hrzlgnm/mdns-tui-browser/pull/131))
 
-## [1.13.0] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.13.0)
+## [1.13.0] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.3...v1.13.0)
 
 ### Changed
 
 - Don't scream the project name in man page (#127) ([#127](https://github.com/hrzlgnm/mdns-tui-browser/pull/127))
 
 - Remove redundant duration field from ServiceSession (#128) ([#128](https://github.com/hrzlgnm/mdns-tui-browser/pull/128))
+
+## [1.12.2] - 2026-02-07 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.12.1...v1.12.2)
 
 ### Fixed
 
@@ -1587,8 +1625,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Extract version from Cargo.toml (#24) ([#24](https://github.com/hrzlgnm/mdns-tui-browser/pull/24))
 
-- *(ci)* Attempt to fix bump version workflow (#25) ([#25](https://github.com/hrzlgnm/mdns-tui-browser/pull/25))
-
 - Fix build-reusable workflow (#26) ([#26](https://github.com/hrzlgnm/mdns-tui-browser/pull/26))
 
 ### Dependencies
@@ -1606,5 +1642,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handle service type removal more thoroughly (#21) ([#21](https://github.com/hrzlgnm/mdns-tui-browser/pull/21))
 
 - Skip service subtypes in service type enumeration (#22) ([#22](https://github.com/hrzlgnm/mdns-tui-browser/pull/22))
+
+### Maintenance
+
+- *(ci)* Attempt to fix bump version workflow (#25) ([#25](https://github.com/hrzlgnm/mdns-tui-browser/pull/25))
 
 
