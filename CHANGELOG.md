@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.33.1...HEAD)
 
+### Changed
+
+- Document immutable releases (#544) ([#544](https://github.com/hrzlgnm/mdns-tui-browser/pull/544))
+
 ### Dependencies
 
 - *(deps)* Lock file maintenance (#542) ([#542](https://github.com/hrzlgnm/mdns-tui-browser/pull/542))
