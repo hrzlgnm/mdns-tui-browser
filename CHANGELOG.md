@@ -19,9 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update rust crate mdns-sd to 0.21 (#549) ([#549](https://github.com/hrzlgnm/mdns-tui-browser/pull/549))
 
+- *(deps)* Update hrzlgnm/actions action to v2.6.0 (#552) ([#552](https://github.com/hrzlgnm/mdns-tui-browser/pull/552))
+
 ### Maintenance
 
 - Trigger bot PR workflow approval on pull_request to main (#546) ([#546](https://github.com/hrzlgnm/mdns-tui-browser/pull/546))
+
+- Approve bot PR workflow runs via reusable workflow (#551) ([#551](https://github.com/hrzlgnm/mdns-tui-browser/pull/551))
+
+- Restore required branch input for approve-bot-pr call (#553) ([#553](https://github.com/hrzlgnm/mdns-tui-browser/pull/553))
 
 ## [1.33.1] - 2026-08-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.33.0...v1.33.1)
 
