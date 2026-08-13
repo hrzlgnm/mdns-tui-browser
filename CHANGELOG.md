@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 7060a98 (#547) ([#547](https://github.com/hrzlgnm/mdns-tui-browser/pull/547))
 
+- *(deps)* Update rust crate mdns-sd to 0.21 (#549) ([#549](https://github.com/hrzlgnm/mdns-tui-browser/pull/549))
+
 ### Maintenance
 
 - Trigger bot PR workflow approval on pull_request to main (#546) ([#546](https://github.com/hrzlgnm/mdns-tui-browser/pull/546))
