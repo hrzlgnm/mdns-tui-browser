@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 28b4f11 (#556) ([#556](https://github.com/hrzlgnm/mdns-tui-browser/pull/556))
 
+- *(deps)* Lock file maintenance (#558) ([#558](https://github.com/hrzlgnm/mdns-tui-browser/pull/558))
+
 ## [1.34.0] - 2026-08-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.33.1...v1.34.0)
 
 ### Changed
