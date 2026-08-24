@@ -31,7 +31,8 @@ const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
-const MAX_SERVICES_LIST_SIZE: usize = 5;
+const MIN_SERVICES_LIST_SIZE: usize = 5;
+const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.2;
 const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
 const BROWSE_RETRY_ATTEMPTS: usize = 100;
 
@@ -829,6 +830,8 @@ impl AppState {
         let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
 
         // Update state with current visible counts
+        let prev_offset = self.services_scroll.offset;
+        let prev_visible = self.services_scroll.visible_items;
         self.types_scroll.visible_items = visible_counts.types;
         self.services_scroll.visible_items = visible_counts.services;
 
@@ -852,6 +855,14 @@ impl AppState {
             // Ensure offset doesn't go negative
             if self.services_scroll.offset > self.selected_service {
                 self.services_scroll.offset = self.selected_service;
+            }
+            // If the list bottom was visible before the resize (e.g. the user
+            // was scrolled to the end), re-pin the window to the bottom when the
+            // terminal grows again so the selected service stays at the end.
+            let was_at_bottom = prev_offset + prev_visible >= filtered_len;
+            let max_offset = filtered_len.saturating_sub(self.services_scroll.visible_items);
+            if was_at_bottom && self.services_scroll.offset > max_offset {
+                self.services_scroll.offset = max_offset;
             }
         }
     }
@@ -1911,6 +1922,11 @@ fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 
         .clamp(min_width, max_width)
 }
 
+fn max_services_list_size(available_height: u16) -> usize {
+    let adaptive = (available_height as f32 * SERVICES_LIST_HEIGHT_FRACTION) as usize;
+    adaptive.max(MIN_SERVICES_LIST_SIZE)
+}
+
 fn create_main_layout(
     area: ratatui::layout::Rect,
     has_filter_status: bool,
@@ -1929,7 +1945,7 @@ fn create_main_layout(
         .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
-    let services_height = (services_count.min(MAX_SERVICES_LIST_SIZE) + 2) as u16;
+    let services_height = (services_count.min(max_services_list_size(main_area.height)) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
@@ -1958,9 +1974,7 @@ fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> Visib
     let available_services_height = (layout.services_area.height as usize).saturating_sub(2);
     VisibleCounts {
         types: (layout.left_panel.height as usize).saturating_sub(2), // Account for borders
-        services: available_services_height
-            .min(services_count)
-            .min(MAX_SERVICES_LIST_SIZE),
+        services: available_services_height.min(services_count),
     }
 }
 
@@ -1977,7 +1991,7 @@ fn create_filter_input_layout(
         .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
         .split(main_area);
 
-    let services_height = (services_count.min(MAX_SERVICES_LIST_SIZE) + 2) as u16;
+    let services_height = (services_count.min(max_services_list_size(main_area.height)) + 2) as u16;
     let services_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
@@ -5688,7 +5702,7 @@ mod tests {
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
-        assert_eq!(counts.services, MAX_SERVICES_LIST_SIZE);
+        assert_eq!(counts.services, max_services_list_size(50));
     }
 
     #[test]
@@ -5697,7 +5711,7 @@ mod tests {
         let layout = create_main_layout(area, false, 20, 20);
         let counts = calculate_visible_counts(&layout, 20);
 
-        assert_eq!(counts.services, MAX_SERVICES_LIST_SIZE);
+        assert_eq!(counts.services, max_services_list_size(50));
     }
 
     #[test]
@@ -5721,7 +5735,7 @@ mod tests {
         let counts = calculate_visible_counts(&layout, 20);
 
         assert!(counts.types > 0);
-        assert!(counts.services <= MAX_SERVICES_LIST_SIZE);
+        assert!(counts.services <= max_services_list_size(10));
     }
 
     #[test]
@@ -5779,6 +5793,54 @@ mod tests {
             "selected_service ({}) should be < scroll offset + visible items ({})",
             state.selected_service,
             state.services_scroll.offset + state.services_scroll.visible_items
+        );
+    }
+
+    #[test]
+    fn test_scroll_offset_stays_at_end_after_shrink_expand() {
+        let mut state = create_test_app_state();
+        for i in 0..30 {
+            let service =
+                create_test_service(&format!("service-{}", i), "_http._tcp.local.", 80 + i);
+            state.add_or_update_service(service);
+        }
+
+        let total = 30usize;
+        let last = total - 1;
+        state.selected_service = last;
+
+        let tall = ratatui::layout::Rect::new(0, 0, 100, 60);
+        let short = ratatui::layout::Rect::new(0, 0, 100, 20);
+
+        // Start at the end of a tall terminal
+        state.services_scroll.offset = 10;
+        state.services_scroll.visible_items = max_services_list_size(60);
+        state.prepare_for_rendering(tall);
+        let tall_visible = state.services_scroll.visible_items;
+        assert_eq!(
+            state.services_scroll.offset,
+            total.saturating_sub(tall_visible),
+            "should start pinned to the bottom"
+        );
+
+        // Shrink the terminal
+        state.prepare_for_rendering(short);
+        let short_visible = state.services_scroll.visible_items;
+        assert_eq!(state.selected_service, last);
+        assert_eq!(
+            state.services_scroll.offset,
+            total.saturating_sub(short_visible),
+            "should remain pinned to the bottom when shrunk"
+        );
+
+        // Expand the terminal again - must return to the bottom, not the middle
+        state.prepare_for_rendering(tall);
+        let tall_visible2 = state.services_scroll.visible_items;
+        assert_eq!(state.selected_service, last);
+        assert_eq!(
+            state.services_scroll.offset,
+            total.saturating_sub(tall_visible2),
+            "selected service should be re-pinned to the bottom after expand"
         );
     }
 
