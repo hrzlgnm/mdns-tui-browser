@@ -32,6 +32,7 @@ const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MIN_SERVICES_LIST_SIZE: usize = 5;
+const SERVICES_LIST_SCALE_THRESHOLD: u16 = 40;
 const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.3;
 const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
 const BROWSE_RETRY_ATTEMPTS: usize = 100;
@@ -1921,6 +1922,12 @@ fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 
 }
 
 fn max_services_list_size(available_height: u16) -> usize {
+    // Terminals up to SERVICES_LIST_SCALE_THRESHOLD lines keep the fixed
+    // minimum so the services list matches the old default; taller terminals
+    // scale to a share of the height so more services are visible.
+    if available_height <= SERVICES_LIST_SCALE_THRESHOLD {
+        return MIN_SERVICES_LIST_SIZE;
+    }
     let adaptive = (available_height as f32 * SERVICES_LIST_HEIGHT_FRACTION) as usize;
     adaptive.max(MIN_SERVICES_LIST_SIZE)
 }
