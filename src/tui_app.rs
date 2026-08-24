@@ -32,7 +32,7 @@ const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MIN_SERVICES_LIST_SIZE: usize = 5;
-const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.35;
+const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.3;
 const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
 const BROWSE_RETRY_ATTEMPTS: usize = 100;
 
