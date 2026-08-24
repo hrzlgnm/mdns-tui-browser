@@ -100,4 +100,4 @@ jobs:
             echo "No checksum files to upload"
             exit 1
           fi
-          gh release upload "$TAG" "${CHECKSUMS[@]}" --clobber
+          gh release upload "$TAG" "${CHECKSUMS[@]}" --clobber --repo "$GITHUB_REPOSITORY"
