@@ -338,6 +338,7 @@ The manpage should contain only essential usage information without excessive de
 ## Common Pitfalls to Avoid
 
 - **Never** use `unsafe` code - this will cause CI to fail
+- **Never** persist GitHub credentials in Actions checkouts - set `persist-credentials: false` on `actions/checkout` unless the job pushes to the repo
 - **Never** add `#[allow(warnings)]` attributes to suppress warnings - fix the underlying issues instead
 - **Never** rewrite published history with `git commit --amend` - use `git commit --fixup` for iterations (see [Commits and Pull Requests](#commits-and-pull-requests)). Leave squashing to the user; don't run `git rebase --autosquash` or `--amend` fixups into their targets.
 - **Always** format code before committing
