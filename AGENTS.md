@@ -167,9 +167,117 @@ src/
  9. Run renovate config validator if `.github/renovate.json5` was modified
 10. Test the application manually with `cargo run`
 11. If README.md was updated, update the manpage (`docs/mdns-tui-browser.1`)
-12. Commit only when all checks pass
+12. Commit logical units of work as you go, once all checks pass (see [Commits and Pull Requests](#commits-and-pull-requests))
 13. Use conventional commit format (e.g., `feat:`, `fix:`, `docs:`) for commit messages
 14. **REQUIRED**: After committing, immediately push the branch and create a pull request - do not wait for the user to ask
+
+## Commits and Pull Requests
+
+These conventions are shared across repositories. They describe the standing
+authorization to commit as you go and the structure expected of every commit.
+
+### Branches and PRs
+- Conventional commits: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, etc.
+- Tags follow `vMAJOR.MINOR.PATCH`.
+- All changes land via pull requests on a branch; direct pushes to `main` are
+  blocked. Create a `feat/...`, `fix/...`, etc. branch and open a PR. After
+  committing, push and open the PR without waiting to be asked.
+- PRs are squash-merged, so the fine-grained structure below exists for review
+  clarity, not for the final history.
+
+### When to commit
+- Do not leave completed work uncommitted. Once a logical unit of work is done
+  and the tree is green, commit it — don't wait to be asked. This is a standing
+  authorization: treat every task as implicitly including "and commit your
+  work" unless the user says otherwise.
+- Commit as you go, not all at once at the end. If a task naturally splits into
+  an independent prep refactor plus a behavior change, that's two (or more)
+  commits made in that order. Tests for a behavior change belong in the same
+  commit as the change itself, not a separate one.
+
+### How to structure commits
+- Prefer a fine-grained history. Commits should be as small as possible while
+  still meaningful and self-contained.
+- Every commit must compile and pass all tests. No "WIP" commits, and no commits
+  that leave the tree broken pending a follow-up.
+- Every commit must be formatted and lint-clean: run `cargo fmt`,
+  `cargo clippy --tests -- -D warnings`, and `cargo nextest run --profile ci`
+  before committing. Don't introduce a warning in one commit and rely on a later
+  commit to clean it up.
+- Commit messages explain *why*, not *what*. The diff already shows what
+  changed; the message should capture the motivation, the constraint, or the bug
+  being fixed. If the reason is obvious from a one-line subject, no body is
+  needed — but never paraphrase the diff.
+- Separate preparatory refactors from behavior changes. If a fix or feature is
+  easier to review after a refactor, land the refactor in its own commit first.
+  The commit that changes behavior should be as small as possible. This applies
+  even when the refactor only becomes apparent mid-change.
+- Wrap the message body at 72 characters. The subject may run up to ~80
+  characters.
+
+### Attributing AI usage
+- Every commit gets both trailers in a trailer block after a blank line. Use
+  `--trailer` on the command line so no wrapping or manual formatting is needed:
+  - `Co-authored-by: opencode <noreply@opencode.ai>`
+  - `Assisted-by: opencode (<model-name>)`
+- Trailers are exempt from the 72-character body wrap.
+- Never use `--author` or `--committer` for attribution; release-notes tooling
+  derives the credited user from the commit author, so doing so would replace
+  the user with the bot throughout the release notes.
+
+### Iterate with fixup!/amend! commits
+- When refining already-committed work, create a fixup against the target
+  (`git commit --fixup=<sha>`) so it sits alongside its target, ready for the
+  user to fold in with `git rebase --autosquash`. Don't pile follow-up commits
+  on top intending to squash them later.
+- Even when the target is HEAD, use `git commit --fixup`, not
+  `git commit --amend`. A bare `--amend` rewrites history on the spot and skips
+  the reviewable checkpoint a fixup provides.
+- If a change would make the target's message inaccurate, use
+  `git commit --fixup=amend:<sha>` and revise the message in the prefilled
+  editor. The replacement message must repeat the subject as its first line
+  (`amend! <original subject>`) and then provide the new subject and body.
+- Never squash fixups yourself. Leave them in history as separate commits for
+  the user to review and fold in. Don't run `git rebase --autosquash` or
+  `--amend` them into their targets. Because this repo squash-merges PRs, a
+  target plus its fixups becomes one squashed commit at merge — the fixup
+  discipline is purely for review visibility.
+
+## Engineering Norms
+
+### Surfacing decisions
+When a decision surfaces while implementing — a design choice, a tradeoff, a
+scope cut, or an unforeseen bug, race, or wrong assumption — stop and lay out
+the options and your recommendation; let the user weigh in. Obvious mechanical
+choices with one sensible answer don't need a checkpoint, but genuine forks do:
+ones where a reasonable person might pick differently, or where you'd trade away
+something the plan assumed (scope, UX, performance, …). This applies to
+discoveries too — finding a latent bug is itself the fork: whether to fix it
+here or in a separate change is the user's call to make with you.
+
+### Don't present "live with the bug" as an option
+When investigating a defect and laying out fix options, "accept the race / leave
+it as-is / document it and move on" is not a valid option. A known race
+condition, data corruption, or correctness violation needs a real fix. If a real
+fix is genuinely out of reach, say so plainly rather than dressing "no fix" up
+as a viable choice.
+
+### Prefer the cleaner design over the smaller diff
+When a task could be implemented either by tacking onto existing code or by
+first restructuring it slightly, choose the restructuring. "Minimal change" is
+not a goal in itself; a readable final state is. The prep-refactor-then-behavior
+change pattern exists for exactly this. This is not license for speculative
+abstraction — but if the current change would be clearer after extracting a
+method, splitting a function, or adjusting names, that refactor is part of the
+task, not an optional extra.
+
+### Code comments
+Comments explain *why* the code is shaped this way, not the path taken during
+development (what was tried first, what's "cleaner" than the old approach). The
+iteration story belongs in the commit message, not the code. Before writing a
+comment, ask: would I have written this if writing the file from scratch with no
+diff in mind? If not, it belongs in the commit message. Also avoid justifying
+routine call sites: if neighboring call sites are bare, match them.
 
 ## Packaging
 
@@ -189,7 +297,16 @@ Run these commands from the repository root:
 - Use `--no-install` to skip installing the `-bin` package, and `--no-cleanup` or `--keep-dir=<path>` to retain build artifacts for debugging.
 
 ### Changelog Inclusion
-When adding or modifying packaging configurations, ensure `CHANGELOG.md` is included:
+
+`CHANGELOG.md` is generated automatically by `git-cliff` from the conventional
+commit messages (configured in `cliff.toml` and `.github/cliff-release.toml`).
+**Never edit `CHANGELOG.md` by hand** — a correct conventional commit (see
+[Commits and Pull Requests](#commits-and-pull-requests)) is the only input that
+drives the changelog. Do not add manual "Unreleased" entries; the release
+tooling derives them from commits at tag time.
+
+When adding or modifying packaging configurations, ensure `CHANGELOG.md` is
+included so the generated file ships with the package:
 - **Debian packages**: Set `changelog = "CHANGELOG.md"` in `Cargo.toml` `[package.metadata.deb]`
 - **AUR packages**: Install `CHANGELOG.md` to `/usr/share/doc/$pkgname/` in the `package()` function
 - **Release archives** (tar.gz/zip): Copy `CHANGELOG.md` into the staging directory in `build-reusable.yml`
@@ -222,7 +339,7 @@ The manpage should contain only essential usage information without excessive de
 
 - **Never** use `unsafe` code - this will cause CI to fail
 - **Never** add `#[allow(warnings)]` attributes to suppress warnings - fix the underlying issues instead
-- **Never** amend commits - commits will be squashed in GitHub, just create a new commit instead
+- **Never** rewrite published history with `git commit --amend` - use `git commit --fixup` for iterations (see [Commits and Pull Requests](#commits-and-pull-requests)). Leave squashing to the user; don't run `git rebase --autosquash` or `--amend` fixups into their targets.
 - **Always** format code before committing
 - **Always** run clippy and fix warnings (both debug and release)
 - **Don't** add dependencies without updating Cargo.toml properly
