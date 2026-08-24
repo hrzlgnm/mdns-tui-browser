@@ -86,7 +86,6 @@ jobs:
     needs: [validate_release_tag, create_release_draft]
     permissions:
       contents: write # to upload source checksums to release
-      actions: read # to access workflow run information and secrets
     name: 🔢 Generate Source Checksums
     uses: ./.github/workflows/source-checksums-reusable.yml
     secrets: inherit

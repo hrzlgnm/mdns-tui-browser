@@ -45,8 +45,8 @@ jobs:
             exit 1
           fi
 
-  generate_checksums:
-    name: 🔢☑️
+  checksums:
+    name: 🔢☑️ ${{ matrix.algorithm }}
     runs-on: ubuntu-slim
     needs:
       - tag
@@ -54,66 +54,50 @@ jobs:
       matrix:
         algorithm: [sha256]
     steps:
-      - name: 📥🔢☑️
+      - name: 📥 Download source archive
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
+          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
+
+      - name: 🔢 Compute ${{ matrix.algorithm }} checksums
         env:
           TAG: ${{ needs.tag.outputs.tag }}
           ALGORITHM: ${{ matrix.algorithm }}
         run: |
           set -o errexit
 
-           ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
-           case "$ALGORITHM" in
-             sha256|sha512|sha1|md5)
-               # Valid algorithm
-               ;;
-             *)
-               echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
-               exit 1
-               ;;
-           esac
+          ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
+          case "$ALGORITHM" in
+            sha256|sha512|sha1|md5)
+              # Valid algorithm
+              ;;
+            *)
+              echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
+              exit 1
+              ;;
+          esac
 
           CMD="${ALGORITHM}sum"
 
-          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
-          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
-          for file in *; do
-            if [ -f "$file" ] && [[ ! "$file" =~ \.sha ]]; then
-              "$CMD" "$file" > "$file.$ALGORITHM"
-            fi
+          for file in *.tar.gz *.zip; do
+            [ -f "$file" ] || continue
+            "$CMD" "$file" > "$file.$ALGORITHM"
           done
-      - name: 📤
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ${{ matrix.algorithm }}-source-checksums
-          path: "*.${{ matrix.algorithm }}"
 
-  publish:
-    name: 📰🔢☑️
-    runs-on: ubuntu-slim
-    needs:
-      - tag
-      - generate_checksums
-    steps:
-      - name: 🔄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-
-      - name: 📥 artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-
-      - name: 📰🔢☑️
-        shell: bash
+      - name: 📰 Upload checksums to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.tag.outputs.tag }}
+          ALGORITHM: ${{ matrix.algorithm }}
         run: |
           CHECKSUMS=()
           while IFS= read -r -d '' file; do
             CHECKSUMS+=("$file")
-          done < <(find . -type f -name '*.sha*' -print0)
+          done < <(find . -type f -name "*.${ALGORITHM}" -print0)
           if [ "${#CHECKSUMS[@]}" -eq 0 ]; then
             echo "No checksum files to upload"
-            exit 0
+            exit 1
           fi
           gh release upload "$TAG" "${CHECKSUMS[@]}" --clobber
