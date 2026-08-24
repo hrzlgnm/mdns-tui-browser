@@ -830,8 +830,6 @@ impl AppState {
         let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
 
         // Update state with current visible counts
-        let prev_offset = self.services_scroll.offset;
-        let prev_visible = self.services_scroll.visible_items;
         self.types_scroll.visible_items = visible_counts.types;
         self.services_scroll.visible_items = visible_counts.services;
 
@@ -856,12 +854,12 @@ impl AppState {
             if self.services_scroll.offset > self.selected_service {
                 self.services_scroll.offset = self.selected_service;
             }
-            // If the list bottom was visible before the resize (e.g. the user
-            // was scrolled to the end), re-pin the window to the bottom when the
-            // terminal grows again so the selected service stays at the end.
-            let was_at_bottom = prev_offset + prev_visible >= filtered_len;
+            // Clamp the offset to the maximum so the window never starts past
+            // the end of the list. This keeps non-bottom offsets within the
+            // valid viewport and re-pins to the bottom when the list bottom was
+            // visible (e.g. after a terminal expand while scrolled to the end).
             let max_offset = filtered_len.saturating_sub(self.services_scroll.visible_items);
-            if was_at_bottom && self.services_scroll.offset > max_offset {
+            if self.services_scroll.offset > max_offset {
                 self.services_scroll.offset = max_offset;
             }
         }
