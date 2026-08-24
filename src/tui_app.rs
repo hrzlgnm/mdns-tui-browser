@@ -32,7 +32,7 @@ const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MIN_SERVICES_LIST_SIZE: usize = 5;
-const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.2;
+const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.35;
 const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
 const BROWSE_RETRY_ATTEMPTS: usize = 100;
 
@@ -5700,7 +5700,9 @@ mod tests {
 
         assert!(counts.types > 0);
         assert!(counts.services > 0);
-        assert_eq!(counts.services, max_services_list_size(50));
+        // Only 10 services exist, so all of them are visible rather than the
+        // adaptive maximum for this terminal height.
+        assert_eq!(counts.services, 10.min(max_services_list_size(50)));
     }
 
     #[test]
