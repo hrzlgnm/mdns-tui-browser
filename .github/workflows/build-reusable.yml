@@ -37,6 +37,17 @@ jobs:
         with:
           artifact-name: "sbom-${{ matrix.family }}"
 
+      - name: 🚀 Upload SBOM to release
+        if: ${{ inputs.tagName }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tagName }}
+        run: |
+          cp sbom.spdx.json "sbom-${{ matrix.family }}.spdx.json"
+          gzip -f "sbom-${{ matrix.family }}.spdx.json"
+          gh release upload "$TAG_NAME" "sbom-${{ matrix.family }}.spdx.json.gz" --clobber
+
   build:
     needs: [sbom]
     strategy:
