@@ -15,7 +15,29 @@ on:
         type: string
 
 jobs:
+  sbom:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - family: unix
+            os: ubuntu-latest
+          - family: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+
+      - name: 📜 Create and 🔍 scan SBOM for vulnerabilities
+        uses: ./.github/actions/sbom
+        with:
+          artifact-name: "sbom-${{ matrix.family }}"
+
   build:
+    needs: [sbom]
     strategy:
       fail-fast: false
       matrix:
@@ -80,10 +102,11 @@ jobs:
           fetch-depth: ${{ inputs.tagName && '0' || '1' }}
           ref: ${{ inputs.tagName || '' }}
 
-      - name: 📜 Create and 🔍 scan SBOM for vulnerabilities
-        uses: ./.github/actions/sbom
+      - name: 📥 Download SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          artifact-name: "sbom.${{ matrix.platform }}.spdx.json"
+          name: sbom-${{ contains(matrix.os, 'windows') && 'windows' || 'unix' }}
+          path: .
 
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
