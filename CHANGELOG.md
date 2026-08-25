@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.0...HEAD)
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.1...HEAD)
+
+### Maintenance
+
+- *(ci)* Keep credentials in update changelog workflow (#575) ([#575](https://github.com/hrzlgnm/mdns-tui-browser/pull/575))
+
+## [1.34.1] - 2026-08-24 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.0...v1.34.1)
+
+### Changed
+
+- Adopt commit/PR and changelog-automation conventions in AGENTS.md (#565) ([#565](https://github.com/hrzlgnm/mdns-tui-browser/pull/565))
+
+- Generate SBOM once per OS family instead of per platform (#571) ([#571](https://github.com/hrzlgnm/mdns-tui-browser/pull/571))
 
 ### Dependencies
 
@@ -16,6 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 8eda1e6 (#560) ([#560](https://github.com/hrzlgnm/mdns-tui-browser/pull/560))
 
 - *(deps)* Lock file maintenance (#562) ([#562](https://github.com/hrzlgnm/mdns-tui-browser/pull/562))
+
+- *(deps)* Update rust crate open to v5.4.2 (#566) ([#566](https://github.com/hrzlgnm/mdns-tui-browser/pull/566))
+
+- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 3bb1a10 (#569) ([#569](https://github.com/hrzlgnm/mdns-tui-browser/pull/569))
+
+### Fixed
+
+- Adaptive list height and scroll-offset clamp on resize (#564) ([#564](https://github.com/hrzlgnm/mdns-tui-browser/pull/564))
+
+- Disable coderabbit request changes workflow (#567) ([#567](https://github.com/hrzlgnm/mdns-tui-browser/pull/567))
+
+- Stop downloading all artifacts for source checksums (#568) ([#568](https://github.com/hrzlgnm/mdns-tui-browser/pull/568))
+
+- Resolve repo for gh release upload in source checksums (#570) ([#570](https://github.com/hrzlgnm/mdns-tui-browser/pull/570))
+
+- Locate downloaded SBOM before attesting (#572) ([#572](https://github.com/hrzlgnm/mdns-tui-browser/pull/572))
+
+- Publish the two canonical SBOMs as release assets (#573) ([#573](https://github.com/hrzlgnm/mdns-tui-browser/pull/573))
 
 ## [1.34.0] - 2026-08-13 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.33.1...v1.34.0)
 
