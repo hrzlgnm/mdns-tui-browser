@@ -243,6 +243,17 @@ authorization to commit as you go and the structure expected of every commit.
   target plus its fixups becomes one squashed commit at merge — the fixup
   discipline is purely for review visibility.
 
+## Code Review
+
+Review every change on two axes before it is treated as complete:
+
+- **Standards**: does the change conform to the coding standards documented in this file (and the Fowler smell baseline where the repo is silent)?
+- **Spec**: does the change faithfully implement the originating issue or spec — no missing requirements, no scope creep, no incorrectly implemented requirements?
+
+Run both axes as parallel sub-agents and report them separately; aggregate the findings, fix any defects, then proceed to push and open a PR. Use the `code-review` skill to drive this review.
+
+When additional changes land on a branch after its PR was already opened, update the PR description so it still reflects the cumulative set of changes (summary, issue references, testing performed) rather than only the original scope.
+
 ## Engineering Norms
 
 ### Surfacing decisions
