@@ -194,6 +194,13 @@ jobs:
             $BUILD_CMD build --release --target "$TARGET"
           fi
 
+      - name: 📝 Gzip changelog for deb
+        if: contains(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          mkdir -p target/debian
+          gzip -9 -c CHANGELOG.md > target/debian/changelog.gz
+
       - name: 📦 Build deb package
         if: contains(matrix.os, 'ubuntu')
         shell: bash

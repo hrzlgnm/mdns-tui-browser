@@ -9,18 +9,22 @@ description = "A TUI browser for mDNS service discovery"
 maintainer = "hrzlgnm"
 copyright = "Copyright 2026 hrzlgnm"
 license-file = "LICENSE"
-changelog = "CHANGELOG.md"
 depends = "libgcc-s1 (>= 4.2)"
 assets = [
+    [
+        "target/release/mdns-tui-browser",
+        "usr/bin/",
+        "755",
+    ],
     [
         "docs/mdns-tui-browser.1",
         "usr/share/man/man1/mdns-tui-browser.1",
         "644",
     ],
     [
-        "target/release/mdns-tui-browser",
-        "usr/bin/",
-        "755",
+        "target/debian/changelog.gz",
+        "usr/share/doc/mdns-tui-browser/changelog.gz",
+        "644",
     ],
 ]
 

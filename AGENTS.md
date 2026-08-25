@@ -307,7 +307,7 @@ tooling derives them from commits at tag time.
 
 When adding or modifying packaging configurations, ensure `CHANGELOG.md` is
 included so the generated file ships with the package:
-- **Debian packages**: Set `changelog = "CHANGELOG.md"` in `Cargo.toml` `[package.metadata.deb]`
+- **Debian packages**: Add `target/debian/changelog.gz` → `usr/share/doc/mdns-tui-browser/changelog.gz` as an asset in `Cargo.toml` `[package.metadata.deb]`. The build workflow gzip-compresses `CHANGELOG.md` before `cargo deb` runs. Do **not** use the `changelog` field — it expects Debian-format changelogs, not upstream markdown.
 - **AUR packages**: Install `CHANGELOG.md` to `/usr/share/doc/$pkgname/` in the `package()` function
 - **Release archives** (tar.gz/zip): Copy `CHANGELOG.md` into the staging directory in `build-reusable.yml`
 - **macOS DMGs**: Copy `CHANGELOG.md` into the app bundle's `Contents/Resources/`
