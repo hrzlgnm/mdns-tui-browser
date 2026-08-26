@@ -41,6 +41,7 @@ jobs:
           crate: cargo-nextest
           version: 0.9.143
           locked: true
+          cache-key: ${{ github.job }}
 
       - name: 🛠️🚀
         uses: ./.github/actions/setup-sccache
