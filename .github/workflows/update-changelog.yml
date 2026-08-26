@@ -34,6 +34,7 @@ jobs:
           crate: git-cliff
           version: 2.13.1
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 📝 Generate changelog
         run: git-cliff --output CHANGELOG.md

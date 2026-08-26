@@ -30,6 +30,7 @@ jobs:
           crate: cargo-edit
           version: 0.13.13
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🔧 Install komac
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
@@ -37,6 +38,7 @@ jobs:
           crate: komac
           version: 2.16.0
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🔧 Install cargo-auditable
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
@@ -44,6 +46,7 @@ jobs:
           crate: cargo-auditable
           version: 0.7.5
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🔧 Install cross
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
@@ -51,6 +54,7 @@ jobs:
           crate: cross
           version: 0.2.5
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🔧 Install git-cliff
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
@@ -58,6 +62,7 @@ jobs:
           crate: git-cliff
           version: 2.13.1
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
   cache-tools-platforms:
     strategy:
@@ -98,3 +103,4 @@ jobs:
           crate: cargo-auditable
           version: 0.7.5
           locked: true
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
