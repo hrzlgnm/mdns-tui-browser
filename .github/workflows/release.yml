@@ -54,7 +54,7 @@ jobs:
           crate: git-cliff
           version: 2.13.1
           locked: true
-          cache-key: ${{ github.job }}
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 📝 Update CHANGELOG.md with the new version
         run: |

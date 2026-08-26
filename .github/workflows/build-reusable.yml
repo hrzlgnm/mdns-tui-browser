@@ -153,7 +153,7 @@ jobs:
           crate: cargo-auditable
           version: 0.7.5
           locked: true
-          cache-key: ${{ github.job }}
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🛠️📦 cargo-deb
         if: contains(matrix.os, 'ubuntu')
@@ -162,7 +162,7 @@ jobs:
           crate: cargo-deb
           version: 3.7.0
           locked: true
-          cache-key: ${{ github.job }}
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🛠️ cross
         if: matrix.use_cross
@@ -171,7 +171,7 @@ jobs:
           crate: cross
           version: 0.2.5
           locked: true
-          cache-key: ${{ github.job }}
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🛠️🚀
         if: (!inputs.tagName)

@@ -47,7 +47,7 @@ jobs:
           crate: komac
           version: 2.16.0
           locked: true
-          cache-key: ${{ github.job }}
+          cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🆙 sync our fork of winget-pkgs
         env:
