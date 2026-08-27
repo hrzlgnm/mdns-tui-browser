@@ -5,6 +5,7 @@
 [![GitHub Release Date](https://img.shields.io/github/release-date/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/releases/latest)
 [![AUR Version](https://img.shields.io/aur/version/mdns-tui-browser)](https://aur.archlinux.org/packages/mdns-tui-browser)
 [![WinGet Package Version](https://img.shields.io/winget/v/hrzlgnm.mdns-tui-browser)](https://winstall.app/apps/hrzlgnm.mdns-tui-browser)
+[![mdns-tui-browser](https://snapcraft.io/mdns-tui-browser/badge.svg)](https://snapcraft.io/mdns-tui-browser)
 [![License: MIT](https://img.shields.io/github/license/hrzlgnm/mdns-tui-browser)](https://github.com/hrzlgnm/mdns-tui-browser/blob/main/LICENSE)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/hrzlgnm/mdns-tui-browser/ci.yml)](https://github.com/hrzlgnm/mdns-tui-browser/actions)
 # mDNS TUI Browser
