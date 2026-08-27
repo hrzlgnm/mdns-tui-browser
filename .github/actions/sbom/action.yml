@@ -1,5 +1,5 @@
 # Copyright 2026 hrzlgnm
-# SPDX-License-Identifier: MIT-0
+# SPDX-License-Identifier: MIT
 
 name: Create and scan SBOM action
 description: Creates and scans the sbom for security vulnerabilities
