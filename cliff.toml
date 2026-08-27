@@ -47,6 +47,7 @@ postprocessors = [
     { pattern = 'verision', replace = 'version' },
     { pattern = 'compileable', replace = 'compilable' },
     { pattern = 'thouroughly', replace = 'thoroughly' },
+    { pattern = 'feat/snap', replace = 'feat: snap' },
 ]
 
 [git]
