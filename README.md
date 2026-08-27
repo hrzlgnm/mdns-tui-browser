@@ -87,6 +87,8 @@ sudo snap install mdns-tui-browser
 
 This will install the latest version from the snap store and handle updates automatically with `snap refresh`.
 
+You can find the package on the [Snapcraft store](https://snapcraft.io/mdns-tui-browser).
+
 ### CLI Options
 
 ```bash
