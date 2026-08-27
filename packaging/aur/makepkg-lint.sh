@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 hrzlgnm
-# SPDX-License-Identifier: MIT-0
+# SPDX-License-Identifier: MIT
 
 set -e
 
