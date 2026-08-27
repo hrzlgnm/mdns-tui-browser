@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Require two-axis code review before completion (#578) ([#578](https://github.com/hrzlgnm/mdns-tui-browser/pull/578))
 
+- Streamline agent conventions (#581) ([#581](https://github.com/hrzlgnm/mdns-tui-browser/pull/581))
+
+### Fixed
+
+- Disable grype DB cache and make cargo-install keys unique (#580) ([#580](https://github.com/hrzlgnm/mdns-tui-browser/pull/580))
+
+### Maintenance
+
+- *(ci)* Install Rust toolchain before git-cliff cargo-install (#582) ([#582](https://github.com/hrzlgnm/mdns-tui-browser/pull/582))
+
 ## [1.34.2] - 2026-08-25 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.1...v1.34.2)
 
 ### Fixed
