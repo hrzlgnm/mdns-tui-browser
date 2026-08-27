@@ -1,0 +1,37 @@
+# Copyright 2026 hrzlgnm
+# SPDX-License-Identifier: MIT-0
+
+name: Publish snap to Snap Store
+
+on:
+  workflow_call:
+    inputs:
+      tagName:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tagName:
+        description: Upstream release tag to package, e.g. v1.34.2
+        required: true
+        type: string
+  release:
+    types: [released]
+
+jobs:
+  dispatch-snap-release:
+    runs-on: ubuntu-latest
+    env:
+      # A personal access token with workflow:write on the snap repo; the
+      # default GITHUB_TOKEN cannot trigger workflows in another repository.
+      GH_TOKEN: ${{ secrets.SNAP_REPO_TOKEN }}
+    steps:
+      - name: 🚀 Trigger snap build & publish
+        env:
+          TAG: ${{ inputs.tagName || github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml \
+            --repo hrzlgnm/mdns-tui-browser-snap \
+            -f tagName="$TAG"
+          echo "Dispatched snap release for $TAG"
