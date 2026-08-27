@@ -76,6 +76,19 @@ winget install hrzlgnm.mdns-tui-browser
 
 This will install the latest version from Winget Packages and handle updates automatically with your regular system updates.
 
+### Install using snap (Linux)
+
+You can install `mdns-tui-browser` from Snapcraft using `snap`:
+
+```console
+# Install using snap
+sudo snap install mdns-tui-browser
+```
+
+This will install the latest version from the snap store and handle updates automatically with `snap refresh`.
+
+You can find the package on the [Snapcraft store](https://snapcraft.io/mdns-tui-browser).
+
 ### CLI Options
 
 ```bash
