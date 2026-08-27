@@ -109,3 +109,13 @@ jobs:
     secrets: inherit
     with:
       tagName: ${{ github.ref_name }}
+
+  snap:
+    needs: [validate_release_tag]
+    permissions:
+      actions: write # to dispatch the snap repo's workflow
+    name: 🐧 Publish snap
+    uses: ./.github/workflows/snap-reusable.yml
+    secrets: inherit
+    with:
+      tagName: ${{ github.ref_name }}
