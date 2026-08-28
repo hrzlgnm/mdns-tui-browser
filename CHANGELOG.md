@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.2...HEAD)
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.3...HEAD)
+
+### Dependencies
+
+- *(deps)* Update anchore/scan-action action to v7.4.1 (#592) ([#592](https://github.com/hrzlgnm/mdns-tui-browser/pull/592))
+
+- *(deps)* Update hrzlgnm/actions action to v2.7.0 (#593) ([#593](https://github.com/hrzlgnm/mdns-tui-browser/pull/593))
+
+- *(deps)* Update hrzlgnm/actions action to v2.8.0 (#595) ([#595](https://github.com/hrzlgnm/mdns-tui-browser/pull/595))
+
+- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to abe0f2e (#591) ([#591](https://github.com/hrzlgnm/mdns-tui-browser/pull/591))
+
+- *(deps)* Update mikepenz/action-junit-report digest to a9170d5 (#594) ([#594](https://github.com/hrzlgnm/mdns-tui-browser/pull/594))
+
+### Fixed
+
+- Align SPDX identifiers with MIT LICENSE (#590) ([#590](https://github.com/hrzlgnm/mdns-tui-browser/pull/590))
+
+## [1.34.3] - 2026-08-27 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.2...v1.34.3)
 
 ### Changed
 
@@ -13,9 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Streamline agent conventions (#581) ([#581](https://github.com/hrzlgnm/mdns-tui-browser/pull/581))
 
+- Add Snapcraft badge to README (#585) ([#585](https://github.com/hrzlgnm/mdns-tui-browser/pull/585))
+
+- Add snap install instructions to README (#586) ([#586](https://github.com/hrzlgnm/mdns-tui-browser/pull/586))
+
+- Add table of contents to README (#587) ([#587](https://github.com/hrzlgnm/mdns-tui-browser/pull/587))
+
 ### Fixed
 
 - Disable grype DB cache and make cargo-install keys unique (#580) ([#580](https://github.com/hrzlgnm/mdns-tui-browser/pull/580))
+
+- Rewrite feat: snap prefix to feat: snap in cliff configs (#588) ([#588](https://github.com/hrzlgnm/mdns-tui-browser/pull/588))
+
+- Trigger snap publish on release published (#589) ([#589](https://github.com/hrzlgnm/mdns-tui-browser/pull/589))
 
 ### Maintenance
 
