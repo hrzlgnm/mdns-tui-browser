@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Update mikepenz/action-junit-report digest to a9170d5 (#594) ([#594](https://github.com/hrzlgnm/mdns-tui-browser/pull/594))
 
+- *(deps)* Update anchore/scan-action action to v7.4.2 (#597) ([#597](https://github.com/hrzlgnm/mdns-tui-browser/pull/597))
+
+- *(deps)* Update hrzlgnm/actions action to v2.8.1 (#598) ([#598](https://github.com/hrzlgnm/mdns-tui-browser/pull/598))
+
 ### Fixed
 
 - Align SPDX identifiers with MIT LICENSE (#590) ([#590](https://github.com/hrzlgnm/mdns-tui-browser/pull/590))
