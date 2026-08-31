@@ -20,7 +20,7 @@ Before each commit, compare its complete diff with the filters in `.github/workf
 | `tests` | `cargo nextest run --profile ci` |
 | `aur` | `~/.local/bin/test-aur-local --variant=both` |
 | Workflow or action | `actionlint` |
-| `.github/renovate.json5` | `docker run --rm --volume=$(pwd):$(pwd):ro --workdir=$(pwd) kokuwaio/renovate-config-validator:latest` |
+| `.github/renovate.json5` | `docker run --rm --volume=$(pwd)/.github/renovate.json5:/github/renovate.json5:ro --workdir=/github kokuwaio/renovate-config-validator:latest` |
 | Text or documentation | `typos` |
 
 - Install `typos` once with `cargo install typos-cli` if needed.
