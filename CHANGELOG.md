@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.3...HEAD)
+## [1.34.4] - 2026-08-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.3...v1.34.4)
 
 ### Dependencies
 
@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(deps)* Update anchore/scan-action action to v7.4.2 (#597) ([#597](https://github.com/hrzlgnm/mdns-tui-browser/pull/597))
 
 - *(deps)* Update hrzlgnm/actions action to v2.8.1 (#598) ([#598](https://github.com/hrzlgnm/mdns-tui-browser/pull/598))
+
+- *(deps)* Lock file maintenance (#600) ([#600](https://github.com/hrzlgnm/mdns-tui-browser/pull/600))
+
+- *(deps)* Update rust crate mdns-sd to v0.21.1 (#601) ([#601](https://github.com/hrzlgnm/mdns-tui-browser/pull/601))
 
 ### Fixed
 
