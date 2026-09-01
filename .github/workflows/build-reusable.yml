@@ -160,7 +160,7 @@ jobs:
         uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
         with:
           crate: cargo-deb
-          version: 3.7.0
+          version: 3.8.0
           locked: true
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
