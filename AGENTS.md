@@ -3,7 +3,8 @@
 ## Workflow
 
 - Work on a typed branch (`feat/...`, `fix/...`, `chore/...`, `refactor/...`, `docs/...`, etc.) and land changes through a pull request; direct pushes to `main` are blocked.
-- Treat every task as authorizing commits and a pull request unless the user opts out. Commit each complete logical unit as soon as its applicable checks pass. Once review is clean, push the branch and open the pull request without waiting to be asked; pull requests are squash-merged.
+- Treat every task as authorizing commits and a pull request unless the user opts out. Commit each complete logical unit as soon as its applicable checks pass.
+- Do not consider work complete until Validation and the two-axis Code Review (see below) have both passed; pushing or opening a PR without the review is a violation. Once review is clean, push the branch and open the pull request without waiting to be asked; pull requests are squash-merged.
 - Pause for genuine forks: design tradeoffs, scope cuts, and UX or performance changes. Present the viable options and a recommendation; proceed without asking when a choice is mechanical and has one sensible answer.
 - Treat every unforeseen bug, race, wrong assumption, or unhandled case as a fork. Raise it before designing or writing a fix, even when the fix seems mechanical.
 - A known race, corruption risk, or correctness bug requires a real fix. If no feasible fix exists, state that directly instead of presenting the bug as an option.
@@ -83,6 +84,24 @@ Before each commit, compare its complete diff with the filters in `.github/workf
 
 ## Code Review
 
-- Before treating a change as complete, use the `code-review` skill to run two parallel reviews: **Standards** checks this file and the Fowler smell baseline; **Spec** checks the originating issue or request for omissions, scope creep, and incorrect behavior.
-- Report the axes separately, aggregate their findings, and fix defects before pushing and opening the pull request.
-- After adding changes to an open pull request, update its description so the summary, issue references, and testing cover the cumulative branch.
+This is a mandatory gate. Do not push, do not open a PR, and do not
+declare a task complete until the two-axis review has run and its
+findings are fixed.
+
+- **When:** after Validation passes on the final commit(s), before
+  `git push` and before `gh pr create`. Re-run after every fixup that
+  touches `src/`, `tests/`, or docs.
+- **How:** load the `code-review` skill (skill tool `name: "code-review"`).
+  Pin the fixed point to `main` (use `origin/main` if `main` is stale)
+  and pass `git diff main...HEAD` (three-dot, merge-base) plus
+  `git log main..HEAD --oneline`. The skill spawns two parallel
+  sub-agents — **Standards** (this file plus the Fowler smell baseline
+  defined in the skill) and **Spec** (originating issue/spec/request;
+  reports "no spec available" if none exists) — then aggregates.
+- **Report:** paste both axes verbatim under `## Standards` / `## Spec`,
+  do not merge or rerank them. End with a one-line summary: total
+  findings per axis and the worst issue within each axis. Fix defects
+  before pushing.
+- After adding changes to an open pull request, update its description
+  so the summary, issue references, and testing cover the cumulative
+  branch.
