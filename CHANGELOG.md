@@ -11,9 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Mount renovate config file for validator (#603) ([#603](https://github.com/hrzlgnm/mdns-tui-browser/pull/603))
 
+- Make two-axis code review a mandatory gate (#610) ([#610](https://github.com/hrzlgnm/mdns-tui-browser/pull/610))
+
 ### Dependencies
 
 - *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 9dd4489 (#604) ([#604](https://github.com/hrzlgnm/mdns-tui-browser/pull/604))
+
+- *(deps)* Update dependency git-cliff to v2.14.1 (#606) ([#606](https://github.com/hrzlgnm/mdns-tui-browser/pull/606))
+
+- *(deps)* Update dependency cargo-deb to v3.8.0 (#607) ([#607](https://github.com/hrzlgnm/mdns-tui-browser/pull/607))
+
+- *(deps)* Update rust crate open to v5.4.3 (#608) ([#608](https://github.com/hrzlgnm/mdns-tui-browser/pull/608))
+
+- *(deps)* Update hrzlgnm/actions action to v2.8.2 (#609) ([#609](https://github.com/hrzlgnm/mdns-tui-browser/pull/609))
 
 ## [1.34.4] - 2026-08-31 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.3...v1.34.4)
 
