@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.5...HEAD)
+
+### Dependencies
+
+- *(deps)* Lock file maintenance (#616) ([#616](https://github.com/hrzlgnm/mdns-tui-browser/pull/616))
+
 ## [1.34.5] - 2026-09-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.4...v1.34.5)
 
 ### Changed
