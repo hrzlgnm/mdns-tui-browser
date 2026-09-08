@@ -86,7 +86,7 @@ jobs:
 
       - name: 🛠️ Setup Deployment keys
         if: github.event.release.tag_name
-        uses: ./.github/actions/retry
+        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
         env:
           AUR_DEPLOY_KEY: ${{ secrets.AUR_DEPLOY_KEY }}
         with:

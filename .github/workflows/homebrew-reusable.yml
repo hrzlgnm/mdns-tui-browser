@@ -24,7 +24,7 @@ jobs:
         uses: ./.github/actions/latest-release-info
 
       - name: 🛠️ Determine download URLs and fetch SHA256 digests
-        uses: ./.github/actions/retry
+        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ steps.release-info.outputs.tagName }}
@@ -77,7 +77,7 @@ jobs:
           cat "$CASK_PATH"
 
       - name: 🚀 Commit and push to tap repo
-        uses: ./.github/actions/retry
+        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
         env:
           VERSION: ${{ env.VERSION }}
         with:
