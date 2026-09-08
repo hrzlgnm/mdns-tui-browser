@@ -126,6 +126,7 @@ jobs:
         run: |
           su runner -c "
             set -o errexit
+            rm -rf ~/aur
             git clone --depth=1 \"ssh://aur@aur.archlinux.org/${{ matrix.package.name }}.git\" ~/aur
           "
 
