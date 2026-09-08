@@ -52,14 +52,20 @@ jobs:
 
       - name: 🔢 Get sha256sums
         id: sha256sums
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         env:
           CHECKSUM_URL: ${{ matrix.package.checksum_url }}
-        shell: bash
-        run: |
-          URL="$CHECKSUM_URL"
-          echo "getting $URL"
-          SUM=$(curl -LfsS --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 "$URL" | cut -f1 -d ' ')
-          echo "sha256=$SUM" >> "$GITHUB_OUTPUT"
+        with:
+          timeout_minutes: 5
+          max_attempts: 5
+          retry_wait_seconds: 10
+          warning_on_retry: true
+          command: |
+            set -o pipefail
+            URL="$CHECKSUM_URL"
+            echo "getting $URL"
+            SUM=$(curl -LfsS --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 "$URL" | cut -f1 -d ' ')
+            echo "sha256=$SUM" >> "$GITHUB_OUTPUT"
 
       - name: 📐 Lint generated PKGBUILD
         env:
@@ -85,17 +91,17 @@ jobs:
           AUR_DEPLOY_KEY: ${{ secrets.AUR_DEPLOY_KEY }}
         with:
           command: |
-          chown -R runner:runner .
-          su runner -c "
-            set -o errexit
-            mkdir -p ~/.ssh
-            printf '%s\n' \"\$AUR_DEPLOY_KEY\" > ~/.ssh/aur
-            chmod 600 ~/.ssh/aur
-            echo \"Host aur.archlinux.org\" >> ~/.ssh/config
-            echo \"  IdentityFile ~/.ssh/aur\" >> ~/.ssh/config
-            echo \"  User aur\" >> ~/.ssh/config
-            ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
-          "
+            chown -R runner:runner .
+            su runner -c "
+              set -o errexit
+              mkdir -p ~/.ssh
+              printf '%s\n' \"\$AUR_DEPLOY_KEY\" > ~/.ssh/aur
+              chmod 600 ~/.ssh/aur
+              echo \"Host aur.archlinux.org\" >> ~/.ssh/config
+              echo \"  IdentityFile ~/.ssh/aur\" >> ~/.ssh/config
+              echo \"  User aur\" >> ~/.ssh/config
+              ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+            "
 
       - name: 🔄 Clone AUR Repo
         if: github.event.release.tag_name

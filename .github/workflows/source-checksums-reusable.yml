@@ -54,52 +54,60 @@ jobs:
       matrix:
         algorithm: [sha256]
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+
       - name: 📥 Download source archive
+        uses: ./.github/actions/retry
         env:
           TAG: ${{ needs.tag.outputs.tag }}
-        run: |
-          curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
-          curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
+        with:
+          command: |
+            curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
+            curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
 
       - name: 🔢 Compute ${{ matrix.algorithm }} checksums
+        uses: ./.github/actions/retry
         env:
           TAG: ${{ needs.tag.outputs.tag }}
           ALGORITHM: ${{ matrix.algorithm }}
         with:
           command: |
-          set -o errexit
+            set -o errexit
 
-          ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
-          case "$ALGORITHM" in
-            sha256|sha512|sha1|md5)
-              # Valid algorithm
-              ;;
-            *)
-              echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
-              exit 1
-              ;;
-          esac
+            ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
+            case "$ALGORITHM" in
+              sha256|sha512|sha1|md5)
+                # Valid algorithm
+                ;;
+              *)
+                echo "Error: ALGORITHM '$ALGORITHM' is not in the allowlist: $ALLOWED_ALGORITHMS"
+                exit 1
+                ;;
+            esac
 
-          CMD="${ALGORITHM}sum"
+            CMD="${ALGORITHM}sum"
 
-          for file in *.tar.gz *.zip; do
-            [ -f "$file" ] || continue
-            "$CMD" "$file" > "$file.$ALGORITHM"
-          done
+            for file in *.tar.gz *.zip; do
+              [ -f "$file" ] || continue
+              "$CMD" "$file" > "$file.$ALGORITHM"
+            done
 
       - name: 📰 Upload checksums to release
+        uses: ./.github/actions/retry
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.tag.outputs.tag }}
           ALGORITHM: ${{ matrix.algorithm }}
         with:
           command: |
-          CHECKSUMS=()
-          while IFS= read -r -d '' file; do
-            CHECKSUMS+=("$file")
-          done < <(find . -type f -name "*.${ALGORITHM}" -print0)
-          if [ "${#CHECKSUMS[@]}" -eq 0 ]; then
-            echo "No checksum files to upload"
-            exit 1
-          fi
-          gh release upload "$TAG" "${CHECKSUMS[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            CHECKSUMS=()
+            while IFS= read -r -d '' file; do
+              CHECKSUMS+=("$file")
+            done < <(find . -type f -name "*.${ALGORITHM}" -print0)
+            if [ "${#CHECKSUMS[@]}" -eq 0 ]; then
+              echo "No checksum files to upload"
+              exit 1
+            fi
+            gh release upload "$TAG" "${CHECKSUMS[@]}" --clobber --repo "$GITHUB_REPOSITORY"

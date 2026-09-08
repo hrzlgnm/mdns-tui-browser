@@ -31,29 +31,29 @@ jobs:
           VERSION: ${{ steps.release-info.outputs.version }}
         with:
           command: |
-          set -o errexit
-          INTEL_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg"
-          ARM64_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg"
+            set -o errexit
+            INTEL_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg"
+            ARM64_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg"
 
-          ASSETS=$(gh api "repos/hrzlgnm/mdns-tui-browser/releases/tags/${TAG_NAME}")
+            ASSETS=$(gh api "repos/hrzlgnm/mdns-tui-browser/releases/tags/${TAG_NAME}")
 
-          INTEL_SHA=$(jq -er --arg name "mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg" \
-            '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' <<< "$ASSETS")
-          ARM64_SHA=$(jq -er --arg name "mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg" \
-            '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' <<< "$ASSETS")
+            INTEL_SHA=$(jq -er --arg name "mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg" \
+              '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' <<< "$ASSETS")
+            ARM64_SHA=$(jq -er --arg name "mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg" \
+              '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' <<< "$ASSETS")
 
-          {
-            echo "INTEL_SHA=$INTEL_SHA"
-            echo "ARM64_SHA=$ARM64_SHA"
-            echo "VERSION=${VERSION#v}"
-          } >> "$GITHUB_ENV"
+            {
+              echo "INTEL_SHA=$INTEL_SHA"
+              echo "ARM64_SHA=$ARM64_SHA"
+              echo "VERSION=${VERSION#v}"
+            } >> "$GITHUB_ENV"
 
-          echo "Detected latest tag name: $TAG_NAME"
-          echo "Version: $VERSION"
-          echo "Intel URL: $INTEL_URL"
-          echo "Intel SHA256: $INTEL_SHA"
-          echo "Apple Silicon URL: $ARM64_URL"
-          echo "Apple Silicon SHA256: $ARM64_SHA"
+            echo "Detected latest tag name: $TAG_NAME"
+            echo "Version: $VERSION"
+            echo "Intel URL: $INTEL_URL"
+            echo "Intel SHA256: $INTEL_SHA"
+            echo "Apple Silicon URL: $ARM64_URL"
+            echo "Apple Silicon SHA256: $ARM64_SHA"
 
       - name: 🔄 Checkout Homebrew Tap
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -82,13 +82,13 @@ jobs:
           VERSION: ${{ env.VERSION }}
         with:
           command: |
-          cd homebrew-tap
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
-            git add Casks/mdns-tui-browser.rb
-            git commit -m "chore: update mdns-tui-browser to $VERSION"
-            git push
-          fi
+            cd homebrew-tap
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if git diff --quiet; then
+              echo "No changes to commit"
+            else
+              git add Casks/mdns-tui-browser.rb
+              git commit -m "chore: update mdns-tui-browser to $VERSION"
+              git push
+            fi
