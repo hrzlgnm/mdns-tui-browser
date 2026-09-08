@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(deps)* Lock file maintenance (#616) ([#616](https://github.com/hrzlgnm/mdns-tui-browser/pull/616))
 
+- *(deps)* Update rust crate mdns-sd to v0.21.3 (#618) ([#618](https://github.com/hrzlgnm/mdns-tui-browser/pull/618))
+
 ## [1.34.5] - 2026-09-05 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.4...v1.34.5)
 
 ### Changed
