@@ -24,12 +24,13 @@ jobs:
         uses: ./.github/actions/latest-release-info
 
       - name: 🛠️ Determine download URLs and fetch SHA256 digests
-        shell: bash
+        uses: ./.github/actions/retry
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ steps.release-info.outputs.tagName }}
           VERSION: ${{ steps.release-info.outputs.version }}
-        run: |
+        with:
+          command: |
           set -o errexit
           INTEL_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-x86_64.dmg"
           ARM64_URL="https://github.com/hrzlgnm/mdns-tui-browser/releases/download/${TAG_NAME}/mdns-tui-browser-${TAG_NAME}-macOS-aarch64.dmg"
@@ -76,10 +77,11 @@ jobs:
           cat "$CASK_PATH"
 
       - name: 🚀 Commit and push to tap repo
-        shell: bash
+        uses: ./.github/actions/retry
         env:
           VERSION: ${{ env.VERSION }}
-        run: |
+        with:
+          command: |
           cd homebrew-tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

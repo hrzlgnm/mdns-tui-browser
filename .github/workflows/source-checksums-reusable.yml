@@ -58,14 +58,15 @@ jobs:
         env:
           TAG: ${{ needs.tag.outputs.tag }}
         run: |
-          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
-          curl -sfLO "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
+          curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.tar.gz"
+          curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
 
       - name: 🔢 Compute ${{ matrix.algorithm }} checksums
         env:
           TAG: ${{ needs.tag.outputs.tag }}
           ALGORITHM: ${{ matrix.algorithm }}
-        run: |
+        with:
+          command: |
           set -o errexit
 
           ALLOWED_ALGORITHMS="sha256 sha512 sha1 md5"
@@ -91,7 +92,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.tag.outputs.tag }}
           ALGORITHM: ${{ matrix.algorithm }}
-        run: |
+        with:
+          command: |
           CHECKSUMS=()
           while IFS= read -r -d '' file; do
             CHECKSUMS+=("$file")
