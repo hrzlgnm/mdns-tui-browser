@@ -5,7 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.5...HEAD)
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.7...HEAD)
+
+### Dependencies
+
+- *(deps)* Update hrzlgnm/actions action to v2.9.0 (#626) ([#626](https://github.com/hrzlgnm/mdns-tui-browser/pull/626))
+
+- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to d344e81 (#625) ([#625](https://github.com/hrzlgnm/mdns-tui-browser/pull/625))
+
+## [1.34.7] - 2026-09-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.6...v1.34.7)
+
+### Dependencies
+
+- *(deps)* Update hrzlgnm/actions action to v2.8.3 (#621) ([#621](https://github.com/hrzlgnm/mdns-tui-browser/pull/621))
+
+- *(deps)* Update hrzlgnm/actions action to v2.8.4 (#623) ([#623](https://github.com/hrzlgnm/mdns-tui-browser/pull/623))
+
+### Maintenance
+
+- *(ci)* Add shared retry wrapper and use for downloads (#620) ([#620](https://github.com/hrzlgnm/mdns-tui-browser/pull/620))
+
+- *(ci)* Quote # in host-key validation case pattern (#622) ([#622](https://github.com/hrzlgnm/mdns-tui-browser/pull/622))
+
+- *(ci)* Use shared retry action from hrzlgnm/actions (#624) ([#624](https://github.com/hrzlgnm/mdns-tui-browser/pull/624))
+
+## [1.34.6] - 2026-09-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.5...v1.34.6)
 
 ### Dependencies
 
