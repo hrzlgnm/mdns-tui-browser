@@ -52,9 +52,7 @@ jobs:
           components: clippy
           targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: 🛠️🚀
-        uses: ./.github/actions/setup-sccache
-
+      # No sccache here: clippy emits metadata only, which sccache cannot cache.
       - name: 📎 Run clippy and fail if any warnings
         shell: bash
         run: |
