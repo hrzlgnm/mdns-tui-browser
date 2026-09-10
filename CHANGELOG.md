@@ -5,21 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.7...HEAD)
-
-### Dependencies
-
-- *(deps)* Update hrzlgnm/actions action to v2.9.0 (#626) ([#626](https://github.com/hrzlgnm/mdns-tui-browser/pull/626))
-
-- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to d344e81 (#625) ([#625](https://github.com/hrzlgnm/mdns-tui-browser/pull/625))
-
-## [1.34.7] - 2026-09-08 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.6...v1.34.7)
+## [1.34.7] - 2026-09-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.6...v1.34.7)
 
 ### Dependencies
 
 - *(deps)* Update hrzlgnm/actions action to v2.8.3 (#621) ([#621](https://github.com/hrzlgnm/mdns-tui-browser/pull/621))
 
 - *(deps)* Update hrzlgnm/actions action to v2.8.4 (#623) ([#623](https://github.com/hrzlgnm/mdns-tui-browser/pull/623))
+
+- *(deps)* Update hrzlgnm/actions action to v2.9.0 (#626) ([#626](https://github.com/hrzlgnm/mdns-tui-browser/pull/626))
+
+- *(deps)* Update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to d344e81 (#625) ([#625](https://github.com/hrzlgnm/mdns-tui-browser/pull/625))
 
 ### Maintenance
 
