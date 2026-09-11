@@ -174,7 +174,10 @@ jobs:
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🛠️🚀
-        if: (!inputs.tagName)
+        # sccache never sees compilations inside cross containers
+        # (RUSTC_WRAPPER/SCCACHE_* are not passed through; metrics show
+        # 0 hits / 0 misses on all use_cross jobs vs ~100% on native).
+        if: (!inputs.tagName) && (!matrix.use_cross)
         uses: ./.github/actions/setup-sccache
 
       - name: 🔨 Build release binary
