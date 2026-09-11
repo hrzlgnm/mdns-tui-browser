@@ -2,9 +2,9 @@
 # Copyright 2026 hrzlgnm
 # SPDX-License-Identifier: MIT
 #
-# Generate the PKGBUILD into ~/lint, print it, and run the namcap/source
-# checks on it. Must run from the repository root (GENERATE_SCRIPT is
-# repo-relative).
+# Generate the PKGBUILD into ~/lint, print it, for the shared
+# aur-makepkg-lint action. Must run from the repository root
+# (GENERATE_SCRIPT is repo-relative).
 #
 # Env:
 #   GENERATE_SCRIPT  generator script, e.g. ./packaging/aur/generate-mdns-tui-browser.sh
@@ -19,9 +19,6 @@ set -euo pipefail
 : "${VERSION:?VERSION must be set}"
 : "${SHA256:?SHA256 must be set}"
 
-repo_root="$PWD"
 mkdir -p "${HOME}/lint"
 "$GENERATE_SCRIPT" "$VERSION" "$SHA256" >"${HOME}/lint/PKGBUILD"
-cd "${HOME}/lint" || exit 1
-cat PKGBUILD
-"$repo_root/packaging/aur/makepkg-lint.sh"
+cat "${HOME}/lint/PKGBUILD"
