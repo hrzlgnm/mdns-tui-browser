@@ -5,7 +5,7 @@ extend-exclude = [".git/", "cliff.toml", ".github/cliff-release.toml"]
 
 [default]
 check-filename = true
-extend-ignore-re = ["digest to \\b[0-9a-f]{7,}\\b", "AUR_SSH_FPS=\"[^\"]*\""]
+extend-ignore-re = ["digest to \\b[0-9a-f]{7,}\\b", "(?i)AUR_SSH_FPS=\"[^\"]*\""]
 
 [default.extend-words]
 # rattatui crate name
