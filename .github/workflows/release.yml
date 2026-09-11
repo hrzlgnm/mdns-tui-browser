@@ -46,8 +46,9 @@ jobs:
       - name: 🛑 Fail if any draft release exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          DRAFTS=$(gh api "repos/${{ github.repository }}/releases?per_page=100" --paginate \
+          DRAFTS=$(gh api "repos/${REPOSITORY}/releases?per_page=100" --paginate \
             -q '[.[] | select(.draft == true) | .tag_name] | join(", ")')
           if [ -n "$DRAFTS" ]; then
             echo "Error: refusing to clobber existing draft release(s): $DRAFTS" >&2
@@ -59,8 +60,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          if gh release view "$TAG_NAME" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          if gh release view "$TAG_NAME" --repo "${REPOSITORY}" >/dev/null 2>&1; then
             echo "Error: release '$TAG_NAME' already exists" >&2
             exit 1
           fi
