@@ -80,27 +80,27 @@ jobs:
         # HOME/SHELL/USER/LOGNAME, so the script reads inputs from env.
         run: su runner -c "./packaging/aur/lint-pkgbuild.sh"
 
+      - name: 🧰 Setup build environment
+        if: github.event.release.tag_name
+        uses: hrzlgnm/actions/.github/actions/aur-fix-ownership@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
+
       - name: 🛠️ Setup Deployment keys
         if: github.event.release.tag_name
-        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
-        env:
-          AUR_DEPLOY_KEY: ${{ secrets.AUR_DEPLOY_KEY }}
+        uses: hrzlgnm/actions/.github/actions/aur-setup-ssh@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
         with:
-          command: ./packaging/aur/fix-ownership.sh && su runner -c "./packaging/aur/setup-aur-ssh.sh"
+          deploy-key: ${{ secrets.AUR_DEPLOY_KEY }}
 
       - name: 🔄 Clone AUR Repo
         if: github.event.release.tag_name
-        shell: bash
-        env:
-          PACKAGE_NAME: ${{ matrix.package.name }}
-        run: su runner -c "./packaging/aur/clone-aur-repo.sh"
+        uses: hrzlgnm/actions/.github/actions/aur-clone-repo@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
+        with:
+          package-name: ${{ matrix.package.name }}
 
       - name: 🔍 Check version
         if: github.event.release.tag_name
-        env:
-          RELEASE_VERSION: ${{ needs.release-info.outputs.version }}
-        shell: bash
-        run: su runner -c "./packaging/aur/check-aur-version.sh"
+        uses: hrzlgnm/actions/.github/actions/aur-check-version@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
+        with:
+          release-version: ${{ needs.release-info.outputs.version }}
 
       - name: 🌀 Generate PKGBUILD update and publish
         if: github.event.release.tag_name
