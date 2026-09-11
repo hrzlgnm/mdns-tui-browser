@@ -19,4 +19,8 @@ set -euo pipefail
 url="$CHECKSUM_URL"
 echo "getting $url"
 sum=$(curl -LfsS --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 "$url" | cut -f1 -d ' ')
+if [[ ! "$sum" =~ ^(sha256:)?[0-9a-fA-F]{64}$ ]]; then
+    echo "Error: Invalid sha256 checksum from $url" >&2
+    exit 1
+fi
 echo "sha256=$sum" >>"$GITHUB_OUTPUT"
