@@ -50,14 +50,14 @@ jobs:
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🆙 sync our fork of winget-pkgs
-        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
+        uses: hrzlgnm/actions/.github/actions/retry@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
         env:
           GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
         with:
           command: komac sync-fork
 
       - name: 🆙 winget package
-        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
+        uses: hrzlgnm/actions/.github/actions/retry@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
         env:
           GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
         with:
@@ -69,7 +69,7 @@ jobs:
 
       - name: 🧹 Cleanup merged branches
         if: always()
-        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
+        uses: hrzlgnm/actions/.github/actions/retry@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
         env:
           GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
         with:

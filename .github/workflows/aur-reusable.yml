@@ -30,7 +30,7 @@ jobs:
 
   lint-scripts:
     name: "🧹 Lint shell scripts"
-    uses: hrzlgnm/actions/.github/workflows/shell-lint-reusable.yml@9a8b61da03cbf93775f3fb47f6b393d06d8c62ed # v2.10.0
+    uses: hrzlgnm/actions/.github/workflows/shell-lint-reusable.yml@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
     with:
       runs-on: ubuntu-latest
       scripts-dir: packaging/aur
@@ -82,7 +82,7 @@ jobs:
 
       - name: 🛠️ Setup Deployment keys
         if: github.event.release.tag_name
-        uses: hrzlgnm/actions/.github/actions/retry@d2c23efb5ed3a9f91dd4b2b898db20aeb5aa788f # v2.9.0
+        uses: hrzlgnm/actions/.github/actions/retry@dc057d6ab047f38c862870e90c81a192d24ca92e # v2.11.0
         env:
           AUR_DEPLOY_KEY: ${{ secrets.AUR_DEPLOY_KEY }}
         with:
