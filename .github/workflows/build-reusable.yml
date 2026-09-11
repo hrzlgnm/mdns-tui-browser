@@ -127,24 +127,12 @@ jobs:
           targets: ${{ matrix.target }}
           save-cache: ${{ inputs.branch == 'main' }}
 
-      - name: 🎯 Sync version from tag
-        if: inputs.tagName
-        uses: ./.github/actions/sync-version
-        with:
-          tagName: ${{ inputs.tagName }}
-
-      - name: 📥 Download versioned changelog
+      - name: 📥 Download versioned sources
         if: inputs.tagName
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: changelog
-          path: changelog-artifact
-
-      - name: 📝 Replace CHANGELOG.md with the versioned changelog
-        if: inputs.tagName
-        shell: bash
-        run: |
-          cp changelog-artifact/CHANGELOG.md CHANGELOG.md
+          name: versioned-sources
+          path: .
 
       - name: 🛠️🔐 cargo-auditable
         if: inputs.tagName
