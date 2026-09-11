@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.7...HEAD)
+
+### Dependencies
+
+- *(deps)* Update rust crate open to v5.4.4 (#629) ([#629](https://github.com/hrzlgnm/mdns-tui-browser/pull/629))
+
+- *(deps)* Update dependency cargo-nextest to v0.9.144 (#632) ([#632](https://github.com/hrzlgnm/mdns-tui-browser/pull/632))
+
 ## [1.34.7] - 2026-09-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.6...v1.34.7)
 
 ### Dependencies
