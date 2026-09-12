@@ -1,11 +1,11 @@
 [files]
 ignore-files = true
 ignore-hidden = false
-extend-exclude = [".git/", "cliff.toml", ".github/cliff-release.toml"]
+extend-exclude = [".git/"]
 
 [default]
 check-filename = true
-extend-ignore-re = ["digest to \\b[0-9a-f]{7,}\\b"]
+extend-ignore-re = ["digest to \\b[0-9a-f]{7,}\\b", "\\[[0-9a-f]{7}\\]"]
 
 [default.extend-words]
 # rattatui crate name
