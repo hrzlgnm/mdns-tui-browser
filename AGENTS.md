@@ -54,7 +54,7 @@ Before each commit, compare its complete diff with the filters in `.github/workf
 ## Packaging
 
 - For one AUR package, replace `both` in the validation command with `source` or `bin`. `--no-build` is only for generator/lint smoke tests, `--no-install` skips binary installation, and `--no-cleanup` or `--keep-dir=<path>` retains artifacts.
-- `CHANGELOG.md` and the `vMAJOR.MINOR.PATCH` tags are managed by release-please (`release-please-config.json` + `.release-please-manifest.json`); never edit the changelog or push version tags manually. Merge the release-please Release PR to tag and open a draft release, wait for the release workflow to upload all assets into the draft, then publish it manually so downstream `release: [released]` packaging workflows fire.
+- `CHANGELOG.md` and the `vMAJOR.MINOR.PATCH` tags are managed by release-please (`release-please-config.json` + `.release-please-manifest.json`); never edit the changelog or push version tags manually. Merge the release-please Release PR to tag and open a draft release, wait for the release workflow to upload all assets into the draft, then publish it manually so downstream `release: [released]` packaging workflows fire. Always squash-merge Release PRs: their bot-created commits are unsigned, so rebase would violate the signature requirement on `main`.
 - Debian packaging uses `target/debian/changelog.gz` as `usr/share/doc/mdns-tui-browser/changelog.gz` in `Cargo.toml`. The build workflow compresses upstream `CHANGELOG.md`; do not use the Debian-format `changelog` field.
 - Keep `CHANGELOG.md` in AUR packages at `/usr/share/doc/$pkgname/`, release archive staging in `build-reusable.yml`, and macOS app bundles under `Contents/Resources/`.
 
