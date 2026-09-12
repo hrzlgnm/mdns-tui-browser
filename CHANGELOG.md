@@ -5,13 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.7...HEAD)
+## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.35.0...HEAD)
+
+### Maintenance
+
+- *(ci)* Restore checkout credentials in update-changelog workflow (#651) ([#651](https://github.com/hrzlgnm/mdns-tui-browser/pull/651))
+
+## [1.35.0] - 2026-09-11 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.8...v1.35.0)
+
+### Added
+
+- Use shared release-preconditions action (#648) ([#648](https://github.com/hrzlgnm/mdns-tui-browser/pull/648))
+
+### Changed
+
+- Set persist-credentials false on read-only checkouts (#639) ([#639](https://github.com/hrzlgnm/mdns-tui-browser/pull/639))
+
+- Use shared AUR actions for stable packaging steps (#642) ([#642](https://github.com/hrzlgnm/mdns-tui-browser/pull/642))
+
+- Use shared aur-makepkg-lint action for PKGBUILD checks (#644) ([#644](https://github.com/hrzlgnm/mdns-tui-browser/pull/644))
+
+### Dependencies
+
+- *(deps)* Update hrzlgnm/actions action to v2.11.0 (#643) ([#643](https://github.com/hrzlgnm/mdns-tui-browser/pull/643))
+
+- *(deps)* Update hrzlgnm/actions action to v2.12.0 (#645) ([#645](https://github.com/hrzlgnm/mdns-tui-browser/pull/645))
+
+- *(deps)* Update hrzlgnm/actions action to v2.13.1 (#646) ([#646](https://github.com/hrzlgnm/mdns-tui-browser/pull/646))
+
+- *(deps)* Update hrzlgnm/actions action to v2.14.0 (#649) ([#649](https://github.com/hrzlgnm/mdns-tui-browser/pull/649))
+
+- *(deps)* Update hrzlgnm/actions action to v2.14.1 (#650) ([#650](https://github.com/hrzlgnm/mdns-tui-browser/pull/650))
+
+### Fixed
+
+- Fail release when a draft already exists (#638) ([#638](https://github.com/hrzlgnm/mdns-tui-browser/pull/638))
+
+### Maintenance
+
+- *(ci)* Share versioned sources via single build artifact (#637) ([#637](https://github.com/hrzlgnm/mdns-tui-browser/pull/637))
+
+- *(ci)* Use shared shell-lint reusable workflow (#641) ([#641](https://github.com/hrzlgnm/mdns-tui-browser/pull/641))
+
+## [1.34.8] - 2026-09-11 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.7...v1.34.8)
+
+### Changed
+
+- Extract AUR workflow inline bash into packaging/aur scripts (#635) ([#635](https://github.com/hrzlgnm/mdns-tui-browser/pull/635))
 
 ### Dependencies
 
 - *(deps)* Update rust crate open to v5.4.4 (#629) ([#629](https://github.com/hrzlgnm/mdns-tui-browser/pull/629))
 
 - *(deps)* Update dependency cargo-nextest to v0.9.144 (#632) ([#632](https://github.com/hrzlgnm/mdns-tui-browser/pull/632))
+
+### Fixed
+
+- Harden AUR release scripts against untrusted input (#636) ([#636](https://github.com/hrzlgnm/mdns-tui-browser/pull/636))
+
+### Maintenance
+
+- *(ci)* Remove idle sccache from clippy job (#630) ([#630](https://github.com/hrzlgnm/mdns-tui-browser/pull/630))
+
+- *(ci)* Pin sccache binary to v0.17.0 (#631) ([#631](https://github.com/hrzlgnm/mdns-tui-browser/pull/631))
+
+- *(ci)* Skip sccache setup for cross builds with zero hit rate (#634) ([#634](https://github.com/hrzlgnm/mdns-tui-browser/pull/634))
 
 ## [1.34.7] - 2026-09-09 [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.34.6...v1.34.7)
 
