@@ -22,14 +22,13 @@ pkgdesc="A terminal-based mDNS service browser"
 arch=('x86_64')
 url="https://github.com/hrzlgnm/mdns-tui-browser"
 license=('MIT')
-makedepends=('cargo' 'cargo-auditable' 'cargo-edit' 'git' 'rust')
+makedepends=('cargo' 'cargo-auditable' 'git' 'rust')
 options=('!strip' '!emptydirs')
 source=("\$pkgname-\$pkgver.tar.gz::https://github.com/hrzlgnm/\$pkgname/archive/refs/tags/v\$pkgver.tar.gz")
 sha256sums=('$sha256sum')
 _builddir="\$pkgname-\$pkgver"
 prepare() {
     cd "\$srcdir/\$_builddir" || exit 1
-    cargo set-version -p "\$pkgname" "\$pkgver"
     cargo fetch --locked --target "\$(rustc -vV | sed -n 's/host: //p')"
 }
 build() {
