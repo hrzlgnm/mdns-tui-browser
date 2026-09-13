@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.35.0...v1.36.0) (2026-09-13)
+
+
+### Features
+
+* manage releases with release-please ([#653](https://github.com/hrzlgnm/mdns-tui-browser/issues/653)) ([9e03ac6](https://github.com/hrzlgnm/mdns-tui-browser/commit/9e03ac692f8e35f595a63cc57a0c77ab89c941ff))
+* run release-please with GITHUB_TOKEN and auto-approved Release PRs ([#657](https://github.com/hrzlgnm/mdns-tui-browser/issues/657)) ([94dfbe5](https://github.com/hrzlgnm/mdns-tui-browser/commit/94dfbe5e1b8a5da88d399f2268e247fa7eaecef2))
+
+
+### Bug Fixes
+
+* **ci:** force tag creation for release-please drafts ([#656](https://github.com/hrzlgnm/mdns-tui-browser/issues/656)) ([3119dae](https://github.com/hrzlgnm/mdns-tui-browser/commit/3119dae3d5c4c425cae1213abe5afdf7981e87fb))
+* **ci:** restore checkout credentials in update-changelog workflow ([#651](https://github.com/hrzlgnm/mdns-tui-browser/issues/651)) ([746f188](https://github.com/hrzlgnm/mdns-tui-browser/commit/746f188f541f113b35f472236efd098d7cba8e2b))
+
 ## [Unreleased] [compare](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.35.0...HEAD)
 
 ### Maintenance
@@ -1886,5 +1900,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Maintenance
 
 - *(ci)* Attempt to fix bump version workflow (#25) ([#25](https://github.com/hrzlgnm/mdns-tui-browser/pull/25))
-
-
