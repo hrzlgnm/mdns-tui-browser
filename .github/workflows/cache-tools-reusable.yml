@@ -25,7 +25,7 @@ jobs:
       # Ensure tools used in release workflow are in the cache
 
       - name: 🔧 Install komac
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: komac
           version: 2.16.0
@@ -33,7 +33,7 @@ jobs:
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🔧 Install cargo-auditable
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-auditable
           version: 0.7.6
@@ -41,7 +41,7 @@ jobs:
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🔧 Install cross
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cross
           version: 0.2.5
@@ -82,7 +82,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
 
       - name: 🔧 Install cargo-auditable
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-auditable
           version: 0.7.6

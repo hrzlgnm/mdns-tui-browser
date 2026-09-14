@@ -129,7 +129,7 @@ jobs:
 
       - name: 🛠️🔐 cargo-auditable
         if: inputs.tagName
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-auditable
           version: 0.7.6
@@ -138,7 +138,7 @@ jobs:
 
       - name: 🛠️📦 cargo-deb
         if: contains(matrix.os, 'ubuntu')
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-deb
           version: 3.8.0
@@ -147,7 +147,7 @@ jobs:
 
       - name: 🛠️ cross
         if: matrix.use_cross
-        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3
+        uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cross
           version: 0.2.5
