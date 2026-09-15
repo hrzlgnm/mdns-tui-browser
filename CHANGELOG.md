@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.36.0...v1.36.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate clap to v4.6.7 ([#676](https://github.com/hrzlgnm/mdns-tui-browser/issues/676)) ([5bf01ed](https://github.com/hrzlgnm/mdns-tui-browser/commit/5bf01eddd995a677bd9def74a1f96bfff3a6fa14))
+
+
+### Dependencies
+
+* update hrzlgnm/actions action to v2.14.6 ([#683](https://github.com/hrzlgnm/mdns-tui-browser/issues/683)) ([0e07095](https://github.com/hrzlgnm/mdns-tui-browser/commit/0e07095abe6e3fa731a54f0fae164b96902cbf61))
+
+
+### Miscellaneous Chores
+
+* **deps:** lock file maintenance ([#672](https://github.com/hrzlgnm/mdns-tui-browser/issues/672)) ([191289b](https://github.com/hrzlgnm/mdns-tui-browser/commit/191289b4e150a68cfc6b40f28246f2baf906d4ce))
+* **deps:** update baptiste0928/cargo-install digest to 8195d4f ([#673](https://github.com/hrzlgnm/mdns-tui-browser/issues/673)) ([e743e2f](https://github.com/hrzlgnm/mdns-tui-browser/commit/e743e2f1501b038f5363dffad877cb1be4d4e2d2))
+* **deps:** update dependency cargo-auditable to v0.7.6 ([#671](https://github.com/hrzlgnm/mdns-tui-browser/issues/671)) ([6095930](https://github.com/hrzlgnm/mdns-tui-browser/commit/6095930bfefdf7c460511d11ff5781bbee64669e))
+* **deps:** update dependency mozilla/sccache to v0.18.0 ([#674](https://github.com/hrzlgnm/mdns-tui-browser/issues/674)) ([59af06b](https://github.com/hrzlgnm/mdns-tui-browser/commit/59af06bf8634ec16104102a07df0bf2a4dd4553e))
+* **deps:** update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 06248ad ([#675](https://github.com/hrzlgnm/mdns-tui-browser/issues/675)) ([b7421bd](https://github.com/hrzlgnm/mdns-tui-browser/commit/b7421bd2450b7ecdcc4cd9229429c682df18fcc6))
+* **deps:** update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 0890253 ([#678](https://github.com/hrzlgnm/mdns-tui-browser/issues/678)) ([01406c2](https://github.com/hrzlgnm/mdns-tui-browser/commit/01406c2505b970329af620b6baaf6d6849266218))
+* **deps:** update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to a6c1be9 ([#669](https://github.com/hrzlgnm/mdns-tui-browser/issues/669)) ([78aff62](https://github.com/hrzlgnm/mdns-tui-browser/commit/78aff622ab901e9bdca2b2231ca063648e1a06e8))
+* **deps:** update hrzlgnm/actions action to v2.14.5 ([#679](https://github.com/hrzlgnm/mdns-tui-browser/issues/679)) ([7acd863](https://github.com/hrzlgnm/mdns-tui-browser/commit/7acd863bcca8e6474920c8116f77b56868b1f29f))
+* drop cargo-edit version re-stamping from AUR packaging ([#667](https://github.com/hrzlgnm/mdns-tui-browser/issues/667)) ([29390bb](https://github.com/hrzlgnm/mdns-tui-browser/commit/29390bb29257353332a90824b8bc4135a9b70602))
+* drop unused cargo-edit from CI tool cache ([#666](https://github.com/hrzlgnm/mdns-tui-browser/issues/666)) ([52a3ad6](https://github.com/hrzlgnm/mdns-tui-browser/commit/52a3ad6ab878fc605e5f19a9dd8f0ad43a5e9bf8))
+* enforce release-please JSON formatting ([#681](https://github.com/hrzlgnm/mdns-tui-browser/issues/681)) ([b36c5a4](https://github.com/hrzlgnm/mdns-tui-browser/commit/b36c5a4160947b2049ea76c76ade0240446f8260))
+* release dep updates via deps commit type ([#680](https://github.com/hrzlgnm/mdns-tui-browser/issues/680)) ([e3f8451](https://github.com/hrzlgnm/mdns-tui-browser/commit/e3f845136fc030e75f5cc8729b13105cf47a6171))
+* show all commit types in release notes ([#682](https://github.com/hrzlgnm/mdns-tui-browser/issues/682)) ([051d735](https://github.com/hrzlgnm/mdns-tui-browser/commit/051d735453362b1c8f48eac229dd07b7da2e6e41))
+* use fix commits for direct dependency updates ([#668](https://github.com/hrzlgnm/mdns-tui-browser/issues/668)) ([b936d41](https://github.com/hrzlgnm/mdns-tui-browser/commit/b936d41f993791645dea397f0f2fa1d0c55f46da))
+* use fix prefix for cargo lockfile updates ([#670](https://github.com/hrzlgnm/mdns-tui-browser/issues/670)) ([7962a52](https://github.com/hrzlgnm/mdns-tui-browser/commit/7962a529e21e8a0d31ca546ddf0b63daa5703e86))
+
+
+### Continuous Integration
+
+* guard releases against manual mid-build publish ([#684](https://github.com/hrzlgnm/mdns-tui-browser/issues/684)) ([0268211](https://github.com/hrzlgnm/mdns-tui-browser/commit/026821199c4bb0e25c7ff29d1a1fbdfdf6565f79))
+
 ## [1.36.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.35.0...v1.36.0) (2026-09-13)
 
 
