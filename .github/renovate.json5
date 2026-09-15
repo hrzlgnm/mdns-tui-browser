@@ -16,16 +16,9 @@
         ":prImmediately",
         ":rebaseStalePrs",
         ":semanticCommits",
-        ":semanticPrefixFixDepsChoreOthers",
+        ":semanticCommitTypeAll(deps)",
+        ":semanticCommitScopeDisabled",
         ":separateMajorReleases",
-    ],
-    packageRules: [
-        {
-            description: "Use fix prefix for direct cargo dependency updates, including lockfile-only ones",
-            matchManagers: ["cargo"],
-            matchDepTypes: ["dependencies", "workspace.dependencies"],
-            semanticCommitType: "fix",
-        },
     ],
     customManagers: [
         {
