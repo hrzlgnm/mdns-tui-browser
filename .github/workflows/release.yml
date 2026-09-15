@@ -69,6 +69,7 @@ jobs:
     secrets: inherit
     with:
       tagName: ${{ needs.release-please.outputs.tag_name }}
+      profile: release
 
   publish:
     # Flips the draft live only when every build job succeeded. A cancelled

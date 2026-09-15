@@ -13,6 +13,16 @@ on:
       tagName:
         required: false
         type: string
+      profile:
+        description: "Cargo build profile (debug for fast CI, release for publishing)"
+        required: false
+        type: string
+        default: "release"
+      upload_artifacts:
+        description: "Upload CI artifacts (disabled for PRs)"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   sbom:
@@ -137,7 +147,7 @@ jobs:
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
       - name: 🛠️📦 cargo-deb
-        if: contains(matrix.os, 'ubuntu')
+        if: contains(matrix.os, 'ubuntu') && inputs.profile == 'release'
         uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-deb
@@ -161,7 +171,7 @@ jobs:
         if: (!inputs.tagName) && (!matrix.use_cross)
         uses: ./.github/actions/setup-sccache
 
-      - name: 🔨 Build release binary
+      - name: 🔨 Build binary
         shell: bash
         env:
           RUSTFLAGS: "-D warnings"
@@ -169,27 +179,33 @@ jobs:
           TAG_NAME: ${{ inputs.tagName }}
           TARGET: ${{ matrix.target }}
           USE_CROSS: ${{ matrix.use_cross }}
+          PROFILE: ${{ inputs.profile }}
         run: |
           if [ "$USE_CROSS" = "true" ]; then
             BUILD_CMD="cross"
           else
             BUILD_CMD="cargo"
           fi
-          if [ -n "$TAG_NAME" ] && [ "$USE_CROSS" != "true" ]; then
-            $BUILD_CMD auditable build --release --target "$TARGET"
+          if [ "$PROFILE" = "release" ]; then
+            PROFILE_FLAG="--release"
           else
-            $BUILD_CMD build --release --target "$TARGET"
+            PROFILE_FLAG=""
+          fi
+          if [ -n "$TAG_NAME" ] && [ "$USE_CROSS" != "true" ]; then
+            $BUILD_CMD auditable build $PROFILE_FLAG --target "$TARGET"
+          else
+            $BUILD_CMD build $PROFILE_FLAG --target "$TARGET"
           fi
 
       - name: 📝 Gzip changelog for deb
-        if: contains(matrix.os, 'ubuntu')
+        if: contains(matrix.os, 'ubuntu') && inputs.profile == 'release'
         shell: bash
         run: |
           mkdir -p target/debian
           gzip -9 -c CHANGELOG.md > target/debian/changelog.gz
 
       - name: 📦 Build deb package
-        if: contains(matrix.os, 'ubuntu')
+        if: contains(matrix.os, 'ubuntu') && inputs.profile == 'release'
         shell: bash
         env:
           TAG_NAME: ${{ inputs.tagName }}
@@ -224,12 +240,18 @@ jobs:
           TARGET: ${{ matrix.target }}
           OS: ${{ matrix.os }}
           PLATFORM: ${{ matrix.platform }}
+          PROFILE: ${{ inputs.profile }}
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
           if [ -n "$TAG_NAME" ]; then
             VERSION_NAME="$TAG_NAME"
           else
             VERSION_NAME="$VERSION"
+          fi
+          if [ "$PROFILE" = "release" ]; then
+            PROFILE_DIR="release"
+          else
+            PROFILE_DIR="debug"
           fi
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           # Use platform for tarball, but preserve original .deb name on Linux
@@ -238,22 +260,22 @@ jobs:
           cp LICENSE "$staging/"
           cp CHANGELOG.md "$staging/"
           if [ "$OS" = "windows-latest" ]; then
-            cp "target/$TARGET/release/mdns-tui-browser.exe" "$staging/"
-            cp "target/$TARGET/release/mdns_tui_browser.pdb" "$staging/"
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser.exe" "$staging/"
+            cp "target/$TARGET/$PROFILE_DIR/mdns_tui_browser.pdb" "$staging/" || true
             7z a -tzip "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> "$GITHUB_ENV"
           elif [ "$OS" = "macos-latest" ]; then
-            cp "target/$TARGET/release/mdns-tui-browser" "$staging/"
-            cp "target/$TARGET/release/mdns-tui-browser.dwp" "$staging/" || true
-            cp -LR "target/$TARGET/release/mdns-tui-browser.dSYM" "$staging/" || true
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser" "$staging/"
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/$TARGET/$PROFILE_DIR/mdns-tui-browser.dSYM" "$staging/" || true
             mkdir -p "$staging/man/man1"
             cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
           else
-            cp "target/$TARGET/release/mdns-tui-browser" "$staging/"
-            cp "target/$TARGET/release/mdns-tui-browser.dwp" "$staging/" || true
-            cp -LR "target/$TARGET/release/mdns-tui-browser.dSYM" "$staging/" || true
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser" "$staging/"
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser.dwp" "$staging/" || true
+            cp -LR "target/$TARGET/$PROFILE_DIR/mdns-tui-browser.dSYM" "$staging/" || true
             # Include manpage for Linux builds only
             if [[ "$OS" =~ ^ubuntu ]]; then
               mkdir -p "$staging/man/man1"
@@ -300,7 +322,7 @@ jobs:
           fi
 
       - name: 🛠️ Install create-dmg
-        if: contains(matrix.os, 'macos')
+        if: contains(matrix.os, 'macos') && inputs.profile == 'release'
         run: |
           CREATE_DMG_VERSION="v1.1.0"
           git clone --depth 1 --branch "$CREATE_DMG_VERSION" https://github.com/create-dmg/create-dmg.git /tmp/create-dmg
@@ -311,7 +333,7 @@ jobs:
           rm -rf /tmp/create-dmg
 
       - name: 📦 Build DMG
-        if: contains(matrix.os, 'macos')
+        if: contains(matrix.os, 'macos') && inputs.profile == 'release'
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
@@ -431,7 +453,7 @@ jobs:
           gh release upload "$TAG_NAME" "${ASSETS[@]}" --clobber
 
       - name: 📦 Upload artifacts
-        if: (!inputs.tagName)
+        if: (!inputs.tagName) && inputs.upload_artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
@@ -439,7 +461,7 @@ jobs:
           retention-days: 30
 
       - name: 📦 Upload deb artifacts
-        if: (!inputs.tagName) && contains(matrix.os, 'ubuntu') && env.DEB_ASSET != ''
+        if: (!inputs.tagName) && inputs.upload_artifacts && contains(matrix.os, 'ubuntu') && env.DEB_ASSET != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mdns-tui-browser-${{ matrix.target }}-deb${{ matrix.os == 'ubuntu-22.04' && '-glibc2.35' || '' }}
@@ -447,7 +469,7 @@ jobs:
           retention-days: 30
 
       - name: 📦 Upload ipk artifacts
-        if: (!inputs.tagName) && matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET != ''
+        if: (!inputs.tagName) && inputs.upload_artifacts && matrix.os == 'ubuntu-latest' && (matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'arm-unknown-linux-gnueabihf') && env.IPK_ASSET != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mdns-tui-browser-${{ matrix.target }}-ipk
@@ -455,7 +477,7 @@ jobs:
           retention-days: 30
 
       - name: 📦 Upload DMG artifacts
-        if: (!inputs.tagName) && contains(matrix.os, 'macos') && env.DMG_ASSET != ''
+        if: (!inputs.tagName) && inputs.upload_artifacts && contains(matrix.os, 'macos') && env.DMG_ASSET != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mdns-tui-browser-${{ matrix.target }}-dmg
