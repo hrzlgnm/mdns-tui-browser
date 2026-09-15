@@ -131,6 +131,8 @@ jobs:
     secrets: inherit
     with:
       branch: ${{ needs.changes.outputs.branch }}
+      profile: debug
+      upload_artifacts: ${{ github.event_name != 'pull_request' }}
 
   aur:
     name: AUR
