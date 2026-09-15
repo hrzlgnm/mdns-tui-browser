@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.36.1...v1.36.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* add missing checkout step to publish job in release workflow ([#685](https://github.com/hrzlgnm/mdns-tui-browser/issues/685)) ([9d66e3e](https://github.com/hrzlgnm/mdns-tui-browser/commit/9d66e3e67189cc1528d6a74a43cd45f4a791c044))
+
+
+### Dependencies
+
+* update hrzlgnm/actions action to v2.14.8 ([#686](https://github.com/hrzlgnm/mdns-tui-browser/issues/686)) ([ffc955b](https://github.com/hrzlgnm/mdns-tui-browser/commit/ffc955b88df9a46d1944a7726ad2d50d7cde199f))
+
 ## [1.36.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.36.0...v1.36.1) (2026-09-15)
 
 
