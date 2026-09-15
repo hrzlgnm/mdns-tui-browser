@@ -22,6 +22,7 @@ Before each commit, compare its complete diff with the filters in `.github/workf
 | `aur` | `~/.local/bin/test-aur-local --variant=both` |
 | Workflow or action | `actionlint` |
 | `.github/renovate.json5` | `npx --yes -p renovate@latest renovate-config-validator .github/renovate.json5` |
+| `release-please-config.json`, `.release-please-manifest.json` | Canonical 2-space JSON with trailing newline: `python3 -c 'import json,sys; sys.exit(any(open(f).read() != json.dumps(json.load(open(f)), indent=2) + "\n" for f in ["release-please-config.json", ".release-please-manifest.json"]))'` |
 | Text or documentation | `typos` |
 
 - Install `typos` once with `cargo install typos-cli` if needed.
