@@ -35,38 +35,31 @@
         },
         {
           "type": "docs",
-          "section": "Documentation",
-          "hidden": true
+          "section": "Documentation"
         },
         {
           "type": "style",
-          "section": "Styles",
-          "hidden": true
+          "section": "Styles"
         },
         {
           "type": "chore",
-          "section": "Miscellaneous Chores",
-          "hidden": true
+          "section": "Miscellaneous Chores"
         },
         {
           "type": "refactor",
-          "section": "Code Refactoring",
-          "hidden": true
+          "section": "Code Refactoring"
         },
         {
           "type": "test",
-          "section": "Tests",
-          "hidden": true
+          "section": "Tests"
         },
         {
           "type": "build",
-          "section": "Build System",
-          "hidden": true
+          "section": "Build System"
         },
         {
           "type": "ci",
-          "section": "Continuous Integration",
-          "hidden": true
+          "section": "Continuous Integration"
         }
       ]
     }
