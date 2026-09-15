@@ -234,6 +234,7 @@ jobs:
           fi
 
       - name: 📦 Build archive
+        if: inputs.tagName || inputs.upload_artifacts
         shell: bash
         env:
           TAG_NAME: ${{ inputs.tagName }}
