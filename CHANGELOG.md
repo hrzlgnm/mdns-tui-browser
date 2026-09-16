@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.0...v1.37.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* detect release-please commits in CI skip check ([#693](https://github.com/hrzlgnm/mdns-tui-browser/issues/693)) ([6674a9a](https://github.com/hrzlgnm/mdns-tui-browser/commit/6674a9a627a71ef0bb6005b5221c1d6682b801dd))
+* detect release-please commits in CI skip check ([#693](https://github.com/hrzlgnm/mdns-tui-browser/issues/693)) ([d770694](https://github.com/hrzlgnm/mdns-tui-browser/commit/d770694caf2666ffb95f2b015a02f5d27c417693))
+
+
+### Miscellaneous Chores
+
+* build debug in CI and release for publishing ([#690](https://github.com/hrzlgnm/mdns-tui-browser/issues/690)) ([93c8c1f](https://github.com/hrzlgnm/mdns-tui-browser/commit/93c8c1f49dee8e4043773b6ee5a1d6d042760402))
+
+
+### Continuous Integration
+
+* skip heavy jobs on release-tag pushes ([#692](https://github.com/hrzlgnm/mdns-tui-browser/issues/692)) ([aab82cf](https://github.com/hrzlgnm/mdns-tui-browser/commit/aab82cf1594f7a090d799ab96c561c3dc8e07b12))
+
 ## [1.37.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.36.2...v1.37.0) (2026-09-15)
 
 
