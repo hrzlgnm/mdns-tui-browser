@@ -35,7 +35,7 @@ jobs:
 
   lint-scripts:
     name: "🧹 Lint shell scripts"
-    uses: hrzlgnm/actions/.github/workflows/shell-lint-reusable.yml@03b79955b43e4b4ae1678541e9d315d4f24c847d # v2.14.8
+    uses: hrzlgnm/actions/.github/workflows/shell-lint-reusable.yml@0bb9559803ab259be48398d4137dcec658d45bf9 # v2.14.9
     with:
       runs-on: ubuntu-latest
       scripts-dir: packaging/aur
@@ -86,13 +86,13 @@ jobs:
         run: su runner -c "./packaging/aur/lint-pkgbuild.sh"
 
       - name: 🧹 Check generated PKGBUILD
-        uses: hrzlgnm/actions/.github/actions/aur-makepkg-lint@03b79955b43e4b4ae1678541e9d315d4f24c847d # v2.14.8
+        uses: hrzlgnm/actions/.github/actions/aur-makepkg-lint@0bb9559803ab259be48398d4137dcec658d45bf9 # v2.14.9
         with:
           workdir: ~/lint
 
       - name: 🛠️ Setup AUR packaging
         if: github.event.release.tag_name || inputs.tag_name
-        uses: hrzlgnm/actions/.github/actions/aur-setup@03b79955b43e4b4ae1678541e9d315d4f24c847d # v2.14.8
+        uses: hrzlgnm/actions/.github/actions/aur-setup@0bb9559803ab259be48398d4137dcec658d45bf9 # v2.14.9
         with:
           package-name: ${{ matrix.package.name }}
           release-version: ${{ needs.release-info.outputs.version }}
