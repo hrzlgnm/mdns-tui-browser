@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.3](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.2...v1.37.3) (2026-09-26)
+
+
+### Dependencies
+
+* update hrzlgnm/actions action to v2.14.10 ([#702](https://github.com/hrzlgnm/mdns-tui-browser/issues/702)) ([32f42ec](https://github.com/hrzlgnm/mdns-tui-browser/commit/32f42eca9a71302e3c8bdf10b9fd8504fb8a2715))
+
 ## [1.37.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.1...v1.37.2) (2026-09-21)
 
 
