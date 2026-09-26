@@ -60,7 +60,7 @@ jobs:
           persist-credentials: false
 
       - name: 📥 Download source archive
-        uses: hrzlgnm/actions/.github/actions/retry@0bb9559803ab259be48398d4137dcec658d45bf9 # v2.14.9
+        uses: hrzlgnm/actions/.github/actions/retry@c4634c8090f9c2941bbad01a692e2dd4fc91416c # v2.14.10
         env:
           TAG: ${{ needs.tag.outputs.tag }}
         with:
@@ -69,7 +69,7 @@ jobs:
             curl -f -sL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 -O "https://github.com/hrzlgnm/mdns-tui-browser/archive/refs/tags/${TAG}.zip"
 
       - name: 🔢 Compute ${{ matrix.algorithm }} checksums
-        uses: hrzlgnm/actions/.github/actions/retry@0bb9559803ab259be48398d4137dcec658d45bf9 # v2.14.9
+        uses: hrzlgnm/actions/.github/actions/retry@c4634c8090f9c2941bbad01a692e2dd4fc91416c # v2.14.10
         env:
           TAG: ${{ needs.tag.outputs.tag }}
           ALGORITHM: ${{ matrix.algorithm }}
@@ -96,7 +96,7 @@ jobs:
             done
 
       - name: 📰 Upload checksums to release
-        uses: hrzlgnm/actions/.github/actions/retry@0bb9559803ab259be48398d4137dcec658d45bf9 # v2.14.9
+        uses: hrzlgnm/actions/.github/actions/retry@c4634c8090f9c2941bbad01a692e2dd4fc91416c # v2.14.10
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.tag.outputs.tag }}
