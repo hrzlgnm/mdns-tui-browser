@@ -36,7 +36,7 @@ jobs:
         uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-auditable
-          version: 0.7.6
+          version: 0.7.7
           locked: true
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
 
@@ -85,6 +85,6 @@ jobs:
         uses: baptiste0928/cargo-install@8195d4f734a149db85385bb4102b42efcd373759 # v3
         with:
           crate: cargo-auditable
-          version: 0.7.6
+          version: 0.7.7
           locked: true
           cache-key: ${{ github.job }}-${{ strategy.job-index }}
