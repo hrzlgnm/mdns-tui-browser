@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.3](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.2...v1.37.3) (2026-10-03)
+
+
+### Dependencies
+
+* lock file maintenance ([#704](https://github.com/hrzlgnm/mdns-tui-browser/issues/704)) ([e77cec7](https://github.com/hrzlgnm/mdns-tui-browser/commit/e77cec791b9741166b206c617e27c452e7ade266))
+* update dependency cargo-auditable to v0.7.7 ([#707](https://github.com/hrzlgnm/mdns-tui-browser/issues/707)) ([d7ab035](https://github.com/hrzlgnm/mdns-tui-browser/commit/d7ab035eb822b5648735fdef16b25f8ca1f01e2e))
+* update dtolnay/rust-toolchain digest to 89b1218 ([#706](https://github.com/hrzlgnm/mdns-tui-browser/issues/706)) ([4083524](https://github.com/hrzlgnm/mdns-tui-browser/commit/408352496710d5d123f5b86289f541f62c34f4bd))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 56fbd74 ([#705](https://github.com/hrzlgnm/mdns-tui-browser/issues/705)) ([e7801e4](https://github.com/hrzlgnm/mdns-tui-browser/commit/e7801e4f3ce0adca6e5ddc4e7e9934cfb1ebbac1))
+* update hrzlgnm/actions action to v2.14.10 ([#702](https://github.com/hrzlgnm/mdns-tui-browser/issues/702)) ([32f42ec](https://github.com/hrzlgnm/mdns-tui-browser/commit/32f42eca9a71302e3c8bdf10b9fd8504fb8a2715))
+* update rust crate tokio to v1.53.2 ([#708](https://github.com/hrzlgnm/mdns-tui-browser/issues/708)) ([22d1ea1](https://github.com/hrzlgnm/mdns-tui-browser/commit/22d1ea163a09bcbe584211ae0301a71bc05e9254))
+
 ## [1.37.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.1...v1.37.2) (2026-09-21)
 
 
