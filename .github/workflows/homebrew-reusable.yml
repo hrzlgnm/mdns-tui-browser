@@ -61,7 +61,8 @@ jobs:
           repository: hrzlgnm/homebrew-tap
           path: homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          fetch-depth: 1
+          # Full history so the rebase below never hits a shallow boundary.
+          fetch-depth: 0
 
       - name: 🔧 Update cask
         shell: bash
@@ -85,10 +86,18 @@ jobs:
             cd homebrew-tap
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            if git diff --quiet; then
-              echo "No changes to commit"
-            else
-              git add Casks/mdns-tui-browser.rb
+            git add Casks/mdns-tui-browser.rb
+            if ! git diff --cached --quiet; then
               git commit -m "chore: update mdns-tui-browser to $VERSION"
-              git push
+            else
+              echo "No staged changes (already committed on previous retry or no update needed)"
             fi
+            # Sibling repos push to the same tap repo concurrently, so a
+            # plain push can be rejected. Rebase onto the latest remote
+            # state first; each repo touches only its own cask file, so
+            # the rebase is conflict-free and a retried push converges.
+            # Always push: a retry after commit-but-push-failed would see
+            # a clean tree and must not skip the push.
+            git fetch origin
+            git rebase origin/main
+            git push origin HEAD:main
