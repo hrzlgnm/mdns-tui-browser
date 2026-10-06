@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=mDNS TUI Browser
+Comment=Terminal-based mDNS service browser
+Exec=mdns-tui-browser
+Terminal=true
+Categories=Network;
+Keywords=mdns;zeroconf;network;browser;
+Icon=mdns-tui-browser
+StartupNotify=false

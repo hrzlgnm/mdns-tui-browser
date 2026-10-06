@@ -281,6 +281,10 @@ jobs:
             if [[ "$OS" =~ ^ubuntu ]]; then
               mkdir -p "$staging/man/man1"
               cp "docs/mdns-tui-browser.1" "$staging/man/man1/"
+              mkdir -p "$staging/applications"
+              cp "packaging/linux/mdns-tui-browser.desktop" "$staging/applications/"
+              mkdir -p "$staging/icons/hicolor/scalable/apps"
+              cp "packaging/linux/mdns-tui-browser.svg" "$staging/icons/hicolor/scalable/apps/"
             fi
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
