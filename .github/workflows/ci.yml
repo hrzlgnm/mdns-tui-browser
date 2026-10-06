@@ -114,6 +114,7 @@ jobs:
               - 'Cargo.lock'
               - 'Cross.toml'
               - 'packaging/linux/**'
+              - 'packaging/macos/**'
             lint:
               - '.github/workflows/lint-reusable.yml'
             tests:

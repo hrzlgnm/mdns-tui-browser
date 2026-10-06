@@ -358,6 +358,7 @@ jobs:
           cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser" "$DMG_STAGING/$APP_NAME/Contents/MacOS/"
           cp LICENSE "$DMG_STAGING/$APP_NAME/Contents/Resources/"
           cp CHANGELOG.md "$DMG_STAGING/$APP_NAME/Contents/Resources/"
+          cp "packaging/macos/mdns-tui-browser.icns" "$DMG_STAGING/$APP_NAME/Contents/Resources/"
           # Create a shell script wrapper that launches Terminal with the TUI app
           cat > "$DMG_STAGING/$APP_NAME/Contents/MacOS/run" << 'WRAPPER'
           #!/bin/bash
@@ -377,6 +378,10 @@ jobs:
             <string>com.mdns-tui-browser.app</string>
             <key>CFBundleName</key>
             <string>mDNS TUI Browser</string>
+            <key>CFBundleIconFile</key>
+            <string>mdns-tui-browser</string>
+            <key>CFBundleIconName</key>
+            <string>mdns-tui-browser</string>
             <key>CFBundleVersion</key>
             <string>${VERSION_NAME}</string>
             <key>CFBundleShortVersionString</key>
