@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.38.0...v1.39.0) (2026-10-06)
+
+
+### Features
+
+* embed app icon in Windows executable ([#720](https://github.com/hrzlgnm/mdns-tui-browser/issues/720)) ([03ee38a](https://github.com/hrzlgnm/mdns-tui-browser/commit/03ee38a962fe7a8180437a9ae92bdce090e52195))
+* publish partial release as pre-release on build failure ([#717](https://github.com/hrzlgnm/mdns-tui-browser/issues/717)) ([f5db058](https://github.com/hrzlgnm/mdns-tui-browser/commit/f5db05883813c00cd67abc4b3facecc44d3c1fe7))
+
+
+### Bug Fixes
+
+* scope release fallback to repo and cover cancelled builds ([#719](https://github.com/hrzlgnm/mdns-tui-browser/issues/719)) ([5caabf3](https://github.com/hrzlgnm/mdns-tui-browser/commit/5caabf357d365f8f82bb0e92b3697568aaf07143))
+
 ## [1.38.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.3...v1.38.0) (2026-10-06)
 
 
