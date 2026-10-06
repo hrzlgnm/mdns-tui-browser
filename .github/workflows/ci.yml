@@ -115,6 +115,7 @@ jobs:
               - 'Cross.toml'
               - 'packaging/linux/**'
               - 'packaging/macos/**'
+              - 'packaging/windows/**'
             lint:
               - '.github/workflows/lint-reusable.yml'
             tests:
