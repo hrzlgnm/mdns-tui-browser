@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.38.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.3...v1.38.0) (2026-10-06)
+
+
+### Features
+
+* add desktop entry and app icon to Linux and macOS packages ([#716](https://github.com/hrzlgnm/mdns-tui-browser/issues/716)) ([214ec7e](https://github.com/hrzlgnm/mdns-tui-browser/commit/214ec7e5b4f805d236c3a219c39098bfdc133dde))
+
+
+### Bug Fixes
+
+* **homebrew:** rebase tap checkout before pushing ([#711](https://github.com/hrzlgnm/mdns-tui-browser/issues/711)) ([eb04863](https://github.com/hrzlgnm/mdns-tui-browser/commit/eb04863e2a018f00954b1e1d543a65739439740a))
+
+
+### Dependencies
+
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to e288d40 ([#715](https://github.com/hrzlgnm/mdns-tui-browser/issues/715)) ([e6e2b6b](https://github.com/hrzlgnm/mdns-tui-browser/commit/e6e2b6b18e68b759657d92d97dbcfec5d81b5b2b))
+* update hrzlgnm/actions action to v2.14.11 ([#712](https://github.com/hrzlgnm/mdns-tui-browser/issues/712)) ([430e020](https://github.com/hrzlgnm/mdns-tui-browser/commit/430e02050ebdf41254f46520cf64c8a783914d20))
+* update mikepenz/action-junit-report digest to b7b80d7 ([#714](https://github.com/hrzlgnm/mdns-tui-browser/issues/714)) ([ff0af78](https://github.com/hrzlgnm/mdns-tui-browser/commit/ff0af78187234f4dab24301759df23b94e9ffe34))
+
 ## [1.37.3](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.37.2...v1.37.3) (2026-10-05)
 
 
