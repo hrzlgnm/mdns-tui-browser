@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.0...v1.39.1) (2026-10-06)
+
+
+### Miscellaneous Chores
+
+* refresh app icon artwork and regenerate binaries ([#721](https://github.com/hrzlgnm/mdns-tui-browser/issues/721)) ([c9e4345](https://github.com/hrzlgnm/mdns-tui-browser/commit/c9e4345a518df5d9f1c87d6a6860b6f2e06c2bd4))
+
 ## [1.39.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.38.0...v1.39.0) (2026-10-06)
 
 
