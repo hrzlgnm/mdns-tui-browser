@@ -22,6 +22,16 @@ assets = [
         "644",
     ],
     [
+        "packaging/linux/mdns-tui-browser.desktop",
+        "usr/share/applications/mdns-tui-browser.desktop",
+        "644",
+    ],
+    [
+        "packaging/linux/mdns-tui-browser.svg",
+        "usr/share/icons/hicolor/scalable/apps/mdns-tui-browser.svg",
+        "644",
+    ],
+    [
         "target/debian/changelog.gz",
         "usr/share/doc/mdns-tui-browser/changelog.gz",
         "644",

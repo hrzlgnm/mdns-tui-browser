@@ -1,0 +1,14 @@
+<!-- Copyright 2026 hrzlgnm -->
+<!-- SPDX-License-Identifier: MIT -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="4" y="10" width="56" height="44" rx="6" fill="#1e1e2e"/>
+  <rect x="4" y="10" width="56" height="12" rx="6" fill="#313244"/>
+  <rect x="4" y="16" width="56" height="6" fill="#313244"/>
+  <circle cx="11" cy="16" r="2.2" fill="#f38ba8"/>
+  <circle cx="18" cy="16" r="2.2" fill="#fab387"/>
+  <circle cx="25" cy="16" r="2.2" fill="#a6e3a1"/>
+  <path d="M14 32 L24 38 L14 44" fill="none" stroke="#89b4fa" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="28" y1="44" x2="42" y2="44" stroke="#cdd6f4" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M44 28 a9 9 0 0 1 6 6 M44 34 a4.5 4.5 0 0 1 3 3" fill="none" stroke="#89dceb" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="42" cy="37" r="2.4" fill="#89dceb"/>
+</svg>

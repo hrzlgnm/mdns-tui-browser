@@ -103,7 +103,7 @@ jobs:
             aur:
               - '.github/workflows/aur-reusable.yml'
               - '.github/actions/latest-release-info/action.yml'
-              - 'packaging/aur/**'
+              - 'packaging/**'
               
             code:
               - '.github/actions/setup-*/**'
@@ -113,6 +113,8 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'Cross.toml'
+              - 'packaging/linux/**'
+              - 'packaging/macos/**'
             lint:
               - '.github/workflows/lint-reusable.yml'
             tests:

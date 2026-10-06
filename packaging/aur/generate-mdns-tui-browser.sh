@@ -45,5 +45,7 @@ package() {
     install -Dm644 "\${srcdir}/\${_builddir}"/README.md "\$pkgdir"/usr/share/doc/\$pkgname/README.md
     install -Dm644 "\${srcdir}/\${_builddir}"/CHANGELOG.md "\$pkgdir"/usr/share/doc/\$pkgname/CHANGELOG.md
     install -Dm644 "\${srcdir}/\${_builddir}"/docs/mdns-tui-browser.1 "\$pkgdir"/usr/share/man/man1/mdns-tui-browser.1
+    install -Dm644 "\${srcdir}/\${_builddir}"/packaging/linux/mdns-tui-browser.desktop "\$pkgdir"/usr/share/applications/mdns-tui-browser.desktop
+    install -Dm644 "\${srcdir}/\${_builddir}"/packaging/linux/mdns-tui-browser.svg "\$pkgdir"/usr/share/icons/hicolor/scalable/apps/mdns-tui-browser.svg
 }
 EOF
