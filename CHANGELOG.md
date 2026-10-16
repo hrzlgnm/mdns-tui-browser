@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.1...v1.39.2) (2026-10-16)
+
+
+### Dependencies
+
+* lock file maintenance ([#733](https://github.com/hrzlgnm/mdns-tui-browser/issues/733)) ([1391b1b](https://github.com/hrzlgnm/mdns-tui-browser/commit/1391b1b239b0a2b1f082c602baab4f5dd264782f))
+* update actions/download-artifact digest to 9000827 ([#723](https://github.com/hrzlgnm/mdns-tui-browser/issues/723)) ([52144b6](https://github.com/hrzlgnm/mdns-tui-browser/commit/52144b69cf029ec6112def55caefe5ed90e16d0b))
+* update actions/upload-artifact action to v7.0.2 ([#724](https://github.com/hrzlgnm/mdns-tui-browser/issues/724)) ([ca75fc5](https://github.com/hrzlgnm/mdns-tui-browser/commit/ca75fc586749770243abd8761589cea22946b122))
+* update dependency cargo-nextest to v0.9.148 ([#726](https://github.com/hrzlgnm/mdns-tui-browser/issues/726)) ([b89b8d0](https://github.com/hrzlgnm/mdns-tui-browser/commit/b89b8d038c3a588e7f9b171b4b69f74a9df056a1))
+* update dependency komac to v2.17.1 ([#738](https://github.com/hrzlgnm/mdns-tui-browser/issues/738)) ([785b058](https://github.com/hrzlgnm/mdns-tui-browser/commit/785b058d0cd390aa63bb08ebf84c80bcf149f43f))
+* update dtolnay/rust-toolchain digest to 686976e ([#728](https://github.com/hrzlgnm/mdns-tui-browser/issues/728)) ([7221d43](https://github.com/hrzlgnm/mdns-tui-browser/commit/7221d43e554a9747572fa195eced6c5f1316dea9))
+* update dtolnay/rust-toolchain digest to b725eda ([#739](https://github.com/hrzlgnm/mdns-tui-browser/issues/739)) ([92db98e](https://github.com/hrzlgnm/mdns-tui-browser/commit/92db98e731c6215a539b948daa050746ade28e23))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 16cf499 ([#735](https://github.com/hrzlgnm/mdns-tui-browser/issues/735)) ([1382f5f](https://github.com/hrzlgnm/mdns-tui-browser/commit/1382f5f5a09bb949dffd2259f044dc9ac7fb98e8))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 688d060 ([#737](https://github.com/hrzlgnm/mdns-tui-browser/issues/737)) ([f728c9f](https://github.com/hrzlgnm/mdns-tui-browser/commit/f728c9f329e578fe5bc7af594b0976f46136c97e))
+* update mikepenz/action-junit-report digest to 6ef3fdc ([#727](https://github.com/hrzlgnm/mdns-tui-browser/issues/727)) ([d079e47](https://github.com/hrzlgnm/mdns-tui-browser/commit/d079e478afff54df738c694571ac1effeeb5176f))
+* update rust crate serde_json to v1.0.152 ([#730](https://github.com/hrzlgnm/mdns-tui-browser/issues/730)) ([fd8a51c](https://github.com/hrzlgnm/mdns-tui-browser/commit/fd8a51cb2522de6326fc4527678a6860fe545b97))
+* update rust crate serde_json to v1.0.154 ([#731](https://github.com/hrzlgnm/mdns-tui-browser/issues/731)) ([e448290](https://github.com/hrzlgnm/mdns-tui-browser/commit/e44829080aa9848823a3193e331c0dd559c96cff))
+* update rust crate tokio to v1.53.3 ([#736](https://github.com/hrzlgnm/mdns-tui-browser/issues/736)) ([825267f](https://github.com/hrzlgnm/mdns-tui-browser/commit/825267f4521fb7ef1edc848da28eae26aea9f535))
+* update rust crate winresource to v0.1.33 ([#732](https://github.com/hrzlgnm/mdns-tui-browser/issues/732)) ([1bdfd7e](https://github.com/hrzlgnm/mdns-tui-browser/commit/1bdfd7ee80e691092667fd72078c3233f58a2a5d))
+* update rust crate winresource to v0.1.34 ([#734](https://github.com/hrzlgnm/mdns-tui-browser/issues/734)) ([4b0d2a2](https://github.com/hrzlgnm/mdns-tui-browser/commit/4b0d2a2e4b94bc0a8c1e0bbf0371f316a9347454))
+
+
+### Miscellaneous Chores
+
+* use ubuntu-slim runner where safe ([#729](https://github.com/hrzlgnm/mdns-tui-browser/issues/729)) ([3e30e12](https://github.com/hrzlgnm/mdns-tui-browser/commit/3e30e121a8885981050565712740dfa0dd3f4112))
+
 ## [1.39.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.0...v1.39.1) (2026-10-06)
 
 
