@@ -33,7 +33,7 @@ prepare() {
 }
 build() {
     cd "\$srcdir/\$_builddir" || exit 1
-    cargo --locked --frozen build --release
+    cargo --locked --frozen auditable build --release
 }
 check() {
     cd "\$srcdir/\$_builddir" || exit 1
