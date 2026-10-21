@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.3](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.2...v1.39.3) (2026-10-21)
+
+
+### Bug Fixes
+
+* build AUR package with cargo auditable ([#749](https://github.com/hrzlgnm/mdns-tui-browser/issues/749)) ([9a47859](https://github.com/hrzlgnm/mdns-tui-browser/commit/9a47859cbcc428bec228d434ab4e54fa1a8e4b75))
+
+
+### Dependencies
+
+* lock file maintenance ([#750](https://github.com/hrzlgnm/mdns-tui-browser/issues/750)) ([b1d3495](https://github.com/hrzlgnm/mdns-tui-browser/commit/b1d34957880e63ae3ce0bb37a3d69091c8c20a45))
+* update dependency cargo-nextest to v0.9.149 ([#748](https://github.com/hrzlgnm/mdns-tui-browser/issues/748)) ([06f59d1](https://github.com/hrzlgnm/mdns-tui-browser/commit/06f59d1762a4415f78063178fc7099de2697969a))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 8279aeb ([#746](https://github.com/hrzlgnm/mdns-tui-browser/issues/746)) ([08ce0fb](https://github.com/hrzlgnm/mdns-tui-browser/commit/08ce0fb43836621b8ff9b317028b1fc4c367088e))
+* update rust crate tokio to v1.54.0 ([#744](https://github.com/hrzlgnm/mdns-tui-browser/issues/744)) ([88f589a](https://github.com/hrzlgnm/mdns-tui-browser/commit/88f589a41ab52dd564712f9b459f9ec2b2a589f3))
+* update swatinem/rust-cache digest to d1527c8 ([#747](https://github.com/hrzlgnm/mdns-tui-browser/issues/747)) ([7044055](https://github.com/hrzlgnm/mdns-tui-browser/commit/70440559c822f92c035829ef905c3942c0d8086c))
+
+
+### Miscellaneous Chores
+
+* gate release PRs on a fully maximized Cargo.lock ([#745](https://github.com/hrzlgnm/mdns-tui-browser/issues/745)) ([89a6562](https://github.com/hrzlgnm/mdns-tui-browser/commit/89a656279dbbbd280be3550f2c1cc1a892398445))
+* remove release-guard in favor of failure handler ([#742](https://github.com/hrzlgnm/mdns-tui-browser/issues/742)) ([6d3ca79](https://github.com/hrzlgnm/mdns-tui-browser/commit/6d3ca79a06d192498ec4803a0a37ca80cbd76069))
+
 ## [1.39.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.1...v1.39.2) (2026-10-19)
 
 
