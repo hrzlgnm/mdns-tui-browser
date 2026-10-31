@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.4](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.3...v1.39.4) (2026-10-31)
+
+
+### Bug Fixes
+
+* drop redundant renovate managers behind built-in extraction ([#762](https://github.com/hrzlgnm/mdns-tui-browser/issues/762)) ([abd4e78](https://github.com/hrzlgnm/mdns-tui-browser/commit/abd4e78991e3b995773d680c7624c66bed7f8dd9))
+* **release:** don't publish release on failure to allow rebuilds ([#766](https://github.com/hrzlgnm/mdns-tui-browser/issues/766)) ([6a32867](https://github.com/hrzlgnm/mdns-tui-browser/commit/6a32867d1ad1f5ec785505bbd717869f80269c35))
+
+
+### Dependencies
+
+* lock file maintenance ([#763](https://github.com/hrzlgnm/mdns-tui-browser/issues/763)) ([c87b269](https://github.com/hrzlgnm/mdns-tui-browser/commit/c87b2694d959e7fdf088f8ebe80a7834f9a1fa8f))
+* update dependency cargo-nextest to v0.9.150 ([#764](https://github.com/hrzlgnm/mdns-tui-browser/issues/764)) ([ba6a938](https://github.com/hrzlgnm/mdns-tui-browser/commit/ba6a938fd41c1ebd46d882640f982f5205930b78))
+* update dependency mozilla/sccache to v0.19.0 ([#760](https://github.com/hrzlgnm/mdns-tui-browser/issues/760)) ([d237014](https://github.com/hrzlgnm/mdns-tui-browser/commit/d237014942b0065d4a57610064edd5d91181aa5b))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 317b461 ([#754](https://github.com/hrzlgnm/mdns-tui-browser/issues/754)) ([f6f529a](https://github.com/hrzlgnm/mdns-tui-browser/commit/f6f529a69aec15851100c343ff229018572ee266))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 60da229 ([#765](https://github.com/hrzlgnm/mdns-tui-browser/issues/765)) ([c83c4ad](https://github.com/hrzlgnm/mdns-tui-browser/commit/c83c4ad1e58bbaaaf0108b9be2185a03d999cb56))
+* update hrzlgnm/actions action to v2.14.12 ([#752](https://github.com/hrzlgnm/mdns-tui-browser/issues/752)) ([4e9a0a1](https://github.com/hrzlgnm/mdns-tui-browser/commit/4e9a0a1c623f014d7fd562eb1bca96739fc347ba))
+* update mikepenz/action-junit-report digest to 8a133bf ([#767](https://github.com/hrzlgnm/mdns-tui-browser/issues/767)) ([cf4044f](https://github.com/hrzlgnm/mdns-tui-browser/commit/cf4044f41d7a66452d4001ddd4faa93005e94536))
+* update rust crate open to v5.4.5 ([#756](https://github.com/hrzlgnm/mdns-tui-browser/issues/756)) ([35965e3](https://github.com/hrzlgnm/mdns-tui-browser/commit/35965e312a8c7a304aca6d56bf2a5f18d81d7dea))
+* update rust crate tokio to v1.54.1 ([#755](https://github.com/hrzlgnm/mdns-tui-browser/issues/755)) ([5ee6e2a](https://github.com/hrzlgnm/mdns-tui-browser/commit/5ee6e2ac977f52b9035e7c13eae809a80c75c2a1))
+
+
+### Miscellaneous Chores
+
+* **ci:** only cancel in-progress runs off main ([#757](https://github.com/hrzlgnm/mdns-tui-browser/issues/757)) ([176e620](https://github.com/hrzlgnm/mdns-tui-browser/commit/176e6209483c1b3046fc06802405a525aafce747))
+* **ci:** remove PR labeler ([#758](https://github.com/hrzlgnm/mdns-tui-browser/issues/758)) ([ff62838](https://github.com/hrzlgnm/mdns-tui-browser/commit/ff62838b22ad645332ac4304f9e079f9a17ac513))
+* fix misleading re-run note in lockfile-fresh error ([#759](https://github.com/hrzlgnm/mdns-tui-browser/issues/759)) ([daabb40](https://github.com/hrzlgnm/mdns-tui-browser/commit/daabb40524311c7afcb8f55ef913630346097e35))
+
 ## [1.39.3](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.2...v1.39.3) (2026-10-21)
 
 
