@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 #![forbid(unsafe_code)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -11,6 +11,16 @@ use mdns_sd::{ResolvedService, ScopedIp};
 use serde::{Deserialize, Serialize};
 
 pub const MDNS_SD_META_SERVICE: &str = "_services._dns-sd._udp.local.";
+
+/// Returns the IP addresses owned by this device's network interfaces.
+///
+/// Used to flag services advertised by the discovery device itself.
+/// Never fails hard: on error returns an empty set (no highlighting).
+pub fn local_interface_addrs() -> HashSet<IpAddr> {
+    if_addrs::get_if_addrs()
+        .map(|ifs| ifs.into_iter().map(|iface| iface.addr.ip()).collect())
+        .unwrap_or_default()
+}
 
 pub fn format_ip_for_display(ip: &ScopedIp) -> String {
     match ip {
@@ -235,6 +245,14 @@ pub struct ServiceEntry {
 }
 
 impl ServiceEntry {
+    /// Whether this service resolves to an address owned by this device,
+    /// i.e. whether it is advertised by the discovery device itself.
+    pub fn is_local(&self, local_addrs: &HashSet<IpAddr>) -> bool {
+        self.addrs
+            .iter()
+            .any(|a| local_addrs.contains(&a.to_ip_addr()))
+    }
+
     /// Returns all URLs associated with this service, deduplicated.
     pub fn get_urls(&self) -> Vec<String> {
         let mut urls = BTreeSet::new();
@@ -1056,5 +1074,46 @@ pub mod tests {
 
         let urls = service.get_urls();
         assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn test_is_local_matching_address() {
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        let local: HashSet<IpAddr> = service.addrs.iter().map(|a| a.to_ip_addr()).collect();
+
+        assert!(service.is_local(&local));
+    }
+
+    #[test]
+    fn test_is_local_no_match() {
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+        let local: HashSet<IpAddr> = ["10.0.0.1".parse().unwrap()].into_iter().collect();
+
+        assert!(!service.is_local(&local));
+    }
+
+    #[test]
+    fn test_is_local_empty_set() {
+        let service = create_test_service("test", "_http._tcp.local.", 8080);
+
+        assert!(!service.is_local(&HashSet::new()));
+    }
+
+    #[test]
+    fn test_is_local_any_matching_address() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.addrs = vec![scoped_ip("192.168.1.100"), scoped_ip("10.0.0.5")];
+        let local: HashSet<IpAddr> = ["10.0.0.5".parse().unwrap()].into_iter().collect();
+
+        assert!(service.is_local(&local));
+    }
+
+    #[test]
+    fn test_is_local_ignores_online_state() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.online = false;
+        let local: HashSet<IpAddr> = service.addrs.iter().map(|a| a.to_ip_addr()).collect();
+
+        assert!(service.is_local(&local));
     }
 }
