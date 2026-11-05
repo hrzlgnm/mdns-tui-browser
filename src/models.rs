@@ -7,19 +7,82 @@ use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
-use mdns_sd::{ResolvedService, ScopedIp};
+use mdns_sd::{InterfaceId, ResolvedService, ScopedIp, ScopedIpV4};
 use serde::{Deserialize, Serialize};
 
 pub const MDNS_SD_META_SERVICE: &str = "_services._dns-sd._udp.local.";
+
+/// Addresses owned by this device's network interfaces, split by scope.
+///
+/// Global addresses are unique per host and match by address alone.
+/// Link-scoped addresses (unicast link-local IPv6, 169.254/16 IPv4) can
+/// repeat on separate links, so they additionally match by interface,
+/// either by OS name or by OS index (index 0 means unknown and never
+/// matches, so an unknown scope cannot alias a known one).
+#[derive(Debug, Clone, Default)]
+pub struct LocalAddrs {
+    global: HashSet<IpAddr>,
+    scoped_by_name: HashSet<(IpAddr, String)>,
+    scoped_by_index: HashSet<(IpAddr, u32)>,
+}
+
+impl LocalAddrs {
+    /// Whether a resolved address belongs to this device.
+    pub fn contains(&self, addr: &ScopedIp) -> bool {
+        match addr {
+            ScopedIp::V6(v6) if v6.addr().is_unicast_link_local() => {
+                let ip = IpAddr::V6(*v6.addr());
+                let scope = v6.scope_id();
+                (!scope.name.is_empty() && self.scoped_by_name.contains(&(ip, scope.name.clone())))
+                    || (scope.index != 0 && self.scoped_by_index.contains(&(ip, scope.index)))
+            }
+            ScopedIp::V4(v4) if v4.addr().is_link_local() => {
+                let ip = IpAddr::V4(*v4.addr());
+                v4.interface_ids().iter().any(|id| {
+                    (!id.name.is_empty() && self.scoped_by_name.contains(&(ip, id.name.clone())))
+                        || (id.index != 0 && self.scoped_by_index.contains(&(ip, id.index)))
+                })
+            }
+            _ => self.global.contains(&addr.to_ip_addr()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl LocalAddrs {
+    /// A cache holding a single global address, for deterministic tests.
+    pub fn single_global(ip: IpAddr) -> Self {
+        Self {
+            global: HashSet::from([ip]),
+            ..Default::default()
+        }
+    }
+}
 
 /// Returns the IP addresses owned by this device's network interfaces.
 ///
 /// Used to flag services advertised by the discovery device itself.
 /// Never fails hard: on error returns an empty set (no highlighting).
-pub fn local_interface_addrs() -> HashSet<IpAddr> {
-    if_addrs::get_if_addrs()
-        .map(|ifs| ifs.into_iter().map(|iface| iface.addr.ip()).collect())
-        .unwrap_or_default()
+pub fn local_interface_addrs() -> LocalAddrs {
+    let mut local = LocalAddrs::default();
+    if let Ok(ifaces) = if_addrs::get_if_addrs() {
+        for iface in ifaces {
+            let ip = iface.addr.ip();
+            let link_scoped = match ip {
+                IpAddr::V4(v4) => v4.is_link_local(),
+                IpAddr::V6(v6) => v6.is_unicast_link_local(),
+            };
+            if link_scoped {
+                local.scoped_by_name.insert((ip, iface.name.clone()));
+                if let Some(index) = iface.index {
+                    local.scoped_by_index.insert((ip, index));
+                }
+            } else {
+                local.global.insert(ip);
+            }
+        }
+    }
+    local
 }
 
 pub fn format_ip_for_display(ip: &ScopedIp) -> String {
@@ -247,10 +310,8 @@ pub struct ServiceEntry {
 impl ServiceEntry {
     /// Whether this service resolves to an address owned by this device,
     /// i.e. whether it is advertised by the discovery device itself.
-    pub fn is_local(&self, local_addrs: &HashSet<IpAddr>) -> bool {
-        self.addrs
-            .iter()
-            .any(|a| local_addrs.contains(&a.to_ip_addr()))
+    pub fn is_local(&self, local_addrs: &LocalAddrs) -> bool {
+        self.addrs.iter().any(|a| local_addrs.contains(a))
     }
 
     /// Returns all URLs associated with this service, deduplicated.
@@ -1079,7 +1140,10 @@ pub mod tests {
     #[test]
     fn test_is_local_matching_address() {
         let service = create_test_service("test", "_http._tcp.local.", 8080);
-        let local: HashSet<IpAddr> = service.addrs.iter().map(|a| a.to_ip_addr()).collect();
+        let local = LocalAddrs {
+            global: service.addrs.iter().map(|a| a.to_ip_addr()).collect(),
+            ..Default::default()
+        };
 
         assert!(service.is_local(&local));
     }
@@ -1087,7 +1151,10 @@ pub mod tests {
     #[test]
     fn test_is_local_no_match() {
         let service = create_test_service("test", "_http._tcp.local.", 8080);
-        let local: HashSet<IpAddr> = ["10.0.0.1".parse().unwrap()].into_iter().collect();
+        let local = LocalAddrs {
+            global: ["10.0.0.1".parse().unwrap()].into_iter().collect(),
+            ..Default::default()
+        };
 
         assert!(!service.is_local(&local));
     }
@@ -1096,14 +1163,17 @@ pub mod tests {
     fn test_is_local_empty_set() {
         let service = create_test_service("test", "_http._tcp.local.", 8080);
 
-        assert!(!service.is_local(&HashSet::new()));
+        assert!(!service.is_local(&LocalAddrs::default()));
     }
 
     #[test]
     fn test_is_local_any_matching_address() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.addrs = vec![scoped_ip("192.168.1.100"), scoped_ip("10.0.0.5")];
-        let local: HashSet<IpAddr> = ["10.0.0.5".parse().unwrap()].into_iter().collect();
+        let local = LocalAddrs {
+            global: ["10.0.0.5".parse().unwrap()].into_iter().collect(),
+            ..Default::default()
+        };
 
         assert!(service.is_local(&local));
     }
@@ -1112,8 +1182,101 @@ pub mod tests {
     fn test_is_local_ignores_online_state() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.online = false;
-        let local: HashSet<IpAddr> = service.addrs.iter().map(|a| a.to_ip_addr()).collect();
+        let local = LocalAddrs {
+            global: service.addrs.iter().map(|a| a.to_ip_addr()).collect(),
+            ..Default::default()
+        };
 
         assert!(service.is_local(&local));
+    }
+
+    fn scoped_v6(ip: &str, ifname: &str, index: u32) -> ScopedIp {
+        ScopedIp::from(&if_addrs::Interface {
+            name: ifname.to_string(),
+            addr: if_addrs::IfAddr::V6(if_addrs::Ifv6Addr {
+                ip: ip.parse().unwrap(),
+                netmask: "::".parse().unwrap(),
+                prefixlen: 64,
+                broadcast: None,
+            }),
+            index: Some(index),
+            oper_status: if_addrs::IfOperStatus::Up,
+            is_p2p: false,
+            #[cfg(windows)]
+            adapter_name: String::new(),
+        })
+    }
+
+    fn scoped_v4(ip: &str, ifname: &str, index: u32) -> ScopedIp {
+        ScopedIp::V4(ScopedIpV4::new(
+            ip.parse().unwrap(),
+            InterfaceId {
+                name: ifname.to_string(),
+                index,
+            },
+        ))
+    }
+
+    fn link_local_set(ip: IpAddr, ifname: &str, index: u32) -> LocalAddrs {
+        LocalAddrs {
+            scoped_by_name: [(ip, ifname.to_string())].into_iter().collect(),
+            scoped_by_index: [(ip, index)].into_iter().collect(),
+            ..Default::default()
+        }
+    }
+
+    /// Same link-local address on the same interface (by name) is local.
+    #[test]
+    fn test_is_local_link_local_v6_matching_interface() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.addrs = vec![scoped_v6("fe80::1", "eth0", 2)];
+        let local = link_local_set("fe80::1".parse().unwrap(), "eth0", 7);
+
+        assert!(service.is_local(&local));
+    }
+
+    /// Same link-local address on a different interface is remote, even
+    /// when the numeric address repeats across links.
+    #[test]
+    fn test_is_local_link_local_v6_other_interface() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.addrs = vec![scoped_v6("fe80::1", "wlan0", 3)];
+        let local = link_local_set("fe80::1".parse().unwrap(), "eth0", 2);
+
+        assert!(!service.is_local(&local));
+    }
+
+    /// A matching OS interface index is sufficient when names disagree.
+    #[test]
+    fn test_is_local_link_local_v6_matching_index() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.addrs = vec![scoped_v6("fe80::1", "wlan0", 2)];
+        let local = link_local_set("fe80::1".parse().unwrap(), "eth0", 2);
+
+        assert!(service.is_local(&local));
+    }
+
+    /// A link-local address with unknown scope never matches: an empty
+    /// name and index 0 must not alias a real interface.
+    #[test]
+    fn test_is_local_link_local_v6_unknown_scope() {
+        let mut service = create_test_service("test", "_http._tcp.local.", 8080);
+        service.addrs = vec![ScopedIp::from("fe80::1".parse::<IpAddr>().unwrap())];
+        let local = link_local_set("fe80::1".parse().unwrap(), "eth0", 2);
+
+        assert!(!service.is_local(&local));
+    }
+
+    /// IPv4 link-local (169.254/16) is link-scoped just like IPv6.
+    #[test]
+    fn test_is_local_link_local_v4_interface_scope() {
+        let mut remote = create_test_service("test", "_http._tcp.local.", 8080);
+        remote.addrs = vec![scoped_v4("169.254.5.6", "wlan0", 3)];
+        let mut nearby = create_test_service("test", "_http._tcp.local.", 8080);
+        nearby.addrs = vec![scoped_v4("169.254.5.6", "eth0", 2)];
+        let local = link_local_set("169.254.5.6".parse().unwrap(), "eth0", 2);
+
+        assert!(!remote.is_local(&local));
+        assert!(nearby.is_local(&local));
     }
 }

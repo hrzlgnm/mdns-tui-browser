@@ -21,9 +21,9 @@ use tokio::sync::RwLock;
 
 use crate::input::InputState;
 use crate::models::{
-    AppOptions, FilterInfo, MDNS_SD_META_SERVICE, Metadata, ServiceEntry, SortDirection, SortField,
-    SortInfo, StateDump, current_timestamp_micros, format_ip_for_display, format_service_addrs,
-    local_interface_addrs,
+    AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
+    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, format_ip_for_display,
+    format_service_addrs, local_interface_addrs,
 };
 use crate::popup::PopupState;
 use crate::scroll::ScrollState;
@@ -189,7 +189,7 @@ struct AppState {
     disable_ipv6: bool,
     interfaces: Option<Vec<String>>,
     loaded_from_file: bool,
-    local_addrs: HashSet<IpAddr>,
+    local_addrs: LocalAddrs,
     local_addrs_refreshed_at: Instant,
 }
 
@@ -5690,21 +5690,27 @@ mod tests {
 
     #[test]
     fn test_refresh_local_addrs_respects_ttl() {
+        use crate::models::tests::create_test_service;
+        use mdns_sd::ScopedIp;
+
+        // TEST-NET-1 address: never assigned to a real interface.
+        let sentinel: IpAddr = "192.0.2.1".parse().unwrap();
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.addrs = vec![ScopedIp::from(sentinel)];
+
         let mut state = AppState::new(HashSet::new(), false, false, None);
 
-        // Fresh cache is left alone, even with a sentinel that a real
-        // interface listing would never contain.
-        let sentinel: IpAddr = "192.0.2.1".parse().unwrap();
-        state.local_addrs = HashSet::from([sentinel]);
+        // Fresh cache is left alone.
+        state.local_addrs = LocalAddrs::single_global(sentinel);
         state.local_addrs_refreshed_at = Instant::now();
         state.refresh_local_addrs();
-        assert!(state.local_addrs.contains(&sentinel));
+        assert!(state.is_local_service(&service));
 
         // A stale cache is re-read from the OS, dropping the sentinel.
         state.local_addrs_refreshed_at =
             Instant::now() - LOCAL_ADDRS_REFRESH_INTERVAL - Duration::from_secs(1);
         state.refresh_local_addrs();
-        assert!(!state.local_addrs.contains(&sentinel));
+        assert!(!state.is_local_service(&service));
     }
 
     #[test]
