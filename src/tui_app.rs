@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
@@ -20,8 +20,9 @@ use tokio::sync::RwLock;
 
 use crate::input::InputState;
 use crate::models::{
-    AppOptions, FilterInfo, MDNS_SD_META_SERVICE, Metadata, ServiceEntry, SortDirection, SortField,
-    SortInfo, StateDump, current_timestamp_micros, format_ip_for_display, format_service_addrs,
+    AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
+    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, format_ip_for_display,
+    format_service_addrs, local_interface_addrs,
 };
 use crate::popup::PopupState;
 use crate::scroll::ScrollState;
@@ -41,6 +42,7 @@ const BROWSE_RETRY_ATTEMPTS: usize = 100;
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
 const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
 const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
+const LOCAL_DEVICE_COLOR: Color = Color::Green;
 
 #[cfg(unix)]
 async fn handle_suspend(
@@ -186,7 +188,13 @@ struct AppState {
     disable_ipv6: bool,
     interfaces: Option<Vec<String>>,
     loaded_from_file: bool,
+    local_addrs: LocalAddrs,
+    local_addrs_refreshed_at: Instant,
 }
+
+// Local interface addresses are re-read at most this often so VPN/DHCP
+// changes get picked up without a syscall on every rendered frame.
+const LOCAL_ADDRS_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 
 impl Clone for AppState {
     fn clone(&self) -> Self {
@@ -216,6 +224,8 @@ impl Clone for AppState {
             disable_ipv6: self.disable_ipv6,
             interfaces: self.interfaces.clone(),
             loaded_from_file: self.loaded_from_file,
+            local_addrs: self.local_addrs.clone(),
+            local_addrs_refreshed_at: self.local_addrs_refreshed_at,
         }
     }
 }
@@ -255,9 +265,28 @@ impl AppState {
             disable_ipv6,
             interfaces,
             loaded_from_file: false,
+            local_addrs: local_interface_addrs(),
+            local_addrs_refreshed_at: Instant::now(),
         };
         state.validate_selected_type();
         state
+    }
+
+    /// Whether the cached device addresses may be outdated.
+    fn local_addrs_stale(&self) -> bool {
+        self.local_addrs_refreshed_at.elapsed() >= LOCAL_ADDRS_REFRESH_INTERVAL
+    }
+
+    /// Re-reads the device's interface addresses if the cached set is stale.
+    fn refresh_local_addrs(&mut self) {
+        if self.local_addrs_stale() {
+            self.local_addrs = local_interface_addrs();
+            self.local_addrs_refreshed_at = Instant::now();
+        }
+    }
+
+    fn is_local_service(&self, service: &ServiceEntry) -> bool {
+        service.is_local(&self.local_addrs)
     }
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
@@ -819,6 +848,7 @@ impl AppState {
     // Prepare state for rendering - updates UI-related fields based on terminal size
     fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
         self.terminal_area = terminal_area;
+        self.refresh_local_addrs();
         self.validate_selected_type();
 
         // Ensure filtered cache is up to date before computing layout
@@ -1534,7 +1564,8 @@ impl AppState {
         if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
             && let Some(service) = self.services.get(service_idx)
         {
-            let details_lines = create_service_details_text(service);
+            let details_lines =
+                create_service_details_text(service, self.is_local_service(service));
             let total_lines = details_lines.len();
 
             if total_lines > 0 && self.details_scroll.visible_items > 0 {
@@ -1608,6 +1639,7 @@ enum Notification {
     UserInput,
     ServiceChanged,
     MetricsUpdated,
+    LocalAddrsChanged,
 }
 
 pub fn normalize_service_type(service_type: &str) -> String {
@@ -2121,8 +2153,9 @@ fn render_services_list(
         .enumerate()
         .map(|(i, &service_idx)| {
             let service = &services_clone[service_idx];
-            let style = create_service_list_item_style(i, selected_service_idx, service);
-            let display_text = format_service_for_display(service);
+            let is_local = app_state.is_local_service(service);
+            let style = create_service_list_item_style(i, selected_service_idx, service, is_local);
+            let display_text = format_service_for_display(service, is_local);
             ListItem::new(Line::from(Span::styled(display_text, style)))
         })
         .collect();
@@ -2212,7 +2245,8 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
         .map(|&idx| &services_clone[idx]);
 
     if let Some(service) = selected_service {
-        let details_lines = create_service_details_text(service);
+        let details_lines =
+            create_service_details_text(service, app_state.is_local_service(service));
 
         // Apply scroll offset
         let clamped_offset = if details_lines.is_empty() {
@@ -2338,6 +2372,7 @@ fn create_service_list_item_style(
     index: usize,
     selected_index: usize,
     service: &ServiceEntry,
+    is_local: bool,
 ) -> Style {
     let foreground = Color::White;
 
@@ -2349,6 +2384,13 @@ fn create_service_list_item_style(
 
     if !service.online {
         style = style.add_modifier(Modifier::CROSSED_OUT);
+    }
+
+    // Bold green foreground for services advertised by this device.
+    // Composes with selection/offline/flapping, which use background,
+    // crossed-out, and underline respectively.
+    if is_local {
+        style = style.fg(LOCAL_DEVICE_COLOR).add_modifier(Modifier::BOLD);
     }
 
     // Add subtle styling for flapping services using color-blind friendly approach
@@ -2370,7 +2412,7 @@ fn create_service_list_item_style(
     style
 }
 
-fn format_service_for_display(service: &ServiceEntry) -> String {
+fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String {
     let display_name = service
         .fullname
         .trim_end_matches(&service.service_type)
@@ -2384,9 +2426,12 @@ fn format_service_for_display(service: &ServiceEntry) -> String {
         .first()
         .map(format_ip_for_display)
         .unwrap_or_else(|| "<no-addr>".into());
+    // The marker survives monochrome terminals; it also keeps the flag
+    // visible when a long row is truncated on the right.
+    let marker = if is_local { "◉ " } else { "" };
     format!(
-        "{} - {} - {}:{}",
-        display_name, display_host, address, service.port
+        "{}{} - {} - {}:{}",
+        marker, display_name, display_host, address, service.port
     )
 }
 
@@ -2512,8 +2557,17 @@ fn get_session_history(service: &ServiceEntry) -> String {
     timeline.join("\n")
 }
 
-fn create_service_details_text(service: &ServiceEntry) -> Vec<Line<'static>> {
+fn create_service_details_text(service: &ServiceEntry, is_local: bool) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
+
+    if is_local {
+        lines.push(Line::from(vec![Span::styled(
+            "◉ Advertised by this device",
+            Style::default()
+                .fg(LOCAL_DEVICE_COLOR)
+                .add_modifier(Modifier::BOLD),
+        )]));
+    }
 
     // Online status - use blue (color-blind friendly)
     let online_style: Style = Style::default()
@@ -2935,6 +2989,21 @@ pub async fn run_tui(
             }
         }
     }
+    // Re-check local interface addresses on a schedule so the local-device
+    // markers track VPN/DHCP changes even with no input or service events.
+    // View-only mode has neither, so without this the markers there could
+    // stay stale indefinitely. The render path applies the refresh only
+    // once the cached set expires.
+    {
+        let notification_sender_for_addrs = notification_sender.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(LOCAL_ADDRS_REFRESH_INTERVAL);
+            loop {
+                interval.tick().await;
+                let _ = notification_sender_for_addrs.send(Notification::LocalAddrsChanged);
+            }
+        });
+    }
     // Initial render to show the UI immediately
     {
         let terminal_area = terminal
@@ -3120,6 +3189,8 @@ pub async fn run_tui(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::net::IpAddr;
 
     use crate::models::SerializableServiceEntry;
     use crate::models::SerializableServiceSession;
@@ -5465,7 +5536,7 @@ mod tests {
     #[test]
     fn test_format_service_for_display() {
         let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
-        let display = format_service_for_display(&service);
+        let display = format_service_for_display(&service, false);
         println!("Display string: {}", display);
         assert!(display.contains("MyPrinter"));
         assert!(display.contains("192.168.1.64"));
@@ -5491,7 +5562,7 @@ mod tests {
             is_flapping: false,
         };
 
-        let display = format_service_for_display(&service);
+        let display = format_service_for_display(&service, false);
         assert!(display.contains("test"));
         assert!(display.contains("testhost"));
         assert!(display.contains("<no-addr>"));
@@ -5514,7 +5585,7 @@ mod tests {
         service.addrs.clear(); // Test with empty addresses
         service.host = "offlinehost.local.".to_string(); // Override host for test
 
-        let display = format_service_for_display(&service);
+        let display = format_service_for_display(&service, false);
         assert!(display.contains("OfflineService"));
         assert!(display.contains("offlinehost"));
         assert!(display.contains("80"));
@@ -5525,8 +5596,20 @@ mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
         service.addrs.clear(); // Test with empty addresses
 
-        let display = format_service_for_display(&service);
+        let display = format_service_for_display(&service, false);
         assert!(display.contains("<no-addr>"));
+    }
+
+    #[test]
+    fn test_format_service_for_display_local_marker() {
+        let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
+
+        let remote = format_service_for_display(&service, false);
+        assert!(!remote.starts_with("◉ "));
+
+        let local = format_service_for_display(&service, true);
+        assert!(local.starts_with("◉ "));
+        assert!(local.contains("MyPrinter"));
     }
 
     #[test]
@@ -5542,7 +5625,7 @@ mod tests {
         service.last_online_micros = Some(1000000000);
         service.last_offline_micros = None;
 
-        let details_lines = create_service_details_text(&service);
+        let details_lines = create_service_details_text(&service, false);
         let details_text: String = details_lines
             .iter()
             .map(|line| {
@@ -5571,7 +5654,7 @@ mod tests {
     fn test_create_service_details_text_online_service() {
         let service = create_test_service("test", "_http._tcp.local.", 80);
 
-        let details_lines = create_service_details_text(&service);
+        let details_lines = create_service_details_text(&service, false);
         let details_text: String = details_lines
             .iter()
             .map(|line| {
@@ -5593,7 +5676,7 @@ mod tests {
     fn test_create_service_details_text_offline_service() {
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
         service.online = false;
-        let details_lines = create_service_details_text(&service);
+        let details_lines = create_service_details_text(&service, false);
         let details_text: String = details_lines
             .iter()
             .map(|line| {
@@ -5606,6 +5689,62 @@ mod tests {
             .join("");
 
         assert!(details_text.contains("Status: Offline"));
+    }
+
+    #[test]
+    fn test_create_service_details_text_local_device() {
+        let service = create_test_service("test", "_http._tcp.local.", 80);
+
+        let remote_lines = create_service_details_text(&service, false);
+        let remote_text: String = remote_lines
+            .iter()
+            .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
+            .collect();
+        assert!(!remote_text.contains("Advertised by this device"));
+
+        let local_lines = create_service_details_text(&service, true);
+        let local_text: String = local_lines
+            .iter()
+            .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
+            .collect();
+        assert!(local_text.contains("Advertised by this device"));
+    }
+
+    #[test]
+    fn test_refresh_local_addrs_respects_ttl() {
+        use crate::models::tests::create_test_service;
+        use mdns_sd::ScopedIp;
+
+        // TEST-NET-1 address: never assigned to a real interface.
+        let sentinel: IpAddr = "192.0.2.1".parse().unwrap();
+        let mut service = create_test_service("test", "_http._tcp.local.", 80);
+        service.addrs = vec![ScopedIp::from(sentinel)];
+
+        let mut state = AppState::new(HashSet::new(), false, false, None);
+
+        // Fresh cache is left alone.
+        state.local_addrs = LocalAddrs::single_global(sentinel);
+        state.local_addrs_refreshed_at = Instant::now();
+        state.refresh_local_addrs();
+        assert!(state.is_local_service(&service));
+
+        // A stale cache is re-read from the OS, dropping the sentinel.
+        state.local_addrs_refreshed_at =
+            Instant::now() - LOCAL_ADDRS_REFRESH_INTERVAL - Duration::from_secs(1);
+        state.refresh_local_addrs();
+        assert!(!state.is_local_service(&service));
+    }
+
+    #[test]
+    fn test_local_addrs_stale_predicate() {
+        let mut state = AppState::new(HashSet::new(), false, false, None);
+
+        state.local_addrs_refreshed_at = Instant::now();
+        assert!(!state.local_addrs_stale());
+
+        state.local_addrs_refreshed_at =
+            Instant::now() - LOCAL_ADDRS_REFRESH_INTERVAL - Duration::from_secs(1);
+        assert!(state.local_addrs_stale());
     }
 
     #[test]
@@ -5870,19 +6009,24 @@ mod tests {
         offline_service.addrs.clear(); // Test with empty addresses
 
         // Test selected online service
-        let style = create_service_list_item_style(0, 0, &online_service);
+        let style = create_service_list_item_style(0, 0, &online_service, false);
         assert_eq!(style.fg, Some(Color::White));
         assert_eq!(style.bg, Some(Color::DarkGray));
 
         // Test unselected online service
-        let style = create_service_list_item_style(0, 1, &online_service);
+        let style = create_service_list_item_style(0, 1, &online_service, false);
         assert_eq!(style.fg, Some(Color::White));
         assert_eq!(style.bg, None);
 
         // Test offline service
-        let style = create_service_list_item_style(0, 0, &offline_service);
+        let style = create_service_list_item_style(0, 0, &offline_service, false);
         assert_eq!(style.fg, Some(Color::White));
         assert!(style.add_modifier.contains(Modifier::CROSSED_OUT));
+
+        // Test local service: bold green foreground on top of the base style
+        let style = create_service_list_item_style(0, 1, &online_service, true);
+        assert_eq!(style.fg, Some(Color::Green));
+        assert!(style.add_modifier.contains(Modifier::BOLD));
     }
 
     // Edge case tests
@@ -5978,6 +6122,7 @@ mod tests {
         let _user_input = Notification::UserInput;
         let _service_changed = Notification::ServiceChanged;
         let _metrics_updated = Notification::MetricsUpdated;
+        let _local_addrs_changed = Notification::LocalAddrsChanged;
     }
 
     // Sorting tests
@@ -7845,7 +7990,7 @@ mod tests {
         service.is_flapping = true;
         service.online = true;
 
-        let style = create_service_list_item_style(2, 2, &service);
+        let style = create_service_list_item_style(2, 2, &service, false);
 
         // Should have darker background with underline when selected and flapping
         assert_eq!(style.bg, Some(FLAPPING_COLOR_SELECTED));
@@ -7859,7 +8004,7 @@ mod tests {
         service.is_flapping = true;
         service.online = true;
 
-        let style = create_service_list_item_style(2, 1, &service);
+        let style = create_service_list_item_style(2, 1, &service, false);
 
         // Should have darker background with underline when not selected and flapping
         assert_eq!(style.bg, Some(FLAPPING_COLOR_NORMAL));
@@ -7873,7 +8018,7 @@ mod tests {
         service.is_flapping = true;
         service.online = false;
 
-        let style = create_service_list_item_style(2, 2, &service);
+        let style = create_service_list_item_style(2, 2, &service, false);
 
         // Should have darker background with underline and crossed out when offline and flapping
         assert_eq!(style.bg, Some(FLAPPING_COLOR_SELECTED));
@@ -7888,7 +8033,7 @@ mod tests {
         service.is_flapping = false;
         service.online = true;
 
-        let style = create_service_list_item_style(2, 1, &service);
+        let style = create_service_list_item_style(2, 1, &service, false);
 
         // Should not have darker background or underline when not flapping
         assert_ne!(style.bg, Some(FLAPPING_COLOR_NORMAL));
@@ -7903,12 +8048,12 @@ mod tests {
         service.is_flapping = true;
 
         // Test selected case
-        let selected_style = create_service_list_item_style(1, 1, &service);
+        let selected_style = create_service_list_item_style(1, 1, &service, false);
         assert_eq!(selected_style.bg, Some(FLAPPING_COLOR_SELECTED));
         assert!(selected_style.add_modifier.contains(Modifier::UNDERLINED));
 
         // Test not selected case
-        let not_selected_style = create_service_list_item_style(1, 0, &service);
+        let not_selected_style = create_service_list_item_style(1, 0, &service, false);
         assert_eq!(not_selected_style.bg, Some(FLAPPING_COLOR_NORMAL));
         assert!(
             not_selected_style
