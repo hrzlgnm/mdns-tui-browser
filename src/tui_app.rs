@@ -3,7 +3,6 @@
 #![forbid(unsafe_code)]
 
 use std::collections::{BTreeMap, HashSet};
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -3190,6 +3189,8 @@ pub async fn run_tui(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::net::IpAddr;
 
     use crate::models::SerializableServiceEntry;
     use crate::models::SerializableServiceSession;

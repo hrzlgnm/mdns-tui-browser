@@ -7,7 +7,7 @@ use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
-use mdns_sd::{InterfaceId, ResolvedService, ScopedIp, ScopedIpV4};
+use mdns_sd::{ResolvedService, ScopedIp};
 use serde::{Deserialize, Serialize};
 
 pub const MDNS_SD_META_SERVICE: &str = "_services._dns-sd._udp.local.";
@@ -693,6 +693,8 @@ pub mod tests {
     //! Unit tests for the models module.
 
     use super::*;
+
+    use mdns_sd::{InterfaceId, ScopedIpV4};
 
     pub fn scoped_ip(s: &str) -> ScopedIp {
         ScopedIp::from(s.parse::<IpAddr>().unwrap())
