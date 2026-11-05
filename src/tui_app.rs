@@ -273,9 +273,14 @@ impl AppState {
         state
     }
 
+    /// Whether the cached device addresses may be outdated.
+    fn local_addrs_stale(&self) -> bool {
+        self.local_addrs_refreshed_at.elapsed() >= LOCAL_ADDRS_REFRESH_INTERVAL
+    }
+
     /// Re-reads the device's interface addresses if the cached set is stale.
     fn refresh_local_addrs(&mut self) {
-        if self.local_addrs_refreshed_at.elapsed() >= LOCAL_ADDRS_REFRESH_INTERVAL {
+        if self.local_addrs_stale() {
             self.local_addrs = local_interface_addrs();
             self.local_addrs_refreshed_at = Instant::now();
         }
@@ -1635,6 +1640,7 @@ enum Notification {
     UserInput,
     ServiceChanged,
     MetricsUpdated,
+    LocalAddrsChanged,
 }
 
 pub fn normalize_service_type(service_type: &str) -> String {
@@ -2983,6 +2989,21 @@ pub async fn run_tui(
                 });
             }
         }
+    }
+    // Re-check local interface addresses on a schedule so the local-device
+    // markers track VPN/DHCP changes even with no input or service events.
+    // View-only mode has neither, so without this the markers there could
+    // stay stale indefinitely. The render path applies the refresh only
+    // once the cached set expires.
+    {
+        let notification_sender_for_addrs = notification_sender.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(LOCAL_ADDRS_REFRESH_INTERVAL);
+            loop {
+                interval.tick().await;
+                let _ = notification_sender_for_addrs.send(Notification::LocalAddrsChanged);
+            }
+        });
     }
     // Initial render to show the UI immediately
     {
@@ -5714,6 +5735,18 @@ mod tests {
     }
 
     #[test]
+    fn test_local_addrs_stale_predicate() {
+        let mut state = AppState::new(HashSet::new(), false, false, None);
+
+        state.local_addrs_refreshed_at = Instant::now();
+        assert!(!state.local_addrs_stale());
+
+        state.local_addrs_refreshed_at =
+            Instant::now() - LOCAL_ADDRS_REFRESH_INTERVAL - Duration::from_secs(1);
+        assert!(state.local_addrs_stale());
+    }
+
+    #[test]
     fn test_format_timestamp_micros() {
         let timestamp = format_timestamp_micros(1609459200000000); // 2021-01-01 00:00:00 UTC
         // Just verify it's a valid formatted string with expected components
@@ -6088,6 +6121,7 @@ mod tests {
         let _user_input = Notification::UserInput;
         let _service_changed = Notification::ServiceChanged;
         let _metrics_updated = Notification::MetricsUpdated;
+        let _local_addrs_changed = Notification::LocalAddrsChanged;
     }
 
     // Sorting tests
