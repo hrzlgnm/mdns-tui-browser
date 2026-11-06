@@ -14,6 +14,7 @@ use ratatui::{
 };
 
 use crate::scroll::ScrollState;
+use crate::terminal::{colors_disabled, with_monochrome_selection};
 
 fn calculate_wrapped_line_count(lines: &[Line], width: u16) -> usize {
     if width == 0 || lines.is_empty() {
@@ -301,7 +302,10 @@ impl UrlSelectionPopup {
 
         let list = List::new(items)
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().bg(Color::DarkGray).fg(Color::White))
+            .highlight_style(with_monochrome_selection(
+                Style::default().bg(Color::DarkGray).fg(Color::White),
+                colors_disabled(),
+            ))
             .highlight_symbol("> ");
 
         f.render_stateful_widget(list, inner_area, &mut list_state);

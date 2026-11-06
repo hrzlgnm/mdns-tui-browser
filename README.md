@@ -343,6 +343,14 @@ The details pane shows which interface each address was seen on (live browsing):
 
 The services list shows only the first address as a bare IP. State dumps do not preserve interface information, so loaded dumps show bare addresses.
 
+### Monochrome Mode (NO_COLOR)
+
+Set the `NO_COLOR` environment variable to any non-empty value (see <https://no-color.org/>) to disable colors. The interface stays fully usable through text attributes instead:
+
+- Selected rows use reverse video.
+- Offline services stay struck through, flapping services stay underlined.
+- The `◉` local-device marker and the `> ` URL-selection indicator do not depend on color.
+
 ## Architecture
 
 The application is built with:

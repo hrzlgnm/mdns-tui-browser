@@ -26,7 +26,7 @@ use crate::models::{
 };
 use crate::popup::PopupState;
 use crate::scroll::ScrollState;
-use crate::terminal::TuiTerminal;
+use crate::terminal::{TuiTerminal, colors_disabled, with_monochrome_selection};
 
 const STATUS_OK_COLOR: Color = Color::Blue;
 const STATUS_ERROR_COLOR: Color = Color::Yellow;
@@ -2118,7 +2118,10 @@ fn render_service_types_list(
                     Line::from(spans)
                 }),
         )
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+        .highlight_style(with_monochrome_selection(
+            Style::default().add_modifier(Modifier::BOLD),
+            colors_disabled(),
+        ));
 
     let mut list_state = ListState::default();
     let display_index = match app_state.selected_type {
@@ -2223,7 +2226,10 @@ fn render_services_list(
                 .border_style(border_style)
                 .title(title),
         )
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+        .highlight_style(with_monochrome_selection(
+            Style::default().add_modifier(Modifier::BOLD),
+            colors_disabled(),
+        ));
 
     let mut services_list_state = ListState::default();
     services_list_state.select(Some(
@@ -6012,11 +6018,13 @@ mod tests {
         let style = create_service_list_item_style(0, 0, &online_service, false);
         assert_eq!(style.fg, Some(Color::White));
         assert_eq!(style.bg, Some(Color::DarkGray));
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
 
         // Test unselected online service
         let style = create_service_list_item_style(0, 1, &online_service, false);
         assert_eq!(style.fg, Some(Color::White));
         assert_eq!(style.bg, None);
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
 
         // Test offline service
         let style = create_service_list_item_style(0, 0, &offline_service, false);
@@ -7996,6 +8004,7 @@ mod tests {
         assert_eq!(style.bg, Some(FLAPPING_COLOR_SELECTED));
         assert_eq!(style.fg, Some(Color::White));
         assert!(style.add_modifier.contains(Modifier::UNDERLINED));
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
@@ -8010,6 +8019,7 @@ mod tests {
         assert_eq!(style.bg, Some(FLAPPING_COLOR_NORMAL));
         assert_eq!(style.fg, Some(Color::White));
         assert!(style.add_modifier.contains(Modifier::UNDERLINED));
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
@@ -8025,6 +8035,7 @@ mod tests {
         assert_eq!(style.fg, Some(Color::White));
         assert!(style.add_modifier.contains(Modifier::UNDERLINED));
         assert!(style.add_modifier.contains(Modifier::CROSSED_OUT));
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
@@ -8051,6 +8062,7 @@ mod tests {
         let selected_style = create_service_list_item_style(1, 1, &service, false);
         assert_eq!(selected_style.bg, Some(FLAPPING_COLOR_SELECTED));
         assert!(selected_style.add_modifier.contains(Modifier::UNDERLINED));
+        assert!(!selected_style.add_modifier.contains(Modifier::REVERSED));
 
         // Test not selected case
         let not_selected_style = create_service_list_item_style(1, 0, &service, false);
@@ -8060,6 +8072,7 @@ mod tests {
                 .add_modifier
                 .contains(Modifier::UNDERLINED)
         );
+        assert!(!not_selected_style.add_modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
