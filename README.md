@@ -25,6 +25,9 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
   - [Install using snap](#install-using-snap-linux)
   - [CLI Options](#cli-options)
     - [Service Types Argument](#service-types-argument---service-types-s)
+    - [Interfaces Argument](#interfaces-argument---interfaces-i)
+    - [IP Version Flags](#ip-version-flags---no-ipv4---no-ipv6)
+    - [Load State Argument](#load-state-argument---load-state-l)
 - [JSON State Dump](#json-state-dump)
   - [Usage](#usage)
   - [JSON Structure](#json-structure)
@@ -175,6 +178,23 @@ Service types to browse for (e.g., http, _http._tcp, printer). Auto-completes `(
 - Accepts comma-separated list of mDNS service types
 - Auto-completes various service type formats automatically
 - Examples: `http`, `_http._tcp`, `printer`
+
+#### Interfaces Argument (`--interfaces/-i`)
+
+Network interfaces to use for mDNS discovery (e.g., en0, eth0).
+
+**Usage:**
+- Can be specified multiple times
+- Accepts comma-separated list of interface names
+- Names are validated against the OS interfaces; an unknown name aborts with the available list
+
+#### IP Version Flags (`--no-ipv4`, `--no-ipv6`)
+
+Disable IPv4 or IPv6 mDNS discovery. Disabling both at once is rejected, unless `--load-state` is used (view-only mode performs no browsing).
+
+#### Load State Argument (`--load-state/-l`)
+
+Load state from a JSON file for inspection (view-only mode, no browsing). See [JSON State Dump](#json-state-dump) for details.
 
 ## JSON State Dump
 
