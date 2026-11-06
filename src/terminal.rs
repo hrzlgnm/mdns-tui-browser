@@ -14,17 +14,30 @@ use ratatui::{
     backend::{Backend, ClearType, CrosstermBackend, WindowSize},
     buffer::Cell,
     layout::{Position, Size},
-    style::Color,
+    style::{Color, Modifier, Style},
 };
 
 /// Whether terminal colors are disabled via `NO_COLOR`.
 ///
 /// Mirrors crossterm's own predicate so the wrapper below and the
 /// escape-sequence layer agree on when colors are off.
-fn colors_disabled() -> bool {
+pub(crate) fn colors_disabled() -> bool {
     std::env::var("NO_COLOR")
         .map(|value| !value.is_empty())
         .unwrap_or(false)
+}
+
+/// Returns `style` with reverse video added when colors are disabled.
+///
+/// Under `NO_COLOR` explicit colors are stripped (see [`NoColorBackend`]),
+/// leaving reverse video as the selection cue. In color mode the style is
+/// returned unchanged so the palette carries the selection.
+pub(crate) fn with_monochrome_selection(style: Style, no_color: bool) -> Style {
+    if no_color {
+        style.add_modifier(Modifier::REVERSED)
+    } else {
+        style
+    }
 }
 
 /// [`Backend`] wrapper that drops colors when `NO_COLOR` is set.
@@ -383,6 +396,25 @@ mod tests {
         assert_eq!(drawn.fg, Color::White);
         assert_eq!(drawn.bg, Color::DarkGray);
         assert_eq!(drawn.modifier, Modifier::REVERSED);
+    }
+
+    #[test]
+    fn test_with_monochrome_selection_adds_reversed_without_colors() {
+        let base = Style::default().add_modifier(Modifier::BOLD);
+        let style = with_monochrome_selection(base, true);
+        assert!(style.add_modifier.contains(Modifier::BOLD));
+        assert!(style.add_modifier.contains(Modifier::REVERSED));
+        assert_eq!(style.fg, base.fg);
+        assert_eq!(style.bg, base.bg);
+    }
+
+    #[test]
+    fn test_with_monochrome_selection_keeps_style_with_colors() {
+        let base = Style::default().bg(Color::DarkGray).fg(Color::White);
+        let style = with_monochrome_selection(base, false);
+        assert_eq!(style.fg, Some(Color::White));
+        assert_eq!(style.bg, Some(Color::DarkGray));
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
