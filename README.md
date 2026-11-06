@@ -24,13 +24,36 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
   - [Install using winget](#install-using-winget-on-windows)
   - [Install using snap](#install-using-snap-linux)
   - [CLI Options](#cli-options)
+    - [Service Types Argument](#service-types-argument---service-types-s)
+    - [Interfaces Argument](#interfaces-argument---interfaces-i)
+    - [IP Version Flags](#ip-version-flags---no-ipv4---no-ipv6)
+    - [Load State Argument](#load-state-argument---load-state-l)
 - [JSON State Dump](#json-state-dump)
+  - [Usage](#usage)
+  - [JSON Structure](#json-structure)
 - [Controls](#controls)
+  - [Service Details Controls](#service-details-controls)
+  - [Help Popup Controls](#help-popup-controls)
+  - [Quick Filter Mode](#quick-filter-mode)
+    - [Special Keywords](#special-keywords)
+  - [Add Service Type Mode](#add-service-type-mode)
+  - [Local Device Highlight](#local-device-highlight)
+  - [Opening Service URLs](#opening-service-urls)
+  - [Service Addresses](#service-addresses)
+  - [Monochrome Mode (NO_COLOR)](#monochrome-mode-no_color)
 - [Architecture](#architecture)
+  - [Safety Policy](#safety-policy)
+  - [Design Notes](#design-notes)
 - [Project Structure](#project-structure)
 - [Building](#building)
 - [Build Provenance](#build-provenance)
+  - [What is Build Provenance?](#what-is-build-provenance)
+  - [Verifying Release Assets](#verifying-release-assets)
 - [Auditable Builds](#auditable-builds)
+  - [What are Auditable Builds?](#what-are-auditable-builds)
+  - [How It Works](#how-it-works)
+  - [Auditing Release Binaries](#auditing-release-binaries)
+  - [Build Process](#build-process)
 - [Immutable releases](#immutable-releases)
 - [Future Enhancements](#future-enhancements)
 - [License](#license)
@@ -155,6 +178,23 @@ Service types to browse for (e.g., http, _http._tcp, printer). Auto-completes `(
 - Accepts comma-separated list of mDNS service types
 - Auto-completes various service type formats automatically
 - Examples: `http`, `_http._tcp`, `printer`
+
+#### Interfaces Argument (`--interfaces/-i`)
+
+Network interfaces to use for mDNS discovery (e.g., en0, eth0).
+
+**Usage:**
+- Can be specified multiple times
+- Accepts comma-separated list of interface names
+- Names are validated against the OS interfaces; an unknown name aborts with the available list
+
+#### IP Version Flags (`--no-ipv4`, `--no-ipv6`)
+
+Disable IPv4 or IPv6 mDNS discovery. Disabling both at once is rejected, unless `--load-state` is used (view-only mode performs no browsing).
+
+#### Load State Argument (`--load-state/-l`)
+
+Load state from a JSON file for inspection (view-only mode, no browsing). See [JSON State Dump](#json-state-dump) for details.
 
 ## JSON State Dump
 
@@ -378,7 +418,7 @@ This project follows a **Safe Rust Only** policy:
 - The codebase is configured to reject unsafe code
 - This ensures maximum security and reliability for the mDNS service browser
 
-### Features
+### Design Notes
 
 - **Extensible Design**: Built for real mDNS service discovery
 
