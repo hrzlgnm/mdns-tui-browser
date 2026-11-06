@@ -38,7 +38,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 ## Features
 
 - 🖥️ **Interactive TUI**: Full terminal UI with keyboard navigation
-- 📊 **Service Details**: Display IP address, port, and TXT records
+- 📊 **Service Details**: Display IP address with interface info, port, and TXT records
 - 🔄 **Real-time Updates**: Async architecture for live service discovery
 - 📈 **Live Metrics**: Comprehensive ServiceDaemon and application metrics
 - 🎛️ **Service Type Filtering**: Browse different service types separately
@@ -46,6 +46,9 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
 - ⚙️ **Custom Service Discovery**: Specify service types via CLI for hard-to-discover services
 - 💾 **JSON State Dump**: Export complete application state to JSON with Ctrl+J
+- 📍 **Local Device Highlight**: Services advertised by this device stand out with `◉` marker and green highlighting
+- 🔗 **Smart URL Opening**: Open service URLs from TXT records or constructed hostname/IP URLs, with selection popup for multiple URLs
+- 🌐 **Interface-Aware Addresses**: Show which network interface an address was seen on (`via eth0`, `%eth0`)
 
 ## Quick Start
 
@@ -246,7 +249,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>Ctrl</kbd>+<kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service type
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
-- <kbd>Enter</kbd> - Open service URL in browser (_http._tcp or URL from TXT)
+- <kbd>Enter</kbd> - Open service URL in browser (shows selection popup when multiple URLs exist)
 - <kbd>s</kbd> - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
 - <kbd>S</kbd> - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
 - <kbd>o</kbd> - Toggle sort direction (↑/↓)
@@ -307,6 +310,36 @@ When in add service type mode (activated with <kbd>a</kbd>):
 - Any other key - Type service type name
 
 The service type is automatically normalized (e.g., `http` becomes `_http._tcp.local.`).
+
+### Local Device Highlight
+
+Services whose resolved address matches one of this device's network interface addresses are marked as local:
+
+- `◉ ` prefix in the services list plus bold green highlighting, visible even on monochrome terminals or when rows truncate.
+- `◉ Advertised by this device` banner at the top of the service details.
+- Interface addresses refresh every 30 seconds, so VPN/DHCP changes are picked up without restart.
+- Link-local addresses (`fe80::/10` IPv6, `169.254/16` IPv4) only match on the same interface, so identical addresses on different links are not misflagged.
+
+### Opening Service URLs
+
+Press <kbd>Enter</kbd> on a service to open its URL. URLs come from two sources, deduplicated:
+
+- TXT records: any `key=http://...` or `key=https://...` value.
+- Constructed URLs for service types containing `http`: `scheme://host:port/path` for the hostname plus every resolved IP (IPv6 bracketed, link-local IPv6 skipped). Scheme is `https` when the service type contains `https`, otherwise `http`. Path comes from the `path=` TXT record when present.
+
+Behavior depends on how many URLs are found:
+
+- No URLs: status message `No URL found for this service`.
+- One URL: opened directly in the browser.
+- Multiple URLs: `Select URL` popup with <kbd>↑</kbd>/<kbd>↓</kbd> to navigate, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> or any other key to cancel.
+
+### Service Addresses
+
+Addresses show which interface they were seen on:
+
+- IPv4: `192.168.1.10 via eth0`
+- IPv6 link-local: `fe80::1%eth0` (interface index on Windows)
+- IPv6 global: `2001:db8::1 via eth0, wlan0`
 
 ## Architecture
 
