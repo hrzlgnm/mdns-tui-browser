@@ -274,7 +274,10 @@ impl Drop for TuiTerminal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::cell::RefCell;
     use std::io;
+    use std::rc::Rc;
 
     #[derive(Debug, Default)]
     struct RecordingBackend {
@@ -402,9 +405,6 @@ mod tests {
     /// wrapper strips colors before crossterm ever sees them.
     #[test]
     fn test_no_color_backend_emits_reverse_without_color_reset_wipe() {
-        use std::cell::RefCell;
-        use std::rc::Rc;
-
         #[derive(Clone, Default)]
         struct SharedBuf(Rc<RefCell<Vec<u8>>>);
 
