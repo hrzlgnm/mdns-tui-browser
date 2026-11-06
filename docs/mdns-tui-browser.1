@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-03-15" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-11-06" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -8,7 +8,7 @@ mdns-tui-browser \- terminal-based mDNS service browser
 [\fIOPTIONS\fR]
 
 .SH DESCRIPTION
-A terminal-based mDNS service browser built with Rust. It provides an interactive TUI interface for discovering and browsing mDNS services on the local network, with real-time updates, service filtering, and sorting capabilities.
+A terminal-based mDNS service browser built with Rust. It provides an interactive TUI interface for discovering and browsing mDNS services on the local network, with real-time updates, service filtering, and sorting capabilities. Services advertised by the local device are highlighted with a marker, addresses show interface information, and service URLs can be opened in the browser.
 
 .SH OPTIONS
 .TP
@@ -81,7 +81,7 @@ PageUp/PageDown or b/f or Space - Scroll services list by page
 .br
 Home/End               - Jump to first/last service
 .br
-Enter                 - Open service URL in browser (_http._tcp or URL from TXT)
+Enter                 - Open service URL in browser (shows selection popup when multiple URLs exist)
 .br
 Shift+↑/↓ or J/K       - Scroll service details
 .TP
@@ -114,6 +114,14 @@ Ctrl+Z                 - Suspend the application (Unix only)
 ?                      - Toggle help popup
 .br
 q or Ctrl+c            - Quit the application
+.TP
+.B URL Selection Popup
+.br
+↑/↓                    - Navigate URLs
+.br
+Enter                  - Open selected URL
+.br
+Esc or any other key   - Cancel and close popup
 .TP
 .B Help Popup Controls
 .br
@@ -194,6 +202,15 @@ Any other key - Type search text (case-insensitive)
 
 .SH ADD SERVICE TYPE
 To add a new service type while the application is running, press \fBa\fR. Then type the service type name and press \fBEnter\fR to add and start browsing, or \fBEsc\fR to cancel.
+
+.SH LOCAL DEVICE HIGHLIGHT
+Services whose resolved address matches one of this device's network interface addresses are marked as local: a ◉ prefix plus bold green highlighting in the services list, and a ◉ Advertised by this device banner at the top of the service details. Interface addresses refresh every 30 seconds, so VPN/DHCP changes are picked up without restart. Link-local addresses (fe80::/10 IPv6, 169.254/16 IPv4) only match on the same interface.
+
+.SH OPENING SERVICE URLS
+Press \fBEnter\fR on a service to open its URL. URLs come from TXT records (any key=value with an http:// or https:// value) and, for service types containing \(lqhttp\(rq, constructed scheme://host:port/path URLs for the hostname plus every resolved IP (IPv6 bracketed, link-local IPv6 skipped; https scheme when the service type contains \(lqhttps\(rq, path from the path= TXT record). With no URLs a status message is shown; with one URL it opens directly; with multiple URLs a Select URL popup offers the choice.
+
+.SH SERVICE ADDRESSES
+The details pane shows which interface each address was seen on (live browsing): IPv4 as \(lq192.168.1.10 via eth0\(rq, IPv6 link-local as \(lqfe80::1%eth0\(rq (interface index on Windows), and IPv6 global as \(lq2001:db8::1 via eth0, wlan0\(rq. The services list shows only the first address as a bare IP. State dumps do not preserve interface information, so loaded dumps show bare addresses.
 .SH EXAMPLES
 .RS
 .IP \(bu
