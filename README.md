@@ -335,7 +335,7 @@ Behavior depends on how many URLs are found:
 
 ### Service Addresses
 
-Addresses show which interface they were seen on:
+Addresses show which interface they were seen on, in both the services list and the details pane:
 
 - IPv4: `192.168.1.10 via eth0`
 - IPv6 link-local: `fe80::1%eth0` (interface index on Windows)
