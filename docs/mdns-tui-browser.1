@@ -211,6 +211,10 @@ Press \fBEnter\fR on a service to open its URL. URLs come from TXT records (any 
 
 .SH SERVICE ADDRESSES
 The details pane shows which interface each address was seen on (live browsing): IPv4 as \(lq192.168.1.10 via eth0\(rq, IPv6 link-local as \(lqfe80::1%eth0\(rq (interface index on Windows), and IPv6 global as \(lq2001:db8::1 via eth0, wlan0\(rq. The services list shows only the first address as a bare IP. State dumps do not preserve interface information, so loaded dumps show bare addresses.
+
+.SH ENVIRONMENT
+Setting the NO_COLOR environment variable to any non-empty value (see https://no-color.org/) disables colors. The interface remains usable through text attributes: selected rows use reverse video, offline services stay struck through, and flapping services stay underlined.
+
 .SH EXAMPLES
 .RS
 .IP \(bu
