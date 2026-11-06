@@ -279,6 +279,8 @@ mod tests {
     use std::io;
     use std::rc::Rc;
 
+    use ratatui::style::{Modifier, Style};
+
     #[derive(Debug, Default)]
     struct RecordingBackend {
         drawn: Vec<(u16, u16, Cell)>,
@@ -345,7 +347,7 @@ mod tests {
         cell.fg = Color::White;
         cell.bg = Color::DarkGray;
         cell.underline_color = Color::White;
-        cell.modifier = ratatui::style::Modifier::REVERSED;
+        cell.modifier = Modifier::REVERSED;
         cell
     }
 
@@ -363,7 +365,7 @@ mod tests {
         assert_eq!(drawn.fg, Color::Reset);
         assert_eq!(drawn.bg, Color::Reset);
         assert_eq!(drawn.underline_color, Color::Reset);
-        assert_eq!(drawn.modifier, ratatui::style::Modifier::REVERSED);
+        assert_eq!(drawn.modifier, Modifier::REVERSED);
         assert_eq!(drawn.symbol(), "x");
     }
 
@@ -380,7 +382,7 @@ mod tests {
         let (_, _, drawn) = &backend.inner.drawn[0];
         assert_eq!(drawn.fg, Color::White);
         assert_eq!(drawn.bg, Color::DarkGray);
-        assert_eq!(drawn.modifier, ratatui::style::Modifier::REVERSED);
+        assert_eq!(drawn.modifier, Modifier::REVERSED);
     }
 
     #[test]
@@ -408,13 +410,13 @@ mod tests {
         #[derive(Clone, Default)]
         struct SharedBuf(Rc<RefCell<Vec<u8>>>);
 
-        impl std::io::Write for SharedBuf {
-            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        impl io::Write for SharedBuf {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
                 self.0.borrow_mut().extend_from_slice(buf);
                 Ok(buf.len())
             }
 
-            fn flush(&mut self) -> std::io::Result<()> {
+            fn flush(&mut self) -> io::Result<()> {
                 Ok(())
             }
         }
@@ -424,10 +426,10 @@ mod tests {
             inner: CrosstermBackend::new(shared.clone()),
             strip_colors: true,
         };
-        let style = ratatui::style::Style::default()
+        let style = Style::default()
             .bg(Color::DarkGray)
             .fg(Color::White)
-            .add_modifier(ratatui::style::Modifier::REVERSED);
+            .add_modifier(Modifier::REVERSED);
         let cells: Vec<Cell> = "hi"
             .chars()
             .map(|ch| {
