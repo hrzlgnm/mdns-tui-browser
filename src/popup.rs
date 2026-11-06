@@ -305,7 +305,7 @@ impl UrlSelectionPopup {
                 Style::default()
                     .bg(Color::DarkGray)
                     .fg(Color::White)
-                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+                    .add_modifier(Modifier::REVERSED),
             )
             .highlight_symbol("> ");
 
