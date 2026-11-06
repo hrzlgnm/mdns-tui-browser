@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::Line,
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
@@ -301,7 +301,12 @@ impl UrlSelectionPopup {
 
         let list = List::new(items)
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().bg(Color::DarkGray).fg(Color::White))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+            )
             .highlight_symbol("> ");
 
         f.render_stateful_widget(list, inner_area, &mut list_state);
