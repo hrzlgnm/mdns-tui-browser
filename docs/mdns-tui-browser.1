@@ -210,7 +210,7 @@ Services whose resolved address matches one of this device's network interface a
 Press \fBEnter\fR on a service to open its URL. URLs come from TXT records (any key=value with an http:// or https:// value) and, for service types containing \(lqhttp\(rq, constructed scheme://host:port/path URLs for the hostname plus every resolved IP (IPv6 bracketed, link-local IPv6 skipped; https scheme when the service type contains \(lqhttps\(rq, path from the path= TXT record). With no URLs a status message is shown; with one URL it opens directly; with multiple URLs a Select URL popup offers the choice.
 
 .SH SERVICE ADDRESSES
-Addresses show which interface they were seen on, in both the services list and the details pane: IPv4 as \(lq192.168.1.10 via eth0\(rq, IPv6 link-local as \(lqfe80::1%eth0\(rq (interface index on Windows), and IPv6 global as \(lq2001:db8::1 via eth0, wlan0\(rq.
+The details pane shows which interface each address was seen on (live browsing): IPv4 as \(lq192.168.1.10 via eth0\(rq, IPv6 link-local as \(lqfe80::1%eth0\(rq (interface index on Windows), and IPv6 global as \(lq2001:db8::1 via eth0, wlan0\(rq. The services list shows only the first address as a bare IP. State dumps do not preserve interface information, so loaded dumps show bare addresses.
 .SH EXAMPLES
 .RS
 .IP \(bu

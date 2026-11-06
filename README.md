@@ -48,7 +48,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 💾 **JSON State Dump**: Export complete application state to JSON with Ctrl+J
 - 📍 **Local Device Highlight**: Services advertised by this device stand out with `◉` marker and green highlighting
 - 🔗 **Smart URL Opening**: Open service URLs from TXT records or constructed hostname/IP URLs, with selection popup for multiple URLs
-- 🌐 **Interface-Aware Addresses**: Show which network interface an address was seen on (`via eth0`, `%eth0`)
+- 🌐 **Interface-Aware Addresses**: Show which network interface an address was seen on in the details pane (`via eth0`, `%eth0`)
 
 ## Quick Start
 
@@ -335,11 +335,13 @@ Behavior depends on how many URLs are found:
 
 ### Service Addresses
 
-Addresses show which interface they were seen on, in both the services list and the details pane:
+The details pane shows which interface each address was seen on (live browsing):
 
 - IPv4: `192.168.1.10 via eth0`
 - IPv6 link-local: `fe80::1%eth0` (interface index on Windows)
 - IPv6 global: `2001:db8::1 via eth0, wlan0`
+
+The services list shows only the first address as a bare IP. State dumps do not preserve interface information, so loaded dumps show bare addresses.
 
 ## Architecture
 
