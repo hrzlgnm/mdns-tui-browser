@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.40.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.40.0...v1.40.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* keep list selection visible when colors are disabled ([#782](https://github.com/hrzlgnm/mdns-tui-browser/issues/782)) ([d9e6003](https://github.com/hrzlgnm/mdns-tui-browser/commit/d9e60034c6cea92a649ef224708a0abcfa22214a))
+
+
+### Dependencies
+
+* lock file maintenance ([#783](https://github.com/hrzlgnm/mdns-tui-browser/issues/783)) ([e365f8e](https://github.com/hrzlgnm/mdns-tui-browser/commit/e365f8e21350ed5efbdaa81224fb234c441e0ef9))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 3c41a3d ([#778](https://github.com/hrzlgnm/mdns-tui-browser/issues/778)) ([6e6f45e](https://github.com/hrzlgnm/mdns-tui-browser/commit/6e6f45ea36bf46845338365eb7f6599c2cc0511a))
+* update mikepenz/action-junit-report digest to a16be3a ([#780](https://github.com/hrzlgnm/mdns-tui-browser/issues/780)) ([a40331a](https://github.com/hrzlgnm/mdns-tui-browser/commit/a40331a17718d722efc2982cd9aa6ee85f2bfe16))
+
+
+### Documentation
+
+* document local highlight, URL selection, interface addresses ([#781](https://github.com/hrzlgnm/mdns-tui-browser/issues/781)) ([63bb475](https://github.com/hrzlgnm/mdns-tui-browser/commit/63bb475af2595df61dbc02d926329f866a705f5f))
+* expand TOC, document all CLI option groups ([#784](https://github.com/hrzlgnm/mdns-tui-browser/issues/784)) ([1c2935d](https://github.com/hrzlgnm/mdns-tui-browser/commit/1c2935de560b34d9bd4e26ca920e66b03d462c38))
+
 ## [1.40.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.39.3...v1.40.0) (2026-11-05)
 
 
