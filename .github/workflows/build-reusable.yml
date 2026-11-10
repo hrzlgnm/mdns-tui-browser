@@ -255,6 +255,21 @@ jobs:
             PROFILE_DIR="debug"
           fi
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          # Plain binary for other packaging systems / installers (e.g. nopkg):
+          # same binary that goes into the archive, uploaded without wrapping.
+          # Kept in plain-dist/ so it never collides with the archive staging
+          # directory below (both would otherwise be mdns-tui-browser-${VERSION_NAME}-${PLATFORM}
+          # on Unix and mkdir -p would fail).
+          mkdir -p plain-dist
+          if [ "$OS" = "windows-latest" ]; then
+            PLAIN="plain-dist/mdns-tui-browser-${VERSION_NAME}-${PLATFORM}.exe"
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser.exe" "$PLAIN"
+          else
+            PLAIN="plain-dist/mdns-tui-browser-${VERSION_NAME}-${PLATFORM}"
+            cp "target/$TARGET/$PROFILE_DIR/mdns-tui-browser" "$PLAIN"
+            chmod +x "$PLAIN"
+          fi
+          echo "PLAIN_ASSET=$PLAIN" >> "$GITHUB_ENV"
           # Use platform for tarball, but preserve original .deb name on Linux
           staging="mdns-tui-browser-${VERSION_NAME}-${PLATFORM}"
           mkdir -p "$staging"
@@ -414,23 +429,26 @@ jobs:
           echo "DMG_ASSET=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: 🧮 Compute attestation subjects
-        if: inputs.tagName && (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos'))
+        if: inputs.tagName || inputs.upload_artifacts
         shell: bash
         env:
           ASSET: ${{ env.ASSET }}
+          PLAIN_ASSET: ${{ env.PLAIN_ASSET }}
           DEB_ASSET: ${{ env.DEB_ASSET }}
           IPK_ASSET: ${{ env.IPK_ASSET }}
           DMG_ASSET: ${{ env.DMG_ASSET }}
         run: |
-          if [ -n "$IPK_ASSET" ]; then
-            echo "ATTESTATION_SUBJECTS=${ASSET},${DEB_ASSET},${IPK_ASSET}" >> "$GITHUB_ENV"
-          elif [ -n "$DMG_ASSET" ]; then
-            echo "ATTESTATION_SUBJECTS=${ASSET},${DMG_ASSET}" >> "$GITHUB_ENV"
-          elif [ -n "$DEB_ASSET" ]; then
-            echo "ATTESTATION_SUBJECTS=${ASSET},${DEB_ASSET}" >> "$GITHUB_ENV"
-          else
-            echo "ATTESTATION_SUBJECTS=${ASSET}" >> "$GITHUB_ENV"
-          fi
+          SUBJECTS=""
+          for file in "$ASSET" "$PLAIN_ASSET" "$DEB_ASSET" "$IPK_ASSET" "$DMG_ASSET"; do
+            if [ -n "$file" ]; then
+              if [ -z "$SUBJECTS" ]; then
+                SUBJECTS="$file"
+              else
+                SUBJECTS="$SUBJECTS,$file"
+              fi
+            fi
+          done
+          echo "ATTESTATION_SUBJECTS=$SUBJECTS" >> "$GITHUB_ENV"
 
       - name: 🛡️ Attest SBOM
         if: inputs.tagName
@@ -443,7 +461,7 @@ jobs:
         if: inputs.tagName
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
-          subject-path: ${{ (contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')) && env.ATTESTATION_SUBJECTS || env.ASSET }}
+          subject-path: ${{ env.ATTESTATION_SUBJECTS }}
 
       - name: 🚀 Publish release assets
         if: inputs.tagName
@@ -452,12 +470,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ inputs.tagName }}
           ASSET: ${{ env.ASSET }}
+          PLAIN_ASSET: ${{ env.PLAIN_ASSET }}
           DEB_ASSET: ${{ env.DEB_ASSET }}
           IPK_ASSET: ${{ env.IPK_ASSET }}
           DMG_ASSET: ${{ env.DMG_ASSET }}
         run: |
           ASSETS=()
-          for file in "$ASSET" "$DEB_ASSET" "$IPK_ASSET" "$DMG_ASSET"; do
+          for file in "$ASSET" "$PLAIN_ASSET" "$DEB_ASSET" "$IPK_ASSET" "$DMG_ASSET"; do
             if [ -n "$file" ] && [ -f "$file" ]; then
               ASSETS+=("$file")
             fi
@@ -474,6 +493,14 @@ jobs:
         with:
           name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}
           path: ${{ env.ASSET }}
+          retention-days: 30
+
+      - name: 📦 Upload plain binary artifacts
+        if: (!inputs.tagName) && inputs.upload_artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mdns-tui-browser-${{ matrix.platform }}${{ matrix.target && '-' || '' }}${{ matrix.target || '' }}-plain
+          path: ${{ env.PLAIN_ASSET }}
           retention-days: 30
 
       - name: 📦 Upload deb artifacts
