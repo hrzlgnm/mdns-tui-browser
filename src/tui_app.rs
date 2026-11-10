@@ -183,6 +183,10 @@ struct AppState {
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     pending_service_types: HashSet<String>,
+    /// Daemon browse keys with a live browse task. Distinct from
+    /// `service_types` (lowercase canonical): the daemon matches keys
+    /// exactly, so mixed-case wire names are browsed verbatim.
+    active_browse_keys: HashSet<String>,
     status_message: Arc<tokio::sync::Mutex<String>>,
     disable_ipv4: bool,
     disable_ipv6: bool,
@@ -219,6 +223,7 @@ impl Clone for AppState {
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
             pending_service_types: self.pending_service_types.clone(),
+            active_browse_keys: self.active_browse_keys.clone(),
             status_message: self.status_message.clone(),
             disable_ipv4: self.disable_ipv4,
             disable_ipv6: self.disable_ipv6,
@@ -260,6 +265,7 @@ impl AppState {
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
             pending_service_types: HashSet::new(),
+            active_browse_keys: HashSet::new(),
             status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
             disable_ipv4,
             disable_ipv6,
@@ -1891,7 +1897,18 @@ async fn handle_browse_failure(
     display_failure: bool,
     error: &Error,
 ) {
-    state.remove_service_type(service_type);
+    state.active_browse_keys.remove(service_type);
+    // The key may be a mixed-case wire name while the stored type is
+    // lowercase canonical: only prune the type when no other active
+    // browse still feeds it.
+    let canonical = normalize_service_type(service_type);
+    if !state
+        .active_browse_keys
+        .iter()
+        .any(|key| normalize_service_type(key) == canonical)
+    {
+        state.remove_service_type(&canonical);
+    }
     state.update_metric(failure_metric_key);
     if display_failure {
         let msg = format!("Failed to browse {}: {}", service_type, error);
@@ -2443,10 +2460,7 @@ fn create_service_list_item_style(
 }
 
 fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String {
-    let display_name = service
-        .fullname
-        .trim_end_matches(&service.service_type)
-        .trim_end_matches(".");
+    let display_name = strip_service_type_suffix(&service.fullname, &service.service_type);
     let display_host = service
         .host
         .trim_end_matches(".local.")
@@ -2463,6 +2477,23 @@ fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String 
         "{}{} - {} - {}:{}",
         marker, display_name, display_host, address, service.port
     )
+}
+
+/// Strips a service-type suffix from a fullname without regard to ASCII
+/// case: resolved fullnames keep wire case while the stored service
+/// type is lowercase canonical, so `test._HTTP._tcp.local.` must still
+/// display as `test`.
+fn strip_service_type_suffix<'a>(fullname: &'a str, service_type: &str) -> &'a str {
+    let prefix_len = fullname.len().saturating_sub(service_type.len());
+    if !service_type.is_empty()
+        && fullname
+            .get(prefix_len..)
+            .is_some_and(|tail| tail.eq_ignore_ascii_case(service_type))
+    {
+        fullname[..prefix_len].trim_end_matches('.')
+    } else {
+        fullname.trim_end_matches('.')
+    }
 }
 
 fn format_timestamp_micros(timestamp_micros: u64) -> String {
@@ -2926,6 +2957,7 @@ pub async fn run_tui(
                     state_write.update_metric("user_service_types_added");
                     let _ = notification_sender_clone.send(Notification::ServiceChanged);
                     if let Some(ref mdns_ref) = mdns {
+                        state_write.active_browse_keys.insert(service_type.clone());
                         spawn_service_type_browse(
                             mdns_ref.clone(),
                             service_type.clone(),
@@ -3007,16 +3039,24 @@ pub async fn run_tui(
                                         state.update_metric("service_types_discovered");
                                         let _ = notification_sender_clone
                                             .send(Notification::ServiceChanged);
-                                        if let Some(ref mdns_ref) = mdns {
-                                            spawn_service_type_browse(
-                                                mdns_ref.clone(),
-                                                service_type.clone(),
-                                                Arc::clone(&state_clone),
-                                                notification_sender_clone.clone(),
-                                                "discovered_service_browse_failures",
-                                                false,
-                                            );
-                                        }
+                                    }
+                                    // Browse the wire-case key: the daemon
+                                    // matches browse keys exactly, so a
+                                    // lowercase key would miss mixed-case
+                                    // advertisers. Each distinct wire name is
+                                    // browsed once; results merge into the
+                                    // single canonical type.
+                                    if state.active_browse_keys.insert(fullname.clone())
+                                        && let Some(ref mdns_ref) = mdns
+                                    {
+                                        spawn_service_type_browse(
+                                            mdns_ref.clone(),
+                                            fullname.clone(),
+                                            Arc::clone(&state_clone),
+                                            notification_sender_clone.clone(),
+                                            "discovered_service_browse_failures",
+                                            false,
+                                        );
                                     }
                                 }
                             }
@@ -3144,6 +3184,9 @@ pub async fn run_tui(
                                                         state.commit_service_type(
                                                             &normalized_inner,
                                                         );
+                                                        state
+                                                            .active_browse_keys
+                                                            .insert(normalized_inner.clone());
                                                         if state
                                                             .user_service_types
                                                             .insert(normalized_inner.clone())
@@ -5651,6 +5694,37 @@ mod tests {
         assert!(display.contains("testhost"));
         assert!(display.contains("<no-addr>"));
         assert!(display.contains("80"));
+    }
+
+    #[test]
+    fn test_strip_service_type_suffix_case_insensitive() {
+        assert_eq!(
+            strip_service_type_suffix("test._HTTP._tcp.local.", "_http._tcp.local."),
+            "test"
+        );
+        assert_eq!(
+            strip_service_type_suffix("test._http._tcp.local.", "_http._tcp.local."),
+            "test"
+        );
+        assert_eq!(
+            strip_service_type_suffix("test._other._tcp.local.", "_http._tcp.local."),
+            "test._other._tcp.local"
+        );
+    }
+
+    #[test]
+    fn test_format_service_for_display_mixed_case_fullname() {
+        let mut service = create_test_service("Test", "_HTTP._tcp.local.", 80);
+        // Stored service type is lowercase canonical while the fullname
+        // keeps wire case, as produced by the model conversions.
+        service.service_type = "_http._tcp.local.".to_string();
+        service.addrs.clear();
+
+        let display = format_service_for_display(&service, false);
+        assert!(
+            display.starts_with("Test - "),
+            "unexpected display: {display}"
+        );
     }
 
     #[test]
@@ -8273,6 +8347,58 @@ mod tests {
         );
         assert_eq!(
             state.user_service_types,
+            HashSet::from(["_http._tcp.local.".to_string()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_browse_failure_removes_unfed_type() {
+        let mut state = create_test_app_state();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .active_browse_keys
+            .insert("_Http._tcp.local.".to_string());
+        let (tx, _rx) = flume::unbounded();
+
+        handle_browse_failure(
+            "_Http._tcp.local.",
+            &mut state,
+            tx,
+            "discovered_service_browse_failures",
+            false,
+            &mdns_sd::Error::Msg("boom".to_string()),
+        )
+        .await;
+
+        assert!(state.service_types.is_empty());
+        assert!(state.active_browse_keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_handle_browse_failure_keeps_type_fed_by_other_browse() {
+        let mut state = create_test_app_state();
+        state.add_service_type("_http._tcp.local.");
+        state
+            .active_browse_keys
+            .insert("_http._tcp.local.".to_string());
+        state
+            .active_browse_keys
+            .insert("_Http._tcp.local.".to_string());
+        let (tx, _rx) = flume::unbounded();
+
+        handle_browse_failure(
+            "_Http._tcp.local.",
+            &mut state,
+            tx,
+            "discovered_service_browse_failures",
+            false,
+            &mdns_sd::Error::Msg("boom".to_string()),
+        )
+        .await;
+
+        assert_eq!(state.service_types, vec!["_http._tcp.local.".to_string()]);
+        assert_eq!(
+            state.active_browse_keys,
             HashSet::from(["_http._tcp.local.".to_string()])
         );
     }
