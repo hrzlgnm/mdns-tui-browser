@@ -1660,6 +1660,8 @@ enum Notification {
     LocalAddrsChanged,
 }
 
+/// Canonicalizes a service type to lowercase `_service._tcp.local.` form,
+/// auto-completing `service`, `_service`, `service.proto` and `sub` shapes.
 pub fn normalize_service_type(service_type: &str) -> String {
     // Return empty string for empty or whitespace-only input
     if service_type.trim().is_empty() {
@@ -2978,8 +2980,13 @@ pub async fn run_tui(
                     while let Ok(event) = receiver.recv_async().await {
                         match event {
                             ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                                // Normalize like the Found path: wire case
+                                // must match the lowercase canonical key.
+                                let service_type = normalize_service_type(&fullname);
                                 let mut state = state_clone.write().await;
-                                if state.remove_service_type(&fullname) {
+                                if !service_type.is_empty()
+                                    && state.remove_service_type(&service_type)
+                                {
                                     let _ = notification_sender_clone
                                         .send(Notification::ServiceChanged);
                                 }
@@ -8220,6 +8227,53 @@ mod tests {
         assert!(
             state.services[0].is_flapping,
             "Flapping status should be recomputed after loading state dump"
+        );
+    }
+
+    #[test]
+    fn test_load_from_state_dump_normalizes_service_types() {
+        let state_dump = StateDump {
+            metadata: Metadata {
+                dump_timestamp: micros_to_iso_timestamp(1000),
+                application_name: "mdns-tui-browser".to_string(),
+                version: "0.1.0".to_string(),
+            },
+            services: vec![],
+            service_types: vec![
+                "_Http._tcp.local.".to_string(),
+                "_http._tcp.local.".to_string(),
+                "_SSH._TCP.local.".to_string(),
+            ],
+            metrics: BTreeMap::new(),
+            options: AppOptions {
+                service_types: vec!["_Http._tcp.local.".to_string()],
+                disable_ipv4: false,
+                disable_ipv6: false,
+                interfaces: None,
+            },
+            filters: FilterInfo {
+                query: String::new(),
+                active_service_types: None,
+            },
+            sorting: SortInfo {
+                field: SortField::Host,
+                direction: SortDirection::Ascending,
+            },
+        };
+
+        let mut state = create_test_app_state();
+        state.load_from_state_dump(state_dump);
+
+        assert_eq!(
+            state.service_types,
+            vec![
+                "_http._tcp.local.".to_string(),
+                "_ssh._tcp.local.".to_string()
+            ]
+        );
+        assert_eq!(
+            state.user_service_types,
+            HashSet::from(["_http._tcp.local.".to_string()])
         );
     }
 }
