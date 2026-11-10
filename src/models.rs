@@ -327,7 +327,9 @@ impl ServiceEntry {
             }
         }
 
-        if self.service_type.contains("http") {
+        // Service type labels are case-insensitive: match on lowercase.
+        let service_type_lower = self.service_type.to_ascii_lowercase();
+        if service_type_lower.contains("http") {
             let path = self
                 .txt
                 .iter()
@@ -342,7 +344,7 @@ impl ServiceEntry {
                 })
                 .unwrap_or("");
 
-            let scheme = if self.service_type.contains("https") {
+            let scheme = if service_type_lower.contains("https") {
                 "https"
             } else {
                 "http"
@@ -473,11 +475,11 @@ impl From<ResolvedService> for ServiceEntry {
         Self {
             fullname: resolved_service.get_fullname().to_string(),
             host: resolved_service.get_hostname().to_string(),
-            service_type: resolved_service.ty_domain.to_string(),
+            service_type: resolved_service.ty_domain.to_ascii_lowercase(),
             subtype: resolved_service
                 .get_subtype()
                 .as_ref()
-                .map(|s| s.to_string()),
+                .map(|s| s.to_ascii_lowercase()),
             addrs: {
                 let mut addrs: Vec<ScopedIp> =
                     resolved_service.get_addresses().iter().cloned().collect();
@@ -587,8 +589,9 @@ impl From<&SerializableServiceEntry> for ServiceEntry {
         Self {
             fullname: entry.fullname.clone(),
             host: entry.host.clone(),
-            service_type: entry.service_type.clone(),
-            subtype: entry.subtype.clone(),
+            // Older dumps may hold mixed-case types; use lowercase canonical.
+            service_type: entry.service_type.to_ascii_lowercase(),
+            subtype: entry.subtype.as_ref().map(|s| s.to_ascii_lowercase()),
             addrs: entry
                 .addresses
                 .iter()
@@ -1060,6 +1063,30 @@ pub mod tests {
     }
 
     #[test]
+    fn test_get_urls_service_type_case_insensitive() {
+        let mut service = create_test_service("test", "_HTTP._tcp.local.", 8080);
+        service.txt = vec![];
+        service.host = "myhost.local".to_string();
+        service.addrs = vec![];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "http://myhost.local:8080/");
+    }
+
+    #[test]
+    fn test_get_urls_https_service_type_case_insensitive() {
+        let mut service = create_test_service("test", "_HTTPS._tcp.local.", 443);
+        service.txt = vec![];
+        service.host = "myhost.local".to_string();
+        service.addrs = vec![];
+
+        let urls = service.get_urls();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://myhost.local/");
+    }
+
+    #[test]
     fn test_get_urls_ipv4_address() {
         let mut service = create_test_service("test", "_http._tcp.local.", 8080);
         service.host = "myhost.local".to_string();
@@ -1137,6 +1164,32 @@ pub mod tests {
 
         let urls = service.get_urls();
         assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn test_serializable_service_entry_lowercases_service_type() {
+        let dumped = SerializableServiceEntry {
+            fullname: "test._HTTP._tcp.local.".to_string(),
+            host: "test.local.".to_string(),
+            service_type: "_HTTP._tcp.local.".to_string(),
+            subtype: Some("_Printer._sub._HTTP._tcp.local.".to_string()),
+            addresses: vec![],
+            port: 8080,
+            txt_records: vec![],
+            is_online: true,
+            is_flapping: false,
+            created_at: "2026-01-01T00:00:00.000000Z".to_string(),
+            updated_at: None,
+            last_online_at: None,
+            last_offline_at: None,
+            session_history: vec![],
+        };
+        let entry = ServiceEntry::from(&dumped);
+        assert_eq!(entry.service_type, "_http._tcp.local.");
+        assert_eq!(
+            entry.subtype.as_deref(),
+            Some("_printer._sub._http._tcp.local.")
+        );
     }
 
     #[test]
