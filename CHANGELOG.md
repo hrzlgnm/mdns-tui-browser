@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.41.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.40.1...v1.41.0) (2026-11-10)
+
+
+### Features
+
+* publish plain binaries for packaging systems and installers ([#792](https://github.com/hrzlgnm/mdns-tui-browser/issues/792)) ([90dc739](https://github.com/hrzlgnm/mdns-tui-browser/commit/90dc739e55b794a539180997fff450f062265c6c))
+
+
+### Bug Fixes
+
+* browse discovered service types in wire case ([#790](https://github.com/hrzlgnm/mdns-tui-browser/issues/790)) ([459eec6](https://github.com/hrzlgnm/mdns-tui-browser/commit/459eec6616394c9079ba79c1fc33f3bf25ed990e))
+* lowercase service-type labels for case-insensitive browsing ([#787](https://github.com/hrzlgnm/mdns-tui-browser/issues/787)) ([b06f9d8](https://github.com/hrzlgnm/mdns-tui-browser/commit/b06f9d8a0e1dd31d81d8617d7973efadc2dcdcc3))
+
+
+### Dependencies
+
+* lock file maintenance ([#785](https://github.com/hrzlgnm/mdns-tui-browser/issues/785)) ([484bad9](https://github.com/hrzlgnm/mdns-tui-browser/commit/484bad9fa0d4a6eb50759ca83c8f1464a3d79430))
+* lock file maintenance ([#789](https://github.com/hrzlgnm/mdns-tui-browser/issues/789)) ([af9423c](https://github.com/hrzlgnm/mdns-tui-browser/commit/af9423cb3d0f4da6eb6b9ea3ec09736cb6c56296))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 6db50c1 ([#788](https://github.com/hrzlgnm/mdns-tui-browser/issues/788)) ([096bb2a](https://github.com/hrzlgnm/mdns-tui-browser/commit/096bb2a1fed497a862d8c2c737dac85f722644c7))
+
+
+### Continuous Integration
+
+* harden changes gate against review findings ([#791](https://github.com/hrzlgnm/mdns-tui-browser/issues/791)) ([5ee9187](https://github.com/hrzlgnm/mdns-tui-browser/commit/5ee9187a4a4fcc89257efb2d116f6775ee0e8145))
+
 ## [1.40.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.40.0...v1.40.1) (2026-11-06)
 
 
