@@ -68,6 +68,9 @@ jobs:
       - check-release
     if: needs.check-release.outputs.is_release != 'true'
     runs-on: ubuntu-slim
+    permissions:
+      contents: read # Needed to checkout code for change detection
+      pull-requests: read # Needed for dorny/paths-filter to list PR files via API
     outputs:
       aur: ${{ steps.filter.outputs.aur }}
       branch: ${{ steps.branch.outputs.branch }}
@@ -93,9 +96,11 @@ jobs:
               
             code:
               - '.github/actions/setup-*/**'
+              - '.github/actions/sbom/**'
               - '.github/workflows/build-reusable.yml'
               - 'src/**'
               - 'src-tauri/Cargo.toml'
+              - 'build.rs'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'Cross.toml'
@@ -113,7 +118,7 @@ jobs:
       - name: Output branch name
         id: branch
         run: |
-          echo "branch=${{ env.BRANCH_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
   typos:
     name: 📝 Check typos
@@ -229,6 +234,7 @@ jobs:
     runs-on: ubuntu-slim
     needs:
       - check-release
+      - changes
       - actionlint
       - aur
       - build
@@ -246,6 +252,7 @@ jobs:
           allowed-skips: >-
             typos,
             actionlint,
+            changes,
             aur,
             lint,
             tests,
