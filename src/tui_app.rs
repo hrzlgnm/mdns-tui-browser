@@ -291,9 +291,10 @@ impl AppState {
 
     fn filter_service(&self, service: &ServiceEntry) -> bool {
         // First filter by service type if one is selected
+        // (case-insensitive: daemon and old dumps may use mixed case)
         if let Some(selected_type_idx) = self.selected_type
             && let Some(selected_type) = self.service_types.get(selected_type_idx)
-            && service.service_type != *selected_type
+            && !service.service_type.eq_ignore_ascii_case(selected_type)
         {
             return false;
         }
@@ -618,7 +619,16 @@ impl AppState {
         self.services
             .iter_mut()
             .for_each(|s| s.update_flapping_status());
-        self.service_types = dump.service_types;
+        // Normalize for older dumps that may hold mixed-case types.
+        let mut service_types: Vec<String> = dump
+            .service_types
+            .iter()
+            .map(|t| normalize_service_type(t))
+            .filter(|t| !t.is_empty())
+            .collect();
+        service_types.sort();
+        service_types.dedup();
+        self.service_types = service_types;
         self.metrics = dump.metrics;
         self.filter_input.set_text(dump.filters.query.as_str());
 
@@ -629,10 +639,18 @@ impl AppState {
                 .filters
                 .active_service_types
                 .unwrap_or_default()
-                .into_iter()
+                .iter()
+                .map(|t| normalize_service_type(t))
+                .filter(|t| !t.is_empty())
                 .collect();
         } else {
-            self.user_service_types = dump.options.service_types.into_iter().collect();
+            self.user_service_types = dump
+                .options
+                .service_types
+                .iter()
+                .map(|t| normalize_service_type(t))
+                .filter(|t| !t.is_empty())
+                .collect();
             self.disable_ipv4 = dump.options.disable_ipv4;
             self.disable_ipv6 = dump.options.disable_ipv6;
             self.interfaces = dump.options.interfaces;
@@ -1642,13 +1660,19 @@ enum Notification {
     LocalAddrsChanged,
 }
 
+/// Canonicalizes a service type to lowercase `_service._tcp.local.` form,
+/// auto-completing `service`, `_service`, `service.proto` and `sub` shapes.
 pub fn normalize_service_type(service_type: &str) -> String {
     // Return empty string for empty or whitespace-only input
     if service_type.trim().is_empty() {
         return String::new();
     }
 
-    let input = service_type.trim();
+    // DNS labels are case-insensitive (RFC 6762/6763): browse with the
+    // lowercase canonical form so `_Http._tcp` matches `_http._tcp`.
+    // mdns-sd matches browse keys exactly, so mixed case would miss.
+    let lowered = service_type.trim().to_ascii_lowercase();
+    let input = lowered.as_str();
 
     // If already has .local. suffix, return as-is
     if input.ends_with(".local.") {
@@ -1765,8 +1789,8 @@ pub fn normalize_service_type(service_type: &str) -> String {
 }
 
 fn is_sub_type(service_type: &str) -> bool {
-    // Check if this is a subtype (contains _sub.)
-    service_type.contains("_sub.")
+    // Subtype marker is a DNS label and therefore case-insensitive.
+    service_type.to_ascii_lowercase().contains("_sub.")
 }
 
 async fn start_browsing_service_type(
@@ -2419,10 +2443,7 @@ fn create_service_list_item_style(
 }
 
 fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String {
-    let display_name = service
-        .fullname
-        .trim_end_matches(&service.service_type)
-        .trim_end_matches(".");
+    let display_name = strip_service_type_suffix(&service.fullname, &service.service_type);
     let display_host = service
         .host
         .trim_end_matches(".local.")
@@ -2439,6 +2460,23 @@ fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String 
         "{}{} - {} - {}:{}",
         marker, display_name, display_host, address, service.port
     )
+}
+
+/// Strips a service-type suffix from a fullname without regard to ASCII
+/// case: resolved fullnames keep wire case while the stored service
+/// type is lowercase canonical, so `test._HTTP._tcp.local.` must still
+/// display as `test`.
+fn strip_service_type_suffix<'a>(fullname: &'a str, service_type: &str) -> &'a str {
+    let prefix_len = fullname.len().saturating_sub(service_type.len());
+    if !service_type.is_empty()
+        && fullname
+            .get(prefix_len..)
+            .is_some_and(|tail| tail.eq_ignore_ascii_case(service_type))
+    {
+        fullname[..prefix_len].trim_end_matches('.')
+    } else {
+        fullname.trim_end_matches('.')
+    }
 }
 
 fn format_timestamp_micros(timestamp_micros: u64) -> String {
@@ -2956,15 +2994,23 @@ pub async fn run_tui(
                     while let Ok(event) = receiver.recv_async().await {
                         match event {
                             ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                                // Normalize like the Found path: wire case
+                                // must match the lowercase canonical key.
+                                let service_type = normalize_service_type(&fullname);
                                 let mut state = state_clone.write().await;
-                                if state.remove_service_type(&fullname) {
+                                if !service_type.is_empty()
+                                    && state.remove_service_type(&service_type)
+                                {
                                     let _ = notification_sender_clone
                                         .send(Notification::ServiceChanged);
                                 }
                             }
                             ServiceEvent::ServiceFound(_service_type, fullname) => {
-                                let service_type = fullname.to_string();
-                                if is_sub_type(&service_type)
+                                // Normalize: meta-query results keep wire case,
+                                // browse keys are lowercase canonical.
+                                let service_type = normalize_service_type(&fullname);
+                                if service_type.is_empty()
+                                    || is_sub_type(&service_type)
                                     || service_type == MDNS_SD_META_SERVICE
                                 {
                                     continue; // skip subtypes and meta-services in auto-discovery
@@ -4876,6 +4922,52 @@ mod tests {
         assert!(user_requested_types.contains("_ssh._tcp.local."));
     }
 
+    #[test]
+    fn test_normalize_service_type_lowercases_labels() {
+        assert_eq!(normalize_service_type("_Http._tcp"), "_http._tcp.local.");
+        assert_eq!(
+            normalize_service_type("_HTTP._TCP.local."),
+            "_http._tcp.local."
+        );
+        assert_eq!(normalize_service_type("HTTP"), "_http._tcp.local.");
+        assert_eq!(
+            normalize_service_type("_Http._tcp.local."),
+            "_http._tcp.local."
+        );
+        assert_eq!(
+            normalize_service_type("PRINTER.sub.HTTP"),
+            "printer._sub._http._tcp.local."
+        );
+    }
+
+    #[test]
+    fn test_normalize_service_type_case_insensitive_dedupe() {
+        let input_types = vec!["_Http._tcp".to_string(), "_http._tcp".to_string()];
+        let user_requested_types: HashSet<String> = input_types
+            .into_iter()
+            .map(|service_type| normalize_service_type(&service_type))
+            .collect::<HashSet<_>>();
+
+        assert_eq!(user_requested_types.len(), 1);
+        assert!(user_requested_types.contains("_http._tcp.local."));
+    }
+
+    #[test]
+    fn test_filter_service_matches_type_case_insensitively() {
+        let mut state = create_test_app_state();
+        state.add_service_type("_http._tcp.local.");
+        state.selected_type = Some(0);
+        state.filter_input.set_text("");
+        let service = create_test_service("test", "_HTTP._tcp.local.", 8080);
+        assert!(state.filter_service(&service));
+    }
+
+    #[test]
+    fn test_is_sub_type_case_insensitive() {
+        assert!(is_sub_type("_printer._SUB._http._tcp.local."));
+        assert!(is_sub_type("_PRINTER._sub._HTTP._tcp.local."));
+    }
+
     // Service type management tests
     #[test]
     fn test_add_service_type() {
@@ -5573,6 +5665,37 @@ mod tests {
         assert!(display.contains("testhost"));
         assert!(display.contains("<no-addr>"));
         assert!(display.contains("80"));
+    }
+
+    #[test]
+    fn test_strip_service_type_suffix_case_insensitive() {
+        assert_eq!(
+            strip_service_type_suffix("test._HTTP._tcp.local.", "_http._tcp.local."),
+            "test"
+        );
+        assert_eq!(
+            strip_service_type_suffix("test._http._tcp.local.", "_http._tcp.local."),
+            "test"
+        );
+        assert_eq!(
+            strip_service_type_suffix("test._other._tcp.local.", "_http._tcp.local."),
+            "test._other._tcp.local"
+        );
+    }
+
+    #[test]
+    fn test_format_service_for_display_mixed_case_fullname() {
+        let mut service = create_test_service("Test", "_HTTP._tcp.local.", 80);
+        // Stored service type is lowercase canonical while the fullname
+        // keeps wire case, as produced by the model conversions.
+        service.service_type = "_http._tcp.local.".to_string();
+        service.addrs.clear();
+
+        let display = format_service_for_display(&service, false);
+        assert!(
+            display.starts_with("Test - "),
+            "unexpected display: {display}"
+        );
     }
 
     #[test]
@@ -8149,6 +8272,53 @@ mod tests {
         assert!(
             state.services[0].is_flapping,
             "Flapping status should be recomputed after loading state dump"
+        );
+    }
+
+    #[test]
+    fn test_load_from_state_dump_normalizes_service_types() {
+        let state_dump = StateDump {
+            metadata: Metadata {
+                dump_timestamp: micros_to_iso_timestamp(1000),
+                application_name: "mdns-tui-browser".to_string(),
+                version: "0.1.0".to_string(),
+            },
+            services: vec![],
+            service_types: vec![
+                "_Http._tcp.local.".to_string(),
+                "_http._tcp.local.".to_string(),
+                "_SSH._TCP.local.".to_string(),
+            ],
+            metrics: BTreeMap::new(),
+            options: AppOptions {
+                service_types: vec!["_Http._tcp.local.".to_string()],
+                disable_ipv4: false,
+                disable_ipv6: false,
+                interfaces: None,
+            },
+            filters: FilterInfo {
+                query: String::new(),
+                active_service_types: None,
+            },
+            sorting: SortInfo {
+                field: SortField::Host,
+                direction: SortDirection::Ascending,
+            },
+        };
+
+        let mut state = create_test_app_state();
+        state.load_from_state_dump(state_dump);
+
+        assert_eq!(
+            state.service_types,
+            vec![
+                "_http._tcp.local.".to_string(),
+                "_ssh._tcp.local.".to_string()
+            ]
+        );
+        assert_eq!(
+            state.user_service_types,
+            HashSet::from(["_http._tcp.local.".to_string()])
         );
     }
 }
