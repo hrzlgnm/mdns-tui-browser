@@ -44,13 +44,28 @@ const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
 const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
 const LOCAL_DEVICE_COLOR: Color = Color::Green;
 
-/// Process group to suspend: the whole foreground job, so wrappers such as
-/// `sh -c 'app; ...'` suspend together and `fg` resumes everything. Alone
-/// in its group (the common case) this targets the current process.
+/// kill target for suspend: suspend_pid() applied to the live ids.
 #[cfg(unix)]
 fn suspend_target() -> nix::unistd::Pid {
-    let group = nix::unistd::getpgrp();
-    nix::unistd::Pid::from_raw(-group.as_raw())
+    use nix::unistd::{getpgrp, getsid};
+    suspend_pid(getpgrp(), getsid(None).ok())
+}
+
+/// Decide the kill target from the own process group and session id.
+/// A negative pid addresses a group for kill(2): stopping the whole job
+/// also suspends wrappers such as `sh -c 'app; ...'`, so the shell gets
+/// its prompt back and `fg` resumes everything. No job-control separation
+/// (our group is the session leader's own group) means the interactive
+/// shell shares it: stopping the group would freeze the shell with nobody
+/// left to `fg`, so stop just ourselves instead (as does an unknown
+/// session, where safety wins over wrapper coverage).
+#[cfg(unix)]
+fn suspend_pid(group: nix::unistd::Pid, session: Option<nix::unistd::Pid>) -> nix::unistd::Pid {
+    use nix::unistd::Pid;
+    match session {
+        Some(sid) if group != sid => Pid::from_raw(-group.as_raw()),
+        _ => Pid::this(),
+    }
 }
 
 #[cfg(unix)]
@@ -3291,12 +3306,25 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn suspend_targets_foreground_process_group_not_just_self() {
-        // Negative pid addresses a process group for kill(2): suspends
-        // wrappers like `sh -c 'app; ...'` together so `fg` resumes all.
-        let target = suspend_target();
-        let group = nix::unistd::getpgrp();
-        assert_eq!(target.as_raw(), -group.as_raw());
-        assert!(target.as_raw() < 0, "must address a group, not a pid");
+        use nix::unistd::Pid;
+        assert_eq!(
+            suspend_pid(Pid::from_raw(100), Some(Pid::from_raw(50))),
+            Pid::from_raw(-100)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn suspend_falls_back_to_self_in_session_leaders_group() {
+        use nix::unistd::Pid;
+        // No job-control separation: the interactive shell shares our
+        // group, so stopping it would freeze the shell. Unknown session:
+        // same safe fallback.
+        assert_eq!(
+            suspend_pid(Pid::from_raw(50), Some(Pid::from_raw(50))),
+            Pid::this()
+        );
+        assert_eq!(suspend_pid(Pid::from_raw(100), None), Pid::this());
     }
 
     /// Helper to create AppState for testing
