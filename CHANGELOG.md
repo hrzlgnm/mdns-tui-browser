@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.41.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.41.0...v1.41.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* stop foreground process group on suspend ([#793](https://github.com/hrzlgnm/mdns-tui-browser/issues/793)) ([201c31f](https://github.com/hrzlgnm/mdns-tui-browser/commit/201c31fa3f536badceb5274054e46a9bd5d80e9b))
+
+
+### Dependencies
+
+* lock file maintenance ([#795](https://github.com/hrzlgnm/mdns-tui-browser/issues/795)) ([c54aceb](https://github.com/hrzlgnm/mdns-tui-browser/commit/c54aceb37dd545d6d3dffab62fbcfd8dfcc31d24))
+
 ## [1.41.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.40.1...v1.41.0) (2026-11-10)
 
 
