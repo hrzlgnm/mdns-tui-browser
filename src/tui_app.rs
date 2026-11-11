@@ -44,6 +44,30 @@ const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
 const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
 const LOCAL_DEVICE_COLOR: Color = Color::Green;
 
+/// kill target for suspend: suspend_pid() applied to the live ids.
+#[cfg(unix)]
+fn suspend_target() -> nix::unistd::Pid {
+    use nix::unistd::{getpgrp, getsid};
+    suspend_pid(getpgrp(), getsid(None).ok())
+}
+
+/// Decide the kill target from the own process group and session id.
+/// A negative pid addresses a group for kill(2): stopping the whole job
+/// also suspends wrappers such as `sh -c 'app; ...'`, so the shell gets
+/// its prompt back and `fg` resumes everything. No job-control separation
+/// (our group is the session leader's own group) means the interactive
+/// shell shares it: stopping the group would freeze the shell with nobody
+/// left to `fg`, so stop just ourselves instead (as does an unknown
+/// session, where safety wins over wrapper coverage).
+#[cfg(unix)]
+fn suspend_pid(group: nix::unistd::Pid, session: Option<nix::unistd::Pid>) -> nix::unistd::Pid {
+    use nix::unistd::Pid;
+    match session {
+        Some(sid) if group != sid => Pid::from_raw(-group.as_raw()),
+        _ => Pid::this(),
+    }
+}
+
 #[cfg(unix)]
 async fn handle_suspend(
     terminal: &mut TuiTerminal,
@@ -51,7 +75,6 @@ async fn handle_suspend(
     ui: fn(&mut Frame<'_>, &AppState),
 ) {
     use nix::sys::signal::{Signal, kill};
-    use nix::unistd::Pid;
 
     // Stop the terminal - this restores the alternate screen and disables raw mode
     // Only proceed with suspend if terminal stop succeeds
@@ -60,9 +83,10 @@ async fn handle_suspend(
         return;
     }
 
+    // Stop the whole foreground job (see suspend_target), not just ourselves.
     // Use SIGSTOP to suspend (cannot be caught, ignored, or blocked)
     // Log error but continue - we still need to restart terminal on resume
-    if let Err(e) = kill(Pid::this(), Signal::SIGSTOP) {
+    if let Err(e) = kill(suspend_target(), Signal::SIGSTOP) {
         eprintln!("Failed to send SIGSTOP: {}", e);
     }
 
@@ -3278,6 +3302,30 @@ mod tests {
     use crate::models::ServiceSession;
     use crate::models::micros_to_iso_timestamp;
     use crate::models::tests::{create_test_service, create_test_service_with_sessions, scoped_ip};
+
+    #[cfg(unix)]
+    #[test]
+    fn suspend_targets_foreground_process_group_not_just_self() {
+        use nix::unistd::Pid;
+        assert_eq!(
+            suspend_pid(Pid::from_raw(100), Some(Pid::from_raw(50))),
+            Pid::from_raw(-100)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn suspend_falls_back_to_self_in_session_leaders_group() {
+        use nix::unistd::Pid;
+        // No job-control separation: the interactive shell shares our
+        // group, so stopping it would freeze the shell. Unknown session:
+        // same safe fallback.
+        assert_eq!(
+            suspend_pid(Pid::from_raw(50), Some(Pid::from_raw(50))),
+            Pid::this()
+        );
+        assert_eq!(suspend_pid(Pid::from_raw(100), None), Pid::this());
+    }
 
     /// Helper to create AppState for testing
     fn create_test_app_state() -> AppState {
