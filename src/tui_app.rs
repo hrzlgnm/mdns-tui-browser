@@ -44,6 +44,15 @@ const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
 const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
 const LOCAL_DEVICE_COLOR: Color = Color::Green;
 
+/// Process group to suspend: the whole foreground job, so wrappers such as
+/// `sh -c 'app; ...'` suspend together and `fg` resumes everything. Alone
+/// in its group (the common case) this targets the current process.
+#[cfg(unix)]
+fn suspend_target() -> nix::unistd::Pid {
+    let group = nix::unistd::getpgrp();
+    nix::unistd::Pid::from_raw(-group.as_raw())
+}
+
 #[cfg(unix)]
 async fn handle_suspend(
     terminal: &mut TuiTerminal,
@@ -51,7 +60,6 @@ async fn handle_suspend(
     ui: fn(&mut Frame<'_>, &AppState),
 ) {
     use nix::sys::signal::{Signal, kill};
-    use nix::unistd::Pid;
 
     // Stop the terminal - this restores the alternate screen and disables raw mode
     // Only proceed with suspend if terminal stop succeeds
@@ -60,9 +68,10 @@ async fn handle_suspend(
         return;
     }
 
+    // Stop the whole foreground job (see suspend_target), not just ourselves.
     // Use SIGSTOP to suspend (cannot be caught, ignored, or blocked)
     // Log error but continue - we still need to restart terminal on resume
-    if let Err(e) = kill(Pid::this(), Signal::SIGSTOP) {
+    if let Err(e) = kill(suspend_target(), Signal::SIGSTOP) {
         eprintln!("Failed to send SIGSTOP: {}", e);
     }
 
@@ -3278,6 +3287,17 @@ mod tests {
     use crate::models::ServiceSession;
     use crate::models::micros_to_iso_timestamp;
     use crate::models::tests::{create_test_service, create_test_service_with_sessions, scoped_ip};
+
+    #[cfg(unix)]
+    #[test]
+    fn suspend_targets_foreground_process_group_not_just_self() {
+        // Negative pid addresses a process group for kill(2): suspends
+        // wrappers like `sh -c 'app; ...'` together so `fg` resumes all.
+        let target = suspend_target();
+        let group = nix::unistd::getpgrp();
+        assert_eq!(target.as_raw(), -group.as_raw());
+        assert!(target.as_raw() < 0, "must address a group, not a pid");
+    }
 
     /// Helper to create AppState for testing
     fn create_test_app_state() -> AppState {
