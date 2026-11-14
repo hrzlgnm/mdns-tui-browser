@@ -553,7 +553,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from("   Backspace         - Delete last character"),
         Line::from(" "),
         Line::from("   Terms fuzzy-match any field, case-insensitively, in any order"),
-        Line::from("   Terms of 4+ characters tolerate one typo, except ports/addresses"),
+        Line::from("   Terms of 4+ characters tolerate one typo, except numbers and IPs"),
         Line::from("   Contiguous matches first, then fuzzy matches, then typo matches"),
         Line::from(" "),
         Line::from("   Status keywords (all given must hold):"),

@@ -86,7 +86,6 @@ struct StatusConstraints {
 }
 
 impl StatusConstraints {
-    /// Records `term` and returns true if it is a reserved status word.
     /// The constraint `term` names, or `None` if it is not a status word.
     fn flag_mut(&mut self, term: &str) -> Option<&mut bool> {
         match term {
@@ -147,9 +146,10 @@ impl Haystack {
 fn tolerates_typo(term: &str) -> bool {
     // Addresses are shown with a `%scope` suffix, e.g. `fe80::1%eth0`
     let address = term.split_once('%').map_or(term, |(address, _)| address);
-    let is_numeric = address
-        .chars()
-        .all(|c| c.is_ascii_digit() || matches!(c, '.' | ':'));
+    let is_numeric = !address.is_empty()
+        && address
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, '.' | ':'));
     let is_ipv6_like = address.contains(':')
         && address
             .chars()

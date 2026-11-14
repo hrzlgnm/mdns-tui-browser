@@ -6895,6 +6895,7 @@ mod tests {
         assert!(quick_filter_hosts(&mut state, "fe80::1c2c").is_empty());
         state.services[0].txt = vec!["link=fe80::1c2b%eth0".to_string()];
         assert!(quick_filter_hosts(&mut state, "fe80::1c2c%eth0").is_empty());
+        assert_eq!(quick_filter_hosts(&mut state, "%etx0"), ["kiosk.local."]);
         assert_eq!(
             quick_filter_hosts(&mut state, "192.168.1.11"),
             ["kiosk.local."]
