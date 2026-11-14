@@ -35,7 +35,8 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
   - [Service Details Controls](#service-details-controls)
   - [Help Popup Controls](#help-popup-controls)
   - [Quick Filter Mode](#quick-filter-mode)
-    - [Special Keywords](#special-keywords)
+    - [Matching](#matching)
+    - [Status Keywords](#status-keywords)
   - [Add Service Type Mode](#add-service-type-mode)
   - [Local Device Highlight](#local-device-highlight)
   - [Opening Service URLs](#opening-service-urls)
@@ -65,7 +66,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🔄 **Real-time Updates**: Async architecture for live service discovery
 - 📈 **Live Metrics**: Comprehensive ServiceDaemon and application metrics
 - 🎛️ **Service Type Filtering**: Browse different service types separately
-- 🔍 **Quick Filter**: Text-based search across all service fields
+- 🔍 **Quick Filter**: Typo-tolerant fuzzy search across all service fields, plus status keywords
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
 - ⚙️ **Custom Service Discovery**: Specify service types via CLI for hard-to-discover services
 - 💾 **JSON State Dump**: Export complete application state to JSON with Ctrl+J
@@ -320,26 +321,34 @@ When in filter mode (activated with <kbd>/</kbd>):
 - <kbd>Backspace</kbd> - Delete last character
 - Any other key - Type search text (case-insensitive)
 
-#### Special Keywords
-The quickfilter supports special keywords for filtering by service status:
+#### Matching
+The quick filter searches every service field (fullname, host, service type,
+subtype, each address, port, and each TXT record) with typo-tolerant fuzzy matching:
 
-- **`online`** - Shows online services AND services containing "online" in any field (fullname, host, service type, TXT records, etc.)
-- **`offline`** - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
-- **`flapping`** - Shows services that are flapping (detected based on session history - at least 3 sessions with at least half shorter than 5 minutes)
-- **Case-insensitive**: `ONLINE`, `Online`, `offline`, `OFFLINE`, `FLAPPING`, `Flapping` all work
-- **Hybrid mode**: Keywords match both by status AND text content
-- **Combined queries**: `online http` shows online services with "http" in text fields
+- **Terms**: whitespace-separated terms must all match, in any order; each term must match within a single field
+- **Fuzzy**: a term's characters must appear in order but need not be adjacent (`prn` finds `printer`)
+- **Typos**: terms of four or more characters tolerate one typo if the rest of the term matches closely together (`prinzer` finds `printer`); shorter terms, numbers, and IP-like terms (digits with dots or colons, or hex digits with colons) tolerate none
+- **Ranking**: services where every term appears contiguously come first, in the selected sort order; then fuzzy matches without typos, then matches needing a typo, each closest first with the selected sort breaking ties; the services header then shows `Relevance ›` before the sort indicator
+
+#### Status Keywords
+The reserved words `online`, `offline`, and `flapping` filter by service status
+instead of matching text. They are case-insensitive and combine with each other
+and with text terms; every one must hold.
+
+- **`online`** - Only online services
+- **`offline`** - Only offline services
+- **`flapping`** - Only flapping services (detected based on session history - at least 3 sessions with at least half shorter than 5 minutes)
 
 **Examples:**
 ```bash
 # Press '/' then type:
-online              # Show online services + services with "online" in text
-offline             # Show offline services + services with "offline" in text
+prn                 # Show services matching "printer" and similar
+online              # Show online services
 flapping            # Show flapping services
-online http         # Show online HTTP services
-offline printer     # Show offline printer services
+online http         # Show online services matching "http"
+offline printer     # Show offline services matching "printer"
 online flapping     # Show services that are both online AND flapping
-online offline      # Shows all services (both keywords present)
+online offline      # Shows nothing (contradictory status)
 ```
 
 ### Add Service Type Mode
@@ -430,6 +439,7 @@ src/
 ├── tui_app.rs    # Main TUI application logic
 ├── input.rs      # User input handling (filter, service type)
 ├── popup.rs      # Popup UI components (help, metrics)
+├── quick_filter.rs # Quick filter query parsing and fuzzy matching
 ├── scroll.rs     # Scroll state management
 ├── models.rs     # Data models
 └── terminal.rs  # Terminal management
