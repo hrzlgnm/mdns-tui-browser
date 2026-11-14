@@ -200,6 +200,8 @@ struct AppState {
     cached_filtered_services: Vec<usize>,
     /// Filtered services with their quick-filter relevance.
     cached_matches: Vec<(usize, Relevance)>,
+    /// Parsed `filter_input`, re-parsed only when its text changes.
+    quick_filter: QuickFilter,
     cache_dirty: bool,
     cached_sorted: bool,
     popup_state: PopupState,
@@ -241,6 +243,7 @@ impl Clone for AppState {
             details_scroll: self.details_scroll.clone(),
             cached_filtered_services: self.cached_filtered_services.clone(),
             cached_matches: self.cached_matches.clone(),
+            quick_filter: self.quick_filter.clone(),
             cache_dirty: self.cache_dirty,
             cached_sorted: self.cached_sorted,
             popup_state: self.popup_state.clone(),
@@ -282,6 +285,7 @@ impl AppState {
             details_scroll: ScrollState::new(),
             cached_filtered_services: Vec::new(),
             cached_matches: Vec::new(),
+            quick_filter: QuickFilter::parse(""),
             cache_dirty: true,
             cached_sorted: false,
             popup_state: PopupState::new(),
@@ -326,21 +330,20 @@ impl AppState {
         service.is_local(&self.local_addrs)
     }
 
-    fn matches_selected_type(&self, service: &ServiceEntry) -> bool {
-        // Case-insensitive: daemon and old dumps may use mixed case
-        self.selected_type
-            .and_then(|idx| self.service_types.get(idx))
-            .is_none_or(|selected_type| service.service_type.eq_ignore_ascii_case(selected_type))
-    }
-
     fn update_filtered_cache(&mut self) -> bool {
         if self.cache_dirty {
+            if self.quick_filter.query() != self.filter_input.text() {
+                self.quick_filter = QuickFilter::parse(self.filter_input.text());
+            }
+            let selected_type = self
+                .selected_type
+                .and_then(|idx| self.service_types.get(idx));
             let candidates = self
                 .services
                 .iter()
                 .enumerate()
-                .filter(|(_, service)| self.matches_selected_type(service));
-            self.cached_matches = QuickFilter::parse(self.filter_input.text()).rank(candidates);
+                .filter(|(_, service)| has_service_type(service, selected_type));
+            self.cached_matches = self.quick_filter.rank(candidates);
             self.project_filtered_services();
             self.cache_dirty = false;
             self.cached_sorted = false;
@@ -629,7 +632,7 @@ impl AppState {
         self.selected_service = 0;
         self.services_scroll.reset();
         self.details_scroll.reset();
-        self.invalidate_cache_and_validate();
+        self.cached_sorted = false;
     }
 
     fn update_sort_direction(&mut self, direction: SortDirection) {
@@ -637,7 +640,7 @@ impl AppState {
         self.selected_service = 0;
         self.services_scroll.reset();
         self.details_scroll.reset();
-        self.invalidate_cache_and_validate();
+        self.cached_sorted = false;
     }
 
     fn toggle_sort_direction(&mut self) {
@@ -1573,6 +1576,13 @@ impl AppState {
             }
         }
     }
+}
+
+/// Whether `service` belongs to `selected_type`; `None` selects all types.
+fn has_service_type(service: &ServiceEntry, selected_type: Option<&String>) -> bool {
+    // Case-insensitive: daemon and old dumps may use mixed case
+    selected_type
+        .is_none_or(|selected_type| service.service_type.eq_ignore_ascii_case(selected_type))
 }
 
 fn compare_services_by_field(
@@ -3227,7 +3237,10 @@ mod tests {
     impl AppState {
         /// Whether `service` passes the current type selection and quick filter.
         fn filter_service(&self, service: &ServiceEntry) -> bool {
-            self.matches_selected_type(service)
+            let selected_type = self
+                .selected_type
+                .and_then(|idx| self.service_types.get(idx));
+            has_service_type(service, selected_type)
                 && !QuickFilter::parse(self.filter_input.text())
                     .rank([(0, service)])
                     .is_empty()
@@ -4550,7 +4563,7 @@ mod tests {
                 },
                 services: vec![
                     create_test_service("test-service", "_http._tcp.local.", 80),
-                    create_test_service("zzz", "_ipp._udp.local.", 80),
+                    create_test_service("scanner", "_ipp._tcp.local.", 631),
                 ],
                 expected_matches: vec![0], // Only service with "test" should match
             },
@@ -4563,7 +4576,7 @@ mod tests {
                 },
                 services: vec![
                     create_test_service("test-service", "_http._tcp.local.", 80),
-                    create_test_service("zzz", "_ipp._udp.local.", 80),
+                    create_test_service("scanner", "_ipp._tcp.local.", 631),
                 ],
                 expected_matches: vec![0], // Should match despite case difference
             },
@@ -4576,7 +4589,7 @@ mod tests {
                 },
                 services: vec![
                     create_test_service("service-8080", "_http._tcp.local.", 8080),
-                    create_test_service("service-9999", "_http._tcp.local.", 9999),
+                    create_test_service("service-9090", "_http._tcp.local.", 9090),
                 ],
                 expected_matches: vec![0], // Only 8080 should match
             },
@@ -6536,7 +6549,7 @@ mod tests {
         state.filter_input.set_text("test");
 
         let matching_service = create_test_service("test", "_http._tcp.local.", 80);
-        let non_matching_service = create_test_service("zzz", "_ipp._udp.local.", 80);
+        let non_matching_service = create_test_service("scanner", "_ipp._tcp.local.", 631);
 
         assert!(state.filter_service(&matching_service));
         assert!(!state.filter_service(&non_matching_service));
@@ -6556,7 +6569,7 @@ mod tests {
         type SetField = fn(&mut ServiceEntry);
         let cases: [(&str, &str, SetField); 7] = [
             ("fullname", "kiosk", |s| {
-                s.fullname = "Kiosk._ipp._udp.local.".to_string()
+                s.fullname = "Kiosk._ipp._tcp.local.".to_string()
             }),
             ("host", "kiosk", |s| s.host = "kiosk.local.".to_string()),
             ("service type", "kiosk", |s| {
@@ -6573,7 +6586,7 @@ mod tests {
         ];
 
         let mut state = create_test_app_state();
-        let base = create_test_service("zzz", "_ipp._udp.local.", 80);
+        let base = create_test_service("scanner", "_ipp._tcp.local.", 631);
         for (field, query, set_field) in cases {
             state.filter_input.set_text(query);
             assert!(
@@ -6802,42 +6815,72 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_service_status_keyword_ignores_literal_text() {
-        let mut state = create_test_app_state();
-        state.filter_input.set_text("online");
+    fn test_quick_filter_typo_match_must_be_compact() {
+        let mut printer = create_test_service("printer", "_ipp._tcp.local.", 631);
+        printer.addrs = vec![scoped_ip("192.168.0.10")];
+        let mut state = setup_test_state_with_services(vec![printer]);
 
-        let mut offline_service = create_test_service("online", "_http._tcp.local.", 80);
-        offline_service.txt = vec!["online".to_string()];
-        offline_service.go_offline_at(1000);
-
-        assert!(!state.filter_service(&offline_service));
+        assert_eq!(
+            quick_filter_hosts(&mut state, "prinzer"),
+            ["printer.local."]
+        );
+        assert!(quick_filter_hosts(&mut state, "http").is_empty());
+        assert!(quick_filter_hosts(&mut state, "8080").is_empty());
     }
 
     #[test]
-    fn test_filter_service_contradictory_status_keywords_match_nothing() {
-        let mut state = create_test_app_state();
-        state.filter_input.set_text("online offline printer");
+    fn test_quick_filter_sort_change_keeps_relevance_order() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
+            create_test_service("kiosk", "_http._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+        let _ = quick_filter_hosts(&mut state, "kiosk");
 
-        let online_printer = create_test_service("printer", "_http._tcp.local.", 80);
-        let mut offline_printer = create_test_service("printer", "_http._tcp.local.", 80);
+        state.update_sort_direction(SortDirection::Descending);
+        let filtered = state.get_filtered_services().to_vec();
+
+        let hosts: Vec<&str> = filtered
+            .iter()
+            .map(|&idx| state.services[idx].host.as_str())
+            .collect();
+        assert_eq!(hosts, ["kiosk.local.", "kxixoxsxk.local."]);
+    }
+
+    #[test]
+    fn test_quick_filter_status_keyword_ignores_literal_text() {
+        let mut offline = create_test_service("online", "_http._tcp.local.", 80);
+        offline.txt = vec!["online".to_string()];
+        offline.go_offline_at(1000);
+        let mut state = setup_test_state_with_services(vec![offline]);
+
+        assert!(quick_filter_hosts(&mut state, "online").is_empty());
+    }
+
+    #[test]
+    fn test_quick_filter_contradictory_status_keywords_match_nothing() {
+        let mut offline_printer = create_test_service("printer-b", "_http._tcp.local.", 80);
         offline_printer.go_offline_at(1000);
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("printer-a", "_http._tcp.local.", 80),
+            offline_printer,
+        ]);
 
-        assert!(!state.filter_service(&online_printer));
-        assert!(!state.filter_service(&offline_printer));
+        assert!(quick_filter_hosts(&mut state, "online offline printer").is_empty());
     }
 
     #[test]
-    fn test_filter_service_status_keyword_with_text_requires_both() {
-        let mut state = create_test_app_state();
-        state.filter_input.set_text("flapping ipp");
+    fn test_quick_filter_status_keyword_with_text_requires_both() {
+        let mut state = setup_test_state_with_services(vec![
+            create_flapping_service("kiosk", "_ipp._tcp.local.", 631, true),
+            create_flapping_service("scanner", "_ssh._tcp.local.", 22, true),
+            create_test_service("kiosk-stable", "_ipp._tcp.local.", 631),
+        ]);
 
-        let flapping_ipp = create_flapping_service("test", "_ipp._tcp.local.", 631, true);
-        let flapping_ssh = create_flapping_service("zzz", "_ssh._udp.local.", 22, true);
-        let stable_ipp = create_test_service("test", "_ipp._tcp.local.", 631);
-
-        assert!(state.filter_service(&flapping_ipp));
-        assert!(!state.filter_service(&flapping_ssh));
-        assert!(!state.filter_service(&stable_ipp));
+        assert_eq!(
+            quick_filter_hosts(&mut state, "flapping kiosk"),
+            ["kiosk.local."]
+        );
     }
 
     #[test]

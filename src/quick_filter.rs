@@ -8,14 +8,14 @@ use std::cmp::Ordering;
 
 use frizbee::{CaseMatching, Config, Matcher, Pattern, PatternConfig, SortStrategy};
 
-use crate::models::{ServiceEntry, format_scoped_ip_with_context};
+use crate::models::{ServiceEntry, formatted_service_addrs};
 
 /// Shortest text term that may contain a typo; shorter terms would match
 /// too broadly with one.
 const MIN_TYPO_TOLERANT_TERM_CHARS: usize = 4;
 
 /// How well a service matched the text terms of a [`QuickFilter`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct Relevance {
     /// Every text term occurs contiguously in one of the service's fields.
     contiguous: bool,
@@ -56,7 +56,7 @@ impl Relevance {
 }
 
 /// Reserved status words; each one present must hold for a service.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct StatusConstraints {
     online: bool,
     offline: bool,
@@ -84,6 +84,7 @@ impl StatusConstraints {
 }
 
 /// One text term of a quick-filter query and its compiled matcher.
+#[derive(Clone)]
 struct Term {
     text: String,
     matcher: Matcher,
@@ -112,7 +113,10 @@ impl Term {
         owner_count: usize,
     ) -> Vec<Option<Relevance>> {
         let mut best: Vec<Option<Relevance>> = vec![None; owner_count];
-        for found in self.matcher.match_list(fields) {
+        for found in self.matcher.match_list_indices(fields) {
+            if !self.is_plausible(&found.indices) {
+                continue;
+            }
             let field = found.index as usize;
             let candidate = Relevance {
                 contiguous: fields[field].contains(&self.text),
@@ -129,11 +133,30 @@ impl Term {
         }
         best
     }
+
+    /// Rejects a typo match whose matched characters are spread out:
+    /// frizbee counts a typo as a missing term character, so a spread-out
+    /// match only shares a few scattered characters with the term (`http`
+    /// against `printer._ipp._tcp`). Matches without a typo may spread out,
+    /// so `prn` still finds `printer`.
+    fn is_plausible(&self, matched_byte_offsets: &[u32]) -> bool {
+        let has_typo = matched_byte_offsets.len() < self.text.chars().count();
+        let (Some(&first), Some(&last)) = (
+            matched_byte_offsets.iter().min(),
+            matched_byte_offsets.iter().max(),
+        ) else {
+            return false;
+        };
+        let span = (last - first) as usize + 1;
+        !has_typo || span <= self.text.len() + 1
+    }
 }
 
 /// A parsed quick-filter query: status constraints plus fuzzy text terms,
 /// all of which must match.
+#[derive(Clone)]
 pub struct QuickFilter {
+    query: String,
     status: StatusConstraints,
     terms: Vec<Term>,
 }
@@ -148,7 +171,16 @@ impl QuickFilter {
             .filter(|term| !status.add(term))
             .map(Term::new)
             .collect();
-        Self { status, terms }
+        Self {
+            query: query.to_string(),
+            status,
+            terms,
+        }
+    }
+
+    /// The query text this filter was parsed from.
+    pub fn query(&self) -> &str {
+        &self.query
     }
 
     /// Returns the ids of the matching candidates with their relevance.
@@ -163,6 +195,12 @@ impl QuickFilter {
             .into_iter()
             .filter(|(_, service)| self.status.admits(service))
             .collect();
+        if self.terms.is_empty() {
+            return admitted
+                .into_iter()
+                .map(|(id, _)| (id, Relevance::default()))
+                .collect();
+        }
 
         let mut fields = Vec::new();
         let mut owners = Vec::new();
@@ -198,12 +236,7 @@ fn searchable_fields(service: &ServiceEntry) -> Vec<String> {
         service.port.to_string(),
     ];
     fields.extend(service.subtype.iter().map(|subtype| subtype.to_lowercase()));
-    fields.extend(
-        service
-            .addrs
-            .iter()
-            .map(|addr| format_scoped_ip_with_context(addr, &service.addrs).to_lowercase()),
-    );
+    fields.extend(formatted_service_addrs(&service.addrs).map(|addr| addr.to_lowercase()));
     fields.extend(service.txt.iter().map(|entry| entry.to_lowercase()));
     fields
 }

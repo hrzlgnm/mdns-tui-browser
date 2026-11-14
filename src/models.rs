@@ -177,13 +177,17 @@ pub fn format_scoped_ip_with_context(ip: &ScopedIp, all_addrs: &[ScopedIp]) -> S
     }
 }
 
+/// Formats each address with its interface context, skipping entries that
+/// duplicate another one.
+pub fn formatted_service_addrs(addrs: &[ScopedIp]) -> impl Iterator<Item = String> + '_ {
+    addrs.iter().filter_map(|addr| {
+        let s = format_scoped_ip_with_context(addr, addrs);
+        if s.is_empty() { None } else { Some(s) }
+    })
+}
+
 pub fn format_service_addrs(addrs: &[ScopedIp], separator: &str) -> String {
-    addrs
-        .iter()
-        .filter_map(|addr| {
-            let s = format_scoped_ip_with_context(addr, addrs);
-            if s.is_empty() { None } else { Some(s) }
-        })
+    formatted_service_addrs(addrs)
         .collect::<Vec<_>>()
         .join(separator)
 }
