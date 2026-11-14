@@ -407,9 +407,12 @@ impl AppState {
                     SortDirection::Ascending => (a_idx, b_idx),
                     SortDirection::Descending => (b_idx, a_idx),
                 };
+                // Index order breaks remaining ties so a re-sort gives the
+                // same order as a rebuild, whatever the previous sort was.
                 a_relevance
                     .cmp_best_first(&b_relevance)
                     .then_with(|| compare_services_by_field(&services[a], &services[b], sort_field))
+                    .then(a_idx.cmp(&b_idx))
             });
         self.project_filtered_services();
     }
@@ -6900,6 +6903,21 @@ mod tests {
             quick_filter_hosts(&mut state, "192.168.1.11"),
             ["kiosk.local."]
         );
+    }
+
+    #[test]
+    fn test_sort_change_orders_ties_like_a_rebuild() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("printer", "_http._tcp.local.", 82),
+            create_test_service("printer", "_ipp._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+        assert_eq!(state.get_filtered_services(), &[0, 1]);
+
+        state.update_sort_field(SortField::Port);
+        assert_eq!(state.get_filtered_services(), &[1, 0]);
+        state.update_sort_field(SortField::Host);
+        assert_eq!(state.get_filtered_services(), &[0, 1]);
     }
 
     #[test]
