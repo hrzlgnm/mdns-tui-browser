@@ -274,9 +274,10 @@ impl Term {
     }
 }
 
-/// Every substring of `field` at most `max_span` bytes long that starts
-/// with the first or second character of `term`. A one-typo alignment
-/// begins with one of them, so other start positions only repeat work.
+/// From each occurrence of the first or second character of `term`, the
+/// substring of `field` up to `max_span` bytes long. A one-typo alignment
+/// begins with one of those characters, so other start positions only
+/// repeat work.
 fn windows_of<'a>(field: &'a str, term: &str, max_span: usize) -> impl Iterator<Item = &'a str> {
     let mut leading = term.chars();
     let (first, second) = (leading.next(), leading.next());

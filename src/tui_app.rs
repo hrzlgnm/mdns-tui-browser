@@ -6842,7 +6842,7 @@ mod tests {
 
     #[test]
     fn test_quick_filter_typo_match_must_be_compact_with_accents() {
-        // frizbee reports matched positions per byte, which `ü` doubles
+        // Typo windows are sized in bytes, which `ü` doubles
         let mut spread = create_test_service("spread", "_http._tcp.local.", 80);
         spread.txt = vec!["bxxxxxxxxxüxxxxxxxxxr".to_string()];
         let mut close = create_test_service("close", "_http._tcp.local.", 81);
