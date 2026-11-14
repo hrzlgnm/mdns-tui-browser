@@ -29,8 +29,9 @@ enum MatchTier {
 #[derive(Clone, Copy, Debug)]
 pub struct Relevance {
     tier: MatchTier,
-    /// Sum of each term's best score; scores are only comparable within a
-    /// tier because typo matches are scored on short windows.
+    /// Sum of each term's best score. Typo matches are scored on short
+    /// windows, which earn frizbee's start-of-text bonus, so typo-tier
+    /// sums are only roughly comparable with each other.
     score: u16,
 }
 
@@ -105,6 +106,43 @@ impl StatusConstraints {
     }
 }
 
+/// Searchable fields of candidate services, each tagged with its owner.
+struct Haystack {
+    fields: Vec<String>,
+    /// Owner index of each field in `fields`.
+    owners: Vec<usize>,
+    owner_count: usize,
+}
+
+impl Haystack {
+    fn new(services: &[&ServiceEntry]) -> Self {
+        let mut fields = Vec::new();
+        let mut owners = Vec::new();
+        for (owner, service) in services.iter().enumerate() {
+            for field in searchable_fields(service) {
+                fields.push(field);
+                owners.push(owner);
+            }
+        }
+        Self {
+            fields,
+            owners,
+            owner_count: services.len(),
+        }
+    }
+
+    /// Drops the fields of owners that `keep` rejects.
+    fn retain_owners(&mut self, keep: impl Fn(usize) -> bool) {
+        let (fields, owners) = std::mem::take(&mut self.fields)
+            .into_iter()
+            .zip(std::mem::take(&mut self.owners))
+            .filter(|&(_, owner)| keep(owner))
+            .unzip();
+        self.fields = fields;
+        self.owners = owners;
+    }
+}
+
 /// One text term of a quick-filter query and its compiled matchers.
 #[derive(Clone)]
 struct Term {
@@ -116,10 +154,11 @@ struct Term {
 
 impl Term {
     /// Terms are matched literally: frizbee's query operators are not
-    /// exposed.
+    /// exposed. Terms and fields are lowercased up front, so matching can
+    /// respect case.
     fn new(text: &str) -> Self {
         let config = Config::default()
-            .casing(CaseMatching::Ignore)
+            .casing(CaseMatching::Respect)
             .sort(SortStrategy::IndexAsc);
         let matcher = |max_typos| {
             let pattern = Pattern::new(text, PatternConfig::default().max_typos(Some(max_typos)));
@@ -132,25 +171,31 @@ impl Term {
         }
     }
 
-    /// Best relevance per owner, where `owners[i]` owns `fields[i]`.
-    fn best_per_owner(
-        &mut self,
-        fields: &[String],
-        owners: &[usize],
-        owner_count: usize,
-    ) -> Vec<Option<Relevance>> {
-        let mut best: Vec<Option<Relevance>> = vec![None; owner_count];
-        for (field, relevance) in self.field_matches(fields) {
-            let slot = &mut best[owners[field]];
+    /// Best relevance per owner of `haystack`.
+    fn best_per_owner(&mut self, haystack: &Haystack) -> Vec<Option<Relevance>> {
+        let mut best: Vec<Option<Relevance>> = vec![None; haystack.owner_count];
+        let mut keep_best = |field: usize, relevance: Relevance| {
+            let slot = &mut best[haystack.owners[field]];
             *slot = Some(slot.map_or(relevance, |current| current.best_of(relevance)));
+        };
+
+        let mut matched = vec![false; haystack.fields.len()];
+        for (field, relevance) in self.typo_free_matches(&haystack.fields) {
+            matched[field] = true;
+            keep_best(field, relevance);
+        }
+        let unmatched: Vec<usize> = (0..haystack.fields.len())
+            .filter(|&field| !matched[field])
+            .collect();
+        for (field, relevance) in self.typo_matches(&haystack.fields, &unmatched) {
+            keep_best(field, relevance);
         }
         best
     }
 
-    /// Relevance of every matching field, as `(field index, relevance)`.
-    fn field_matches(&mut self, fields: &[String]) -> Vec<(usize, Relevance)> {
-        let mut matches: Vec<(usize, Relevance)> = self
-            .exact
+    /// Fields the term matches without a typo, as `(field, relevance)`.
+    fn typo_free_matches(&mut self, fields: &[String]) -> Vec<(usize, Relevance)> {
+        self.exact
             .match_list(fields)
             .into_iter()
             .map(|found| {
@@ -168,60 +213,63 @@ impl Term {
                     },
                 )
             })
-            .collect();
+            .collect()
+    }
 
+    /// Fields among `candidates` the term matches with one typo, as
+    /// `(field, relevance)`.
+    ///
+    /// frizbee counts a typo as a missing term character and lets the rest
+    /// spread over the whole field, so one typo would turn `http` into any
+    /// `t..t..p`. Matching windows one byte longer than the term keeps typo
+    /// matches close together and scores them all the same way.
+    fn typo_matches(&mut self, fields: &[String], candidates: &[usize]) -> Vec<(usize, Relevance)> {
         let Some(typo) = self.typo.as_mut() else {
-            return matches;
+            return Vec::new();
         };
-        let mut matched = vec![false; fields.len()];
-        for &(field, _) in &matches {
-            matched[field] = true;
-        }
-        let unmatched: Vec<usize> = (0..fields.len()).filter(|&field| !matched[field]).collect();
-        let unmatched_fields: Vec<&str> = unmatched
+        let candidate_fields: Vec<&str> = candidates
             .iter()
             .map(|&field| fields[field].as_str())
             .collect();
         let max_span = self.text.len() + 1;
-        for found in typo.match_list(&unmatched_fields) {
-            let field = unmatched[found.index as usize];
-            if let Some(score) = best_window_score(typo, &fields[field], max_span) {
-                matches.push((
-                    field,
-                    Relevance {
-                        tier: MatchTier::Typo,
-                        score,
-                    },
-                ));
+        let mut windows = Vec::new();
+        let mut window_fields = Vec::new();
+        for found in typo.match_list(&candidate_fields) {
+            let field = candidates[found.index as usize];
+            for window in windows_of(&fields[field], max_span) {
+                windows.push(window);
+                window_fields.push(field);
             }
         }
-        matches
+
+        let mut best: Vec<Option<u16>> = vec![None; fields.len()];
+        for found in typo.match_list(&windows) {
+            let slot = &mut best[window_fields[found.index as usize]];
+            *slot = Some(slot.map_or(found.score, |score| score.max(found.score)));
+        }
+        best.into_iter()
+            .enumerate()
+            .filter_map(|(field, score)| {
+                let relevance = Relevance {
+                    tier: MatchTier::Typo,
+                    score: score?,
+                };
+                Some((field, relevance))
+            })
+            .collect()
     }
 }
 
-/// Best score of `matcher` over every window of `field` at most
-/// `max_span` bytes long, or `None` if no window matches.
-///
-/// frizbee counts a typo as a missing term character and lets the rest
-/// spread over the whole field, so one typo would turn `http` into any
-/// `t..t..p`. Matching windows one byte longer than the term keeps typo
-/// matches close together and scores them all the same way.
-fn best_window_score(matcher: &mut Matcher, field: &str, max_span: usize) -> Option<u16> {
-    let windows: Vec<&str> = field
-        .char_indices()
-        .map(|(start, _)| {
-            let mut end = (start + max_span).min(field.len());
-            while !field.is_char_boundary(end) {
-                end -= 1;
-            }
-            &field[start..end]
-        })
-        .collect();
-    matcher
-        .match_list(&windows)
-        .into_iter()
-        .map(|found| found.score)
-        .max()
+/// Every substring of `field` that starts at a character boundary and is
+/// at most `max_span` bytes long.
+fn windows_of(field: &str, max_span: usize) -> impl Iterator<Item = &str> {
+    field.char_indices().map(move |(start, _)| {
+        let mut end = (start + max_span).min(field.len());
+        while !field.is_char_boundary(end) {
+            end -= 1;
+        }
+        &field[start..end]
+    })
 }
 
 /// A parsed quick-filter query: status constraints plus fuzzy text terms,
@@ -274,21 +322,15 @@ impl QuickFilter {
                 .collect();
         }
 
-        let mut fields = Vec::new();
-        let mut owners = Vec::new();
-        for (owner, (_, service)) in admitted.iter().enumerate() {
-            for field in searchable_fields(service) {
-                fields.push(field);
-                owners.push(owner);
-            }
-        }
-
+        let services: Vec<&ServiceEntry> = admitted.iter().map(|&(_, service)| service).collect();
+        let mut haystack = Haystack::new(&services);
         let mut relevance = vec![Some(Relevance::default()); admitted.len()];
         for term in &mut self.terms {
-            let best = term.best_per_owner(&fields, &owners, admitted.len());
+            let best = term.best_per_owner(&haystack);
             for (combined, term_best) in relevance.iter_mut().zip(best) {
                 *combined = combined.zip(term_best).map(|(a, b)| a.and(b));
             }
+            haystack.retain_owners(|owner| relevance[owner].is_some());
         }
 
         admitted

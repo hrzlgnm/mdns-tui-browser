@@ -922,7 +922,6 @@ impl AppState {
             self.filter_input.deactivate();
             self.selected_service = 0;
             self.services_scroll.reset();
-            self.invalidate_cache_and_validate();
         }
     }
 
@@ -6684,6 +6683,25 @@ mod tests {
             ["printer.local."]
         );
         assert!(quick_filter_hosts(&mut state, "printer ssh").is_empty());
+    }
+
+    #[test]
+    fn test_quick_filter_later_terms_match_remaining_services() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosk-lobby", "_ipp._tcp.local.", 631),
+            create_test_service("scanner", "_ipp._tcp.local.", 632),
+            create_test_service("kiosk-hall", "_ipp._tcp.local.", 633),
+        ]);
+        state.sort_field = SortField::Host;
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk hall"),
+            ["kiosk-hall.local."]
+        );
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk ipp"),
+            ["kiosk-hall.local.", "kiosk-lobby.local."]
+        );
     }
 
     #[test]
