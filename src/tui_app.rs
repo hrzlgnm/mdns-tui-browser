@@ -637,7 +637,11 @@ impl AppState {
 
     async fn save_json_dump(&self) -> Result<String, Box<dyn std::error::Error>> {
         let timestamp = Utc::now().format("%Y%m%dT%H%M%S%.6f").to_string();
-        let filename = format!("{}-state-dump.json", timestamp);
+        let filename = format!(
+            "{timestamp}-{appname}-{version}.json",
+            appname = env!("CARGO_PKG_NAME"),
+            version = env!("CARGO_PKG_VERSION")
+        );
         let json_content = self.dump_state_to_json()?;
 
         tokio::fs::write(&filename, json_content).await?;
@@ -7773,7 +7777,16 @@ mod tests {
             "Filename should start with year"
         );
         assert!(
-            filename.ends_with("-state-dump.json"),
+            filename.contains(env!("CARGO_PKG_NAME")),
+            "Filename should contain name"
+        );
+        assert!(
+            filename.contains(env!("CARGO_PKG_VERSION")),
+            "Filename should contain version"
+        );
+
+        assert!(
+            filename.ends_with(".json"),
             "Filename should end with suffix"
         );
 
