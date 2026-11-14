@@ -87,15 +87,14 @@ struct StatusConstraints {
 
 impl StatusConstraints {
     /// Records `term` and returns true if it is a reserved status word.
-    fn add(&mut self, term: &str) -> bool {
-        let flag = match term {
-            "online" => &mut self.online,
-            "offline" => &mut self.offline,
-            "flapping" => &mut self.flapping,
-            _ => return false,
-        };
-        *flag = true;
-        true
+    /// The constraint `term` names, or `None` if it is not a status word.
+    fn flag_mut(&mut self, term: &str) -> Option<&mut bool> {
+        match term {
+            "online" => Some(&mut self.online),
+            "offline" => Some(&mut self.offline),
+            "flapping" => Some(&mut self.flapping),
+            _ => None,
+        }
     }
 
     fn admits(&self, service: &ServiceEntry) -> bool {
@@ -146,11 +145,13 @@ impl Haystack {
 /// broadly, and in a port or address one digit off names a different
 /// service, so numeric and IP-like terms must match without a typo.
 fn tolerates_typo(term: &str) -> bool {
-    let is_numeric = term
+    // Addresses are shown with a `%scope` suffix, e.g. `fe80::1%eth0`
+    let address = term.split_once('%').map_or(term, |(address, _)| address);
+    let is_numeric = address
         .chars()
         .all(|c| c.is_ascii_digit() || matches!(c, '.' | ':'));
-    let is_ipv6_like = term.contains(':')
-        && term
+    let is_ipv6_like = address.contains(':')
+        && address
             .chars()
             .all(|c| c.is_ascii_hexdigit() || matches!(c, '.' | ':'));
     term.chars().count() >= MIN_TYPO_TOLERANT_TERM_CHARS && !is_numeric && !is_ipv6_like
@@ -187,21 +188,21 @@ impl Term {
     /// Best relevance per owner of `haystack`.
     fn best_per_owner(&mut self, haystack: &Haystack) -> Vec<Option<Relevance>> {
         let mut best: Vec<Option<Relevance>> = vec![None; haystack.owner_count];
-        let mut keep_best = |field: usize, relevance: Relevance| {
+        let keep_best = |best: &mut [Option<Relevance>], field: usize, relevance: Relevance| {
             let slot = &mut best[haystack.owners[field]];
             *slot = Some(slot.map_or(relevance, |current| current.best_of(relevance)));
         };
 
-        let mut matched = vec![false; haystack.fields.len()];
         for (field, relevance) in self.typo_free_matches(&haystack.fields) {
-            matched[field] = true;
-            keep_best(field, relevance);
+            keep_best(&mut best, field, relevance);
         }
+        // A typo match never beats a typo-free one, so only owners without
+        // any match need the typo pass.
         let unmatched: Vec<usize> = (0..haystack.fields.len())
-            .filter(|&field| !matched[field])
+            .filter(|&field| best[haystack.owners[field]].is_none())
             .collect();
         for (field, relevance) in self.typo_matches(&haystack.fields, &unmatched) {
-            keep_best(field, relevance);
+            keep_best(&mut best, field, relevance);
         }
         best
     }
@@ -249,7 +250,7 @@ impl Term {
         let mut window_fields = Vec::new();
         for found in typo.match_list(&candidate_fields) {
             let field = candidates[found.index as usize];
-            for window in windows_of(&fields[field], max_span) {
+            for window in windows_of(&fields[field], &self.text, max_span) {
                 windows.push(window);
                 window_fields.push(field);
             }
@@ -273,16 +274,22 @@ impl Term {
     }
 }
 
-/// Every substring of `field` that starts at a character boundary and is
-/// at most `max_span` bytes long.
-fn windows_of(field: &str, max_span: usize) -> impl Iterator<Item = &str> {
-    field.char_indices().map(move |(start, _)| {
-        let mut end = (start + max_span).min(field.len());
-        while !field.is_char_boundary(end) {
-            end -= 1;
-        }
-        &field[start..end]
-    })
+/// Every substring of `field` at most `max_span` bytes long that starts
+/// with the first or second character of `term`. A one-typo alignment
+/// begins with one of them, so other start positions only repeat work.
+fn windows_of<'a>(field: &'a str, term: &str, max_span: usize) -> impl Iterator<Item = &'a str> {
+    let mut leading = term.chars();
+    let (first, second) = (leading.next(), leading.next());
+    field
+        .char_indices()
+        .filter(move |&(_, c)| Some(c) == first || Some(c) == second)
+        .map(move |(start, _)| {
+            let mut end = (start + max_span).min(field.len());
+            while !field.is_char_boundary(end) {
+                end -= 1;
+            }
+            &field[start..end]
+        })
 }
 
 /// A parsed quick-filter query: status constraints plus fuzzy text terms,
@@ -298,12 +305,13 @@ impl QuickFilter {
     /// Parses whitespace-separated terms case-insensitively.
     pub fn parse(query: &str) -> Self {
         let mut status = StatusConstraints::default();
-        let terms = query
-            .to_lowercase()
-            .split_whitespace()
-            .filter(|term| !status.add(term))
-            .map(Term::new)
-            .collect();
+        let mut terms = Vec::new();
+        for term in query.to_lowercase().split_whitespace() {
+            match status.flag_mut(term) {
+                Some(flag) => *flag = true,
+                None => terms.push(Term::new(term)),
+            }
+        }
         Self {
             query: query.to_string(),
             status,

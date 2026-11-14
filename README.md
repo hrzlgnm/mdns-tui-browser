@@ -66,7 +66,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🔄 **Real-time Updates**: Async architecture for live service discovery
 - 📈 **Live Metrics**: Comprehensive ServiceDaemon and application metrics
 - 🎛️ **Service Type Filtering**: Browse different service types separately
-- 🔍 **Quick Filter**: Text-based search across all service fields
+- 🔍 **Quick Filter**: Typo-tolerant fuzzy search across all service fields, plus status keywords
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
 - ⚙️ **Custom Service Discovery**: Specify service types via CLI for hard-to-discover services
 - 💾 **JSON State Dump**: Export complete application state to JSON with Ctrl+J

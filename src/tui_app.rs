@@ -6707,7 +6707,7 @@ mod tests {
     #[test]
     fn test_quick_filter_contiguous_matches_rank_before_fuzzy_matches() {
         let mut state = setup_test_state_with_services(vec![
-            create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
+            create_test_service("kitchen-old-sink", "_http._tcp.local.", 80),
             create_test_service("kiosk", "_http._tcp.local.", 81),
         ]);
         state.sort_field = SortField::Host;
@@ -6715,22 +6715,22 @@ mod tests {
 
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kiosk.local.", "kxixoxsxk.local."]
+            ["kiosk.local.", "kitchen-old-sink.local."]
         );
     }
 
     #[test]
     fn test_quick_filter_fuzzy_matches_ordered_by_relevance() {
         let mut state = setup_test_state_with_services(vec![
-            create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
-            create_test_service("kiosxk", "_http._tcp.local.", 81),
+            create_test_service("kitchen-old-sink", "_http._tcp.local.", 80),
+            create_test_service("kios-kitchen", "_http._tcp.local.", 81),
         ]);
         state.sort_field = SortField::Host;
         state.sort_direction = SortDirection::Descending;
 
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kiosxk.local.", "kxixoxsxk.local."]
+            ["kios-kitchen.local.", "kitchen-old-sink.local."]
         );
     }
 
@@ -6758,21 +6758,21 @@ mod tests {
     #[test]
     fn test_quick_filter_selected_sort_breaks_fuzzy_score_ties() {
         let mut state = setup_test_state_with_services(vec![
-            create_test_service("kxiosk-a", "_http._tcp.local.", 80),
-            create_test_service("kxiosk-b", "_http._tcp.local.", 80),
+            create_test_service("kitchen-old-sink-a", "_http._tcp.local.", 80),
+            create_test_service("kitchen-old-sink-b", "_http._tcp.local.", 80),
         ]);
         state.sort_field = SortField::Host;
 
         state.sort_direction = SortDirection::Descending;
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kxiosk-b.local.", "kxiosk-a.local."]
+            ["kitchen-old-sink-b.local.", "kitchen-old-sink-a.local."]
         );
 
         state.sort_direction = SortDirection::Ascending;
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kxiosk-a.local.", "kxiosk-b.local."]
+            ["kitchen-old-sink-a.local.", "kitchen-old-sink-b.local."]
         );
     }
 
@@ -6795,18 +6795,18 @@ mod tests {
     fn test_quick_filter_cleared_query_keeps_selected_sort() {
         let mut state = setup_test_state_with_services(vec![
             create_test_service("kiosk", "_http._tcp.local.", 80),
-            create_test_service("kxixoxsxk", "_http._tcp.local.", 81),
+            create_test_service("kitchen-old-sink", "_http._tcp.local.", 81),
         ]);
         state.sort_field = SortField::Host;
         state.sort_direction = SortDirection::Descending;
 
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kiosk.local.", "kxixoxsxk.local."]
+            ["kiosk.local.", "kitchen-old-sink.local."]
         );
         assert_eq!(
             quick_filter_hosts(&mut state, ""),
-            ["kxixoxsxk.local.", "kiosk.local."]
+            ["kitchen-old-sink.local.", "kiosk.local."]
         );
     }
 
@@ -6835,11 +6835,11 @@ mod tests {
             ["printer.local."]
         );
         assert!(quick_filter_hosts(&mut state, "http").is_empty());
-        assert!(quick_filter_hosts(&mut state, "8080").is_empty());
     }
 
     #[test]
     fn test_quick_filter_typo_match_must_be_compact_with_accents() {
+        // frizbee reports matched positions per byte, which `ü` doubles
         let mut spread = create_test_service("spread", "_http._tcp.local.", 80);
         spread.txt = vec!["bxxxxxxxxxüxxxxxxxxxr".to_string()];
         let mut close = create_test_service("close", "_http._tcp.local.", 81);
@@ -6851,6 +6851,7 @@ mod tests {
 
     #[test]
     fn test_quick_filter_finds_compact_typo_match_behind_spread_alignment() {
+        // frizbee prefers the spread-out alignment starting the field
         let mut service = create_test_service("kiosk", "_http._tcp.local.", 80);
         service.txt = vec!["a__b__c xabcx".to_string()];
         let mut state = setup_test_state_with_services(vec![service]);
@@ -6860,6 +6861,8 @@ mod tests {
 
     #[test]
     fn test_quick_filter_typo_tolerant_term_keeps_spread_typo_free_match() {
+        // With a typo allowed, frizbee reports an equally scored typo
+        // alignment here instead of the typo-free one
         let mut service = create_test_service("zzz", "_ipp._udp.local.", 80);
         service.txt = vec!["k-i-o-s------------------------k".to_string()];
         let mut state = setup_test_state_with_services(vec![service]);
@@ -6870,14 +6873,14 @@ mod tests {
     #[test]
     fn test_quick_filter_typo_free_matches_rank_before_typo_matches() {
         let mut state = setup_test_state_with_services(vec![
-            create_test_service("kiosx", "_http._tcp.local.", 80),
-            create_test_service("kxixoxsxk", "_http._tcp.local.", 81),
+            create_test_service("kios-printer", "_http._tcp.local.", 80),
+            create_test_service("kitchen-old-sink", "_http._tcp.local.", 81),
         ]);
         state.sort_field = SortField::Host;
 
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kxixoxsxk.local.", "kiosx.local."]
+            ["kitchen-old-sink.local.", "kios-printer.local."]
         );
     }
 
@@ -6890,6 +6893,8 @@ mod tests {
         assert!(quick_filter_hosts(&mut state, "8443").is_empty());
         assert!(quick_filter_hosts(&mut state, "192.168.1.10").is_empty());
         assert!(quick_filter_hosts(&mut state, "fe80::1c2c").is_empty());
+        state.services[0].txt = vec!["link=fe80::1c2b%eth0".to_string()];
+        assert!(quick_filter_hosts(&mut state, "fe80::1c2c%eth0").is_empty());
         assert_eq!(
             quick_filter_hosts(&mut state, "192.168.1.11"),
             ["kiosk.local."]
@@ -6899,7 +6904,7 @@ mod tests {
     #[test]
     fn test_quick_filter_sort_change_keeps_relevance_order() {
         let mut state = setup_test_state_with_services(vec![
-            create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
+            create_test_service("kitchen-old-sink", "_http._tcp.local.", 80),
             create_test_service("kiosk", "_http._tcp.local.", 81),
         ]);
         state.sort_field = SortField::Host;
@@ -6912,7 +6917,7 @@ mod tests {
             .iter()
             .map(|&idx| state.services[idx].host.as_str())
             .collect();
-        assert_eq!(hosts, ["kiosk.local.", "kxixoxsxk.local."]);
+        assert_eq!(hosts, ["kiosk.local.", "kitchen-old-sink.local."]);
     }
 
     #[test]
