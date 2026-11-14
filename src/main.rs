@@ -5,6 +5,7 @@
 mod input;
 mod models;
 mod popup;
+mod quick_filter;
 mod scroll;
 mod terminal;
 mod tui_app;

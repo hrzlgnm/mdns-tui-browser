@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-11-06" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-11-14" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -134,7 +134,7 @@ Any other key          - Close help popup
 \fBNote:\fR When loading a state file with \fB\-\-load-state\fR, the application runs in view-only mode (no browsing). The border color changes to a darker color to indicate this mode.
 
 .SH QUICK FILTER
-The quickfilter feature allows searching across all service fields using text patterns and special keywords.
+The quickfilter feature allows searching across all service fields using typo-tolerant fuzzy matching and status keywords.
 .PP
 To activate quickfilter mode, press \fB/\fR. Then type your search query and press \fBEnter\fR to apply or \fBEsc\fR to cancel.
 .PP
@@ -154,38 +154,28 @@ Port number
 TXT record contents
 .RE
 .PP
-The quickfilter supports special keywords for filtering by service status:
+Whitespace-separated terms must all match, in any order. A term's characters must appear in order but need not be adjacent. Terms of four or more characters tolerate one typo; shorter terms tolerate none. Services where every term appears contiguously are listed first, then closer fuzzy matches; the selected sort breaks ties.
+.PP
+The reserved words \fBonline\fR, \fBoffline\fR, and \fBflapping\fR filter by service status instead of matching text. They are case-insensitive and combine with each other and with text terms; every one must hold:
 .RS
 .IP \(bu
-\fBonline\fR - Shows online services AND services containing "online" in any field (fullname, host, service type, TXT records, etc.)
+\fBonline\fR - Only online services
 .IP \(bu
-\fBoffline\fR - Shows offline services AND services containing "offline" in any field (fullname, host, service type, TXT records, etc.)
+\fBoffline\fR - Only offline services
 .IP \(bu
-\fBflapping\fR - Shows services that are flapping (detected based on session history - at least 3 sessions with at least half shorter than 5 minutes)
-.IP \(bu
-Case-insensitive: \fBONLINE\fR, \fBOnline\fR, \fBoffline\fR, \fBOFFLINE\fR, \fBFLAPPING\fR, \fBFlapping\fR all work
-.IP \(bu
-Hybrid mode: Keywords match both by status AND text content
-.IP \(bu
-Combined queries: \fBonline http\fR shows online services with "http" in text fields
+\fBflapping\fR - Only flapping services (at least 3 sessions with at least half shorter than 5 minutes)
 .RE
 .PP
 Examples:
 .RS
 .IP \(bu
-\fBonline\fR - Show online services + services with "online" in text
+\fBprn\fR - Matches services such as "printer"
 .IP \(bu
-\fBoffline\fR - Show offline services + services with "offline" in text  
-.IP \(bu
-\fBflapping\fR - Show flapping services
-.IP \(bu
-\fBonline http\fR - Show online HTTP services
-.IP \(bu
-\fBoffline printer\fR - Show offline printer services
+\fBonline http\fR - Show online services matching "http"
 .IP \(bu
 \fBonline flapping\fR - Show services that are both online AND flapping
 .IP \(bu
-\fBonline offline\fR - Shows all services (both keywords present)
+\fBonline offline\fR - Shows nothing (contradictory status)
 .RE
 .PP
 Quick filter mode controls:

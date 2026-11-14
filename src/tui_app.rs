@@ -25,6 +25,7 @@ use crate::models::{
     format_service_addrs, local_interface_addrs,
 };
 use crate::popup::PopupState;
+use crate::quick_filter::{QuickFilter, Relevance};
 use crate::scroll::ScrollState;
 use crate::terminal::{TuiTerminal, colors_disabled, with_monochrome_selection};
 
@@ -195,6 +196,9 @@ struct AppState {
     services_scroll: ScrollState,
     details_scroll: ScrollState,
     cached_filtered_services: Vec<usize>,
+    /// Quick-filter relevance per index into `services`, rebuilt with
+    /// `cached_filtered_services`.
+    cached_relevance: Vec<Relevance>,
     cache_dirty: bool,
     cached_sorted: bool,
     popup_state: PopupState,
@@ -235,6 +239,7 @@ impl Clone for AppState {
             services_scroll: self.services_scroll.clone(),
             details_scroll: self.details_scroll.clone(),
             cached_filtered_services: self.cached_filtered_services.clone(),
+            cached_relevance: self.cached_relevance.clone(),
             cache_dirty: self.cache_dirty,
             cached_sorted: self.cached_sorted,
             popup_state: self.popup_state.clone(),
@@ -275,6 +280,7 @@ impl AppState {
             services_scroll: ScrollState::new(),
             details_scroll: ScrollState::new(),
             cached_filtered_services: Vec::new(),
+            cached_relevance: Vec::new(),
             cache_dirty: true,
             cached_sorted: false,
             popup_state: PopupState::new(),
@@ -319,111 +325,34 @@ impl AppState {
         service.is_local(&self.local_addrs)
     }
 
-    fn filter_service(&self, service: &ServiceEntry) -> bool {
-        // First filter by service type if one is selected
-        // (case-insensitive: daemon and old dumps may use mixed case)
+    /// Returns how well `service` matches the selected type and quick
+    /// filter, or `None` if it is filtered out.
+    fn service_relevance(
+        &self,
+        service: &ServiceEntry,
+        quick_filter: &mut QuickFilter,
+    ) -> Option<Relevance> {
+        // Case-insensitive: daemon and old dumps may use mixed case
         if let Some(selected_type_idx) = self.selected_type
             && let Some(selected_type) = self.service_types.get(selected_type_idx)
             && !service.service_type.eq_ignore_ascii_case(selected_type)
         {
-            return false;
+            return None;
         }
-
-        // Then filter by text query if present
-        if !self.filter_input.text().is_empty() {
-            let query = self.filter_input.text().to_lowercase();
-
-            // Check for special keywords: online, offline, and flapping
-            let query_terms: Vec<&str> = query.split_whitespace().collect();
-            let has_online_keyword = query_terms.contains(&"online");
-            let has_offline_keyword = query_terms.contains(&"offline");
-            let has_flapping_keyword = query_terms.contains(&"flapping");
-
-            let query_without_keyword = query_terms
-                .iter()
-                .copied()
-                .filter(|term| !matches!(*term, "online" | "offline" | "flapping"))
-                .collect::<Vec<_>>()
-                .join(" ");
-            // Search in all service fields case-insensitively
-            let search_text = [
-                service.fullname.clone(),
-                service.host.clone(),
-                service.service_type.clone(),
-                format_service_addrs(&service.addrs, " "),
-                service.port.to_string(),
-                service.txt.join(" "),
-                service.subtype.as_ref().unwrap_or(&String::new()).clone(),
-            ]
-            .join(" ")
-            .to_lowercase();
-
-            if has_online_keyword || has_offline_keyword || has_flapping_keyword {
-                // Special handling for online/offline/flapping keywords (hybrid mode)
-                let online_status_matches = has_online_keyword && service.online;
-                let offline_status_matches = has_offline_keyword && !service.online;
-                let flapping_status_matches = has_flapping_keyword && service.is_flapping;
-
-                let status_matches = if has_online_keyword && has_offline_keyword {
-                    !has_flapping_keyword || flapping_status_matches
-                } else if has_flapping_keyword && (has_online_keyword || has_offline_keyword) {
-                    // flapping with online/offline - both must match their respective conditions
-                    (!has_online_keyword || online_status_matches)
-                        && (!has_offline_keyword || offline_status_matches)
-                        && flapping_status_matches
-                } else {
-                    // Single keyword or flapping only - use OR logic
-                    online_status_matches || offline_status_matches || flapping_status_matches
-                };
-
-                // Check if the full query appears in text fields
-                let text_matches = search_text.contains(&query);
-
-                // For hybrid mode: match if status matches OR text contains the keywords
-                // But for combined queries, we need to be more precise
-                let keyword_count = has_online_keyword as u8
-                    + has_offline_keyword as u8
-                    + has_flapping_keyword as u8;
-                if keyword_count >= 2 {
-                    // Two or more keywords present - all share the same logic
-                    if query_without_keyword.is_empty() {
-                        // Only keywords - treat as match-all (status or text)
-                        status_matches || text_matches
-                    } else {
-                        // Has additional terms - enforce remaining terms
-                        (status_matches
-                            && search_text.contains(&query_without_keyword.to_lowercase()))
-                            || text_matches
-                    }
-                } else if query == "online" || query == "offline" || query == "flapping" {
-                    // Pure keyword - hybrid mode: match by status OR text containing keyword
-                    status_matches || text_matches
-                } else {
-                    // Mixed query (keyword + other terms) - match if (status matches AND text contains other terms) OR text contains full query
-                    if query_without_keyword.is_empty() {
-                        status_matches || text_matches
-                    } else {
-                        (status_matches
-                            && search_text.contains(&query_without_keyword.to_lowercase()))
-                            || text_matches
-                    }
-                }
-            } else {
-                // Standard text search for non-keyword queries
-                search_text.contains(&query)
-            }
-        } else {
-            true // Show all services if query is empty
-        }
+        quick_filter.relevance(service)
     }
 
     fn update_filtered_cache(&mut self) -> bool {
         if self.cache_dirty {
             self.cached_filtered_services.clear();
+            self.cached_relevance.clear();
+            let mut quick_filter = QuickFilter::parse(self.filter_input.text());
             for (idx, service) in self.services.iter().enumerate() {
-                if self.filter_service(service) {
+                let relevance = self.service_relevance(service, &mut quick_filter);
+                if relevance.is_some() {
                     self.cached_filtered_services.push(idx);
                 }
+                self.cached_relevance.push(relevance.unwrap_or_default());
             }
             self.cache_dirty = false;
             self.cached_sorted = false;
@@ -476,24 +405,22 @@ impl AppState {
 
     fn sort_filtered_services(&mut self) {
         let sort_field = self.sort_field;
+        let sort_direction = self.sort_direction;
         let services = &self.services;
+        let relevance = |idx: usize| self.cached_relevance.get(idx).copied().unwrap_or_default();
 
-        match self.sort_direction {
-            SortDirection::Ascending => {
-                self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
-                    let service_a = &services[a_idx];
-                    let service_b = &services[b_idx];
-                    compare_services_by_field(service_a, service_b, sort_field)
-                });
-            }
-            SortDirection::Descending => {
-                self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
-                    let service_a = &services[a_idx];
-                    let service_b = &services[b_idx];
-                    compare_services_by_field(service_b, service_a, sort_field)
-                });
-            }
-        }
+        self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
+            let by_field = || {
+                let (a, b) = match sort_direction {
+                    SortDirection::Ascending => (a_idx, b_idx),
+                    SortDirection::Descending => (b_idx, a_idx),
+                };
+                compare_services_by_field(&services[a], &services[b], sort_field)
+            };
+            relevance(a_idx)
+                .cmp_best_first(&relevance(b_idx))
+                .then_with(by_field)
+        });
     }
 
     // Helper methods for service type management
@@ -3307,6 +3234,14 @@ mod tests {
     use crate::models::micros_to_iso_timestamp;
     use crate::models::tests::{create_test_service, create_test_service_with_sessions, scoped_ip};
 
+    impl AppState {
+        /// Whether `service` passes the current type selection and quick filter.
+        fn filter_service(&self, service: &ServiceEntry) -> bool {
+            let mut quick_filter = QuickFilter::parse(self.filter_input.text());
+            self.service_relevance(service, &mut quick_filter).is_some()
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn suspend_targets_foreground_process_group_not_just_self() {
@@ -4623,7 +4558,7 @@ mod tests {
                 },
                 services: vec![
                     create_test_service("test-service", "_http._tcp.local.", 80),
-                    create_test_service("other-service", "_http._tcp.local.", 80),
+                    create_test_service("zzz", "_ipp._udp.local.", 80),
                 ],
                 expected_matches: vec![0], // Only service with "test" should match
             },
@@ -4636,7 +4571,7 @@ mod tests {
                 },
                 services: vec![
                     create_test_service("test-service", "_http._tcp.local.", 80),
-                    create_test_service("other-service", "_http._tcp.local.", 80),
+                    create_test_service("zzz", "_ipp._udp.local.", 80),
                 ],
                 expected_matches: vec![0], // Should match despite case difference
             },
@@ -4649,7 +4584,7 @@ mod tests {
                 },
                 services: vec![
                     create_test_service("service-8080", "_http._tcp.local.", 8080),
-                    create_test_service("service-9090", "_http._tcp.local.", 9090),
+                    create_test_service("service-9999", "_http._tcp.local.", 9999),
                 ],
                 expected_matches: vec![0], // Only 8080 should match
             },
@@ -6609,7 +6544,7 @@ mod tests {
         state.filter_input.set_text("test");
 
         let matching_service = create_test_service("test", "_http._tcp.local.", 80);
-        let non_matching_service = create_test_service("other", "_http._tcp.local.", 80);
+        let non_matching_service = create_test_service("zzz", "_ipp._udp.local.", 80);
 
         assert!(state.filter_service(&matching_service));
         assert!(!state.filter_service(&non_matching_service));
@@ -6691,47 +6626,195 @@ mod tests {
         assert!(state.filter_service(&offline_service));
     }
 
-    #[test]
-    fn test_filter_service_both_keywords_with_additional_terms() {
-        let mut state = create_test_app_state();
-        state.filter_input.set_text("online offline printer");
-
-        // Online HTTP service with "printer" in name should match
-        let online_http_printer = create_test_service("printer-service", "_http._tcp.local.", 80);
-        assert!(state.filter_service(&online_http_printer));
-
-        // Online SSH service without "printer" should NOT match (status doesn't matter, but missing additional term)
-        let online_ssh_service = create_test_service("ssh-service", "_ssh._tcp.local.", 22);
-        assert!(!state.filter_service(&online_ssh_service));
-
-        // Offline HTTP service with "printer" in name should match (text contains full query)
-        let mut offline_http_printer =
-            create_test_service("printer-service", "_http._tcp.local.", 80);
-        offline_http_printer.go_offline_at(1000);
-        assert!(state.filter_service(&offline_http_printer));
-
-        // Service with "online offline printer" in TXT record should match (text contains full query)
-        let mut service_with_txt = create_test_service("test", "_http._tcp.local.", 80);
-        service_with_txt.txt = vec!["online offline printer mode".to_string()];
-        assert!(state.filter_service(&service_with_txt));
+    /// Applies `query` as the quick filter and returns the hosts of the
+    /// matching services in display order.
+    fn quick_filter_hosts(state: &mut AppState, query: &str) -> Vec<String> {
+        state.filter_input.set_text(query);
+        state.mark_cache_dirty();
+        let filtered = state.get_filtered_services().to_vec();
+        filtered
+            .into_iter()
+            .map(|idx| state.services[idx].host.clone())
+            .collect()
     }
 
     #[test]
-    fn test_filter_service_non_keyword_queries_unchanged() {
+    fn test_quick_filter_subsequence_query_matches() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("printer", "_http._tcp.local.", 80),
+            create_test_service("server", "_http._tcp.local.", 81),
+        ]);
+
+        assert_eq!(quick_filter_hosts(&mut state, "prn"), ["printer.local."]);
+    }
+
+    #[test]
+    fn test_quick_filter_typo_allowed_from_four_characters() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "kiosk",
+            "_http._tcp.local.",
+            80,
+        )]);
+
+        // `q` occurs nowhere in the service, so each query needs one typo
+        assert_eq!(quick_filter_hosts(&mut state, "kiqs"), ["kiosk.local."]);
+        assert!(quick_filter_hosts(&mut state, "kqs").is_empty());
+    }
+
+    #[test]
+    fn test_quick_filter_typo_allowance_applies_per_term() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "kiosk",
+            "_http._tcp.local.",
+            80,
+        )]);
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiqs htqp"),
+            ["kiosk.local."]
+        );
+        assert!(quick_filter_hosts(&mut state, "kiqs hqp").is_empty());
+    }
+
+    #[test]
+    fn test_quick_filter_requires_all_terms_in_any_order() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("printer", "_ipp._tcp.local.", 631),
+            create_test_service("zzz", "_ssh._udp.local.", 22),
+        ]);
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "printer ipp"),
+            ["printer.local."]
+        );
+        assert_eq!(
+            quick_filter_hosts(&mut state, "ipp printer"),
+            ["printer.local."]
+        );
+        assert!(quick_filter_hosts(&mut state, "printer ssh").is_empty());
+    }
+
+    #[test]
+    fn test_quick_filter_contiguous_matches_rank_before_fuzzy_matches() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
+            create_test_service("kiosk", "_http._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Descending;
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kiosk.local.", "kxixoxsxk.local."]
+        );
+    }
+
+    #[test]
+    fn test_quick_filter_fuzzy_matches_ordered_by_relevance() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
+            create_test_service("kiosxk", "_http._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Descending;
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kiosxk.local.", "kxixoxsxk.local."]
+        );
+    }
+
+    #[test]
+    fn test_quick_filter_selected_sort_breaks_relevance_ties() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosk-a", "_http._tcp.local.", 80),
+            create_test_service("kiosk-b", "_http._tcp.local.", 80),
+        ]);
+        state.sort_field = SortField::Host;
+
+        state.sort_direction = SortDirection::Descending;
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kiosk-b.local.", "kiosk-a.local."]
+        );
+
+        state.sort_direction = SortDirection::Ascending;
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kiosk-a.local.", "kiosk-b.local."]
+        );
+    }
+
+    #[test]
+    fn test_quick_filter_cleared_query_keeps_selected_sort() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosk", "_http._tcp.local.", 80),
+            create_test_service("kxixoxsxk", "_http._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+        state.sort_direction = SortDirection::Descending;
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kiosk.local.", "kxixoxsxk.local."]
+        );
+        assert_eq!(
+            quick_filter_hosts(&mut state, ""),
+            ["kxixoxsxk.local.", "kiosk.local."]
+        );
+    }
+
+    #[test]
+    fn test_quick_filter_respects_selected_service_type() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosk", "_http._tcp.local.", 80),
+            create_test_service("kiosk2", "_ipp._tcp.local.", 631),
+        ]);
+        state.selected_type = state
+            .service_types
+            .iter()
+            .position(|service_type| service_type == "_ipp._tcp.local.");
+
+        assert_eq!(quick_filter_hosts(&mut state, "kiosk"), ["kiosk2.local."]);
+    }
+
+    #[test]
+    fn test_filter_service_status_keyword_ignores_literal_text() {
         let mut state = create_test_app_state();
+        state.filter_input.set_text("online");
 
-        // Test that regular queries still work as before
-        state.filter_input.set_text("http");
-        let http_service = create_test_service("test", "_http._tcp.local.", 80);
-        let ssh_service = create_test_service("test", "_ssh._tcp.local.", 22);
+        let mut offline_service = create_test_service("online", "_http._tcp.local.", 80);
+        offline_service.txt = vec!["online".to_string()];
+        offline_service.go_offline_at(1000);
 
-        assert!(state.filter_service(&http_service));
-        assert!(!state.filter_service(&ssh_service));
+        assert!(!state.filter_service(&offline_service));
+    }
 
-        // Test queries that don't contain keywords
-        state.filter_input.set_text("printer");
-        let printer_service = create_test_service("test", "_printer._http._tcp.local.", 80);
-        assert!(state.filter_service(&printer_service));
+    #[test]
+    fn test_filter_service_contradictory_status_keywords_match_nothing() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("online offline printer");
+
+        let online_printer = create_test_service("printer", "_http._tcp.local.", 80);
+        let mut offline_printer = create_test_service("printer", "_http._tcp.local.", 80);
+        offline_printer.go_offline_at(1000);
+
+        assert!(!state.filter_service(&online_printer));
+        assert!(!state.filter_service(&offline_printer));
+    }
+
+    #[test]
+    fn test_filter_service_status_keyword_with_text_requires_both() {
+        let mut state = create_test_app_state();
+        state.filter_input.set_text("flapping ipp");
+
+        let flapping_ipp = create_flapping_service("test", "_ipp._tcp.local.", 631, true);
+        let flapping_ssh = create_flapping_service("zzz", "_ssh._udp.local.", 22, true);
+        let stable_ipp = create_test_service("test", "_ipp._tcp.local.", 631);
+
+        assert!(state.filter_service(&flapping_ipp));
+        assert!(!state.filter_service(&flapping_ssh));
+        assert!(!state.filter_service(&stable_ipp));
     }
 
     #[test]
@@ -6762,25 +6845,6 @@ mod tests {
         // Test mixed case
         state.filter_input.set_text("FlApPiNg");
         assert!(state.filter_service(&flapping_service));
-    }
-
-    #[test]
-    fn test_filter_service_flapping_with_other_terms() {
-        let mut state = create_test_app_state();
-        state.filter_input.set_text("flapping http");
-
-        // Create a flapping HTTP service - should match (status matches AND text contains "http")
-        let flapping_http_service = create_flapping_service("test", "_http._tcp.local.", 80, true);
-        assert!(state.filter_service(&flapping_http_service));
-
-        // Create a flapping SSH service - should NOT match (status matches but text doesn't contain "http")
-        let flapping_ssh_service = create_flapping_service("test", "_ssh._tcp.local.", 22, true);
-        assert!(!state.filter_service(&flapping_ssh_service));
-
-        // Service with "flapping http" in TXT record should match (text contains full query)
-        let mut txt_service = create_test_service("test", "_http._tcp.local.", 80);
-        txt_service.txt = vec!["flapping http mode".to_string()];
-        assert!(state.filter_service(&txt_service));
     }
 
     #[test]
@@ -6836,52 +6900,6 @@ mod tests {
         );
         offline_stable_service.update_flapping_status();
         assert!(!state.filter_service(&offline_stable_service));
-    }
-
-    #[test]
-    fn test_filter_service_three_keywords_online_offline_flapping() {
-        let mut state = create_test_app_state();
-        state.filter_input.set_text("online offline flapping");
-
-        // Create an online+flapping service - should match (has online AND flapping)
-        let online_flapping_service =
-            create_flapping_service("test", "_http._tcp.local.", 80, true);
-        assert!(state.filter_service(&online_flapping_service));
-
-        // Create an offline+flapping service - should match (has offline AND flapping)
-        let offline_flapping_service =
-            create_flapping_service("test", "_http._tcp.local.", 80, false);
-        assert!(state.filter_service(&offline_flapping_service));
-
-        // Create an online stable service - should NOT match
-        let online_stable_service = create_test_service("test", "_http._tcp.local.", 80);
-        assert!(!state.filter_service(&online_stable_service));
-
-        // Create an offline stable service (non-flapping sessions) - should NOT match
-        let stable_sessions = vec![ServiceSession {
-            start_time: 0,
-            end_time: None,
-        }];
-        let mut offline_stable_service = create_test_service_with_sessions(
-            "test",
-            "_http._tcp.local.",
-            80,
-            stable_sessions,
-            false,
-            100_000_000,
-            0,
-            Some(100_000_000),
-            Some(300_000_001),
-        );
-        offline_stable_service.update_flapping_status();
-        assert!(!state.filter_service(&offline_stable_service));
-
-        // Test three keywords with additional text term
-        state.filter_input.set_text("online offline flapping http");
-
-        assert!(state.filter_service(&online_flapping_service));
-        assert!(state.filter_service(&offline_flapping_service));
-        assert!(!state.filter_service(&online_stable_service));
     }
 
     #[test]
