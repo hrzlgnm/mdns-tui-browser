@@ -5,6 +5,8 @@
 //! Parsing and typo-tolerant matching of the `/` quick-filter query.
 
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use frizbee::{CaseMatching, Config, Matcher, Pattern, PatternConfig, SortStrategy};
 
@@ -103,28 +105,84 @@ impl StatusConstraints {
     }
 }
 
+/// Lowercased searchable fields of services, keyed by a hash of the
+/// searchable content so a changed service gets fresh fields whichever code
+/// path changed it.
+#[derive(Clone, Debug, Default)]
+pub struct SearchFieldCache {
+    by_fingerprint: HashMap<u64, Vec<String>>,
+}
+
+impl SearchFieldCache {
+    /// Ensures `services` have cached fields and returns their keys.
+    fn refresh(&mut self, services: &[&ServiceEntry]) -> Vec<u64> {
+        services
+            .iter()
+            .map(|service| {
+                let key = fingerprint(service);
+                self.by_fingerprint
+                    .entry(key)
+                    .or_insert_with(|| searchable_fields(service));
+                key
+            })
+            .collect()
+    }
+
+    fn fields(&self, key: u64) -> &[String] {
+        self.by_fingerprint.get(&key).map_or(&[], Vec::as_slice)
+    }
+
+    /// Drops fields no service in `services` uses, once the cache holds
+    /// more than twice as many entries as there are services.
+    pub fn prune(&mut self, services: &[ServiceEntry]) {
+        if self.by_fingerprint.len() <= 2 * services.len() {
+            return;
+        }
+        let live: HashSet<u64> = services.iter().map(fingerprint).collect();
+        self.by_fingerprint.retain(|key, _| live.contains(key));
+    }
+
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.by_fingerprint.len()
+    }
+}
+
+/// Hash of everything [`searchable_fields`] reads.
+fn fingerprint(service: &ServiceEntry) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    service.fullname.hash(&mut hasher);
+    service.host.hash(&mut hasher);
+    service.service_type.hash(&mut hasher);
+    service.subtype.hash(&mut hasher);
+    service.addrs.hash(&mut hasher);
+    service.port.hash(&mut hasher);
+    service.txt.hash(&mut hasher);
+    hasher.finish()
+}
+
 /// Searchable fields of candidate services, each tagged with its owner.
-struct Haystack {
-    fields: Vec<String>,
+struct Haystack<'a> {
+    fields: Vec<&'a str>,
     /// Owner index of each field in `fields`.
     owners: Vec<usize>,
     owner_count: usize,
 }
 
-impl Haystack {
-    fn new(services: &[&ServiceEntry]) -> Self {
+impl<'a> Haystack<'a> {
+    fn new(field_lists: &[&'a [String]]) -> Self {
         let mut fields = Vec::new();
         let mut owners = Vec::new();
-        for (owner, service) in services.iter().enumerate() {
-            for field in searchable_fields(service) {
-                fields.push(field);
+        for (owner, list) in field_lists.iter().enumerate() {
+            for field in list.iter() {
+                fields.push(field.as_str());
                 owners.push(owner);
             }
         }
         Self {
             fields,
             owners,
-            owner_count: services.len(),
+            owner_count: field_lists.len(),
         }
     }
 
@@ -208,7 +266,7 @@ impl Term {
     }
 
     /// Fields the term matches without a typo, as `(field, relevance)`.
-    fn typo_free_matches(&mut self, fields: &[String]) -> Vec<(usize, Relevance)> {
+    fn typo_free_matches(&mut self, fields: &[&str]) -> Vec<(usize, Relevance)> {
         self.exact
             .match_list(fields)
             .into_iter()
@@ -237,20 +295,17 @@ impl Term {
     /// spread over the whole field, so one typo would turn `http` into any
     /// `t..t..p`. Matching windows one byte longer than the term keeps typo
     /// matches close together and scores them all the same way.
-    fn typo_matches(&mut self, fields: &[String], candidates: &[usize]) -> Vec<(usize, Relevance)> {
+    fn typo_matches(&mut self, fields: &[&str], candidates: &[usize]) -> Vec<(usize, Relevance)> {
         let Some(typo) = self.typo.as_mut() else {
             return Vec::new();
         };
-        let candidate_fields: Vec<&str> = candidates
-            .iter()
-            .map(|&field| fields[field].as_str())
-            .collect();
+        let candidate_fields: Vec<&str> = candidates.iter().map(|&field| fields[field]).collect();
         let max_span = self.text.len() + 1;
         let mut windows = Vec::new();
         let mut window_fields = Vec::new();
         for found in typo.match_list(&candidate_fields) {
             let field = candidates[found.index as usize];
-            for window in windows_of(&fields[field], &self.text, max_span) {
+            for window in windows_of(fields[field], &self.text, max_span) {
                 windows.push(window);
                 window_fields.push(field);
             }
@@ -332,6 +387,7 @@ impl QuickFilter {
     pub fn rank<'a>(
         &mut self,
         candidates: impl IntoIterator<Item = (usize, &'a ServiceEntry)>,
+        cache: &mut SearchFieldCache,
     ) -> Vec<(usize, Relevance)> {
         let admitted: Vec<(usize, &ServiceEntry)> = candidates
             .into_iter()
@@ -345,7 +401,9 @@ impl QuickFilter {
         }
 
         let services: Vec<&ServiceEntry> = admitted.iter().map(|&(_, service)| service).collect();
-        let mut haystack = Haystack::new(&services);
+        let keys = cache.refresh(&services);
+        let field_lists: Vec<&[String]> = keys.iter().map(|&key| cache.fields(key)).collect();
+        let mut haystack = Haystack::new(&field_lists);
         let mut relevance = vec![Some(Relevance::default()); admitted.len()];
         for term in &mut self.terms {
             let best = term.best_per_owner(&haystack);

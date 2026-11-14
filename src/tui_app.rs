@@ -25,7 +25,7 @@ use crate::models::{
     format_service_addrs, local_interface_addrs,
 };
 use crate::popup::PopupState;
-use crate::quick_filter::{QuickFilter, Relevance};
+use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
 use crate::scroll::ScrollState;
 use crate::terminal::{TuiTerminal, colors_disabled, with_monochrome_selection};
 
@@ -202,6 +202,7 @@ struct AppState {
     cached_matches: Vec<(usize, Relevance)>,
     /// Parsed `filter_input`, re-parsed only when its text changes.
     quick_filter: QuickFilter,
+    search_fields: SearchFieldCache,
     cache_dirty: bool,
     cached_sorted: bool,
     popup_state: PopupState,
@@ -244,6 +245,7 @@ impl Clone for AppState {
             cached_filtered_services: self.cached_filtered_services.clone(),
             cached_matches: self.cached_matches.clone(),
             quick_filter: self.quick_filter.clone(),
+            search_fields: self.search_fields.clone(),
             cache_dirty: self.cache_dirty,
             cached_sorted: self.cached_sorted,
             popup_state: self.popup_state.clone(),
@@ -286,6 +288,7 @@ impl AppState {
             cached_filtered_services: Vec::new(),
             cached_matches: Vec::new(),
             quick_filter: QuickFilter::parse(""),
+            search_fields: SearchFieldCache::default(),
             cache_dirty: true,
             cached_sorted: false,
             popup_state: PopupState::new(),
@@ -345,7 +348,8 @@ impl AppState {
                 .iter()
                 .enumerate()
                 .filter(|(_, service)| has_service_type(service, selected_type));
-            self.cached_matches = self.quick_filter.rank(candidates);
+            self.cached_matches = self.quick_filter.rank(candidates, &mut self.search_fields);
+            self.search_fields.prune(&self.services);
             self.cache_dirty = false;
             self.cached_sorted = false;
         }
@@ -6918,6 +6922,34 @@ mod tests {
         assert_eq!(state.get_filtered_services(), &[1, 0]);
         state.update_sort_field(SortField::Host);
         assert_eq!(state.get_filtered_services(), &[0, 1]);
+    }
+
+    #[test]
+    fn test_quick_filter_sees_changed_service_fields() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "kiosk",
+            "_ipp._tcp.local.",
+            631,
+        )]);
+        assert!(quick_filter_hosts(&mut state, "lobby").is_empty());
+
+        state.services[0].txt = vec!["room=lobby".to_string()];
+        assert_eq!(quick_filter_hosts(&mut state, "lobby"), ["kiosk.local."]);
+    }
+
+    #[test]
+    fn test_quick_filter_field_cache_stays_bounded() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "kiosk",
+            "_ipp._tcp.local.",
+            631,
+        )]);
+        for revision in 0..50 {
+            state.services[0].txt = vec![format!("rev={revision}")];
+            let _ = quick_filter_hosts(&mut state, "kiosk");
+        }
+
+        assert!(state.search_fields.len() <= 2 * state.services.len() + 1);
     }
 
     #[test]
