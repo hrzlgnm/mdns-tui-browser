@@ -4,11 +4,12 @@
 
 //! Parsing and typo-tolerant matching of the `/` quick-filter query.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 use frizbee::{CaseMatching, Config, Matcher, Pattern, PatternConfig, SortStrategy};
+use mdns_sd::ScopedIp;
 
 use crate::models::{ServiceEntry, formatted_service_addrs};
 
@@ -105,60 +106,127 @@ impl StatusConstraints {
     }
 }
 
-/// Lowercased searchable fields of services, keyed by a hash of the
-/// searchable content so a changed service gets fresh fields whichever code
-/// path changed it.
+/// Everything the quick filter searches in a service.
+#[derive(Clone, Debug)]
+struct SearchSource {
+    fullname: String,
+    host: String,
+    service_type: String,
+    subtype: Option<String>,
+    addrs: Vec<ScopedIp>,
+    port: u16,
+    txt: Vec<String>,
+}
+
+impl SearchSource {
+    fn of(service: &ServiceEntry) -> Self {
+        Self {
+            fullname: service.fullname.clone(),
+            host: service.host.clone(),
+            service_type: service.service_type.clone(),
+            subtype: service.subtype.clone(),
+            addrs: service.addrs.clone(),
+            port: service.port,
+            txt: service.txt.clone(),
+        }
+    }
+
+    /// Whether `service` still has this searchable content.
+    fn matches(&self, service: &ServiceEntry) -> bool {
+        // Exhaustive so a new searchable field cannot be left out
+        let Self {
+            fullname,
+            host,
+            service_type,
+            subtype,
+            addrs,
+            port,
+            txt,
+        } = self;
+        *fullname == service.fullname
+            && *host == service.host
+            && *service_type == service.service_type
+            && *subtype == service.subtype
+            && *addrs == service.addrs
+            && *port == service.port
+            && *txt == service.txt
+    }
+
+    /// Every searchable field, lowercased.
+    fn fields(&self) -> Vec<String> {
+        let mut fields = vec![
+            self.fullname.to_lowercase(),
+            self.host.to_lowercase(),
+            self.service_type.to_lowercase(),
+            self.port.to_string(),
+        ];
+        fields.extend(self.subtype.iter().map(|subtype| subtype.to_lowercase()));
+        fields.extend(formatted_service_addrs(&self.addrs).map(|addr| addr.to_lowercase()));
+        fields.extend(self.txt.iter().map(|entry| entry.to_lowercase()));
+        fields
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CachedFields {
+    source: SearchSource,
+    fields: Vec<String>,
+}
+
+/// Lowercased searchable fields of services by fullname, reused while a
+/// service's searchable content is unchanged.
 #[derive(Clone, Debug, Default)]
 pub struct SearchFieldCache {
-    by_fingerprint: HashMap<u64, Vec<String>>,
+    by_fullname: HashMap<String, CachedFields>,
 }
 
 impl SearchFieldCache {
-    /// Ensures `services` have cached fields and returns their keys.
-    fn refresh(&mut self, services: &[&ServiceEntry]) -> Vec<u64> {
+    /// Searchable fields of each of `services`, refreshing stale entries.
+    fn fields_of<'c>(&'c mut self, services: &[&ServiceEntry]) -> Vec<Cow<'c, [String]>> {
+        for service in services {
+            let fresh = self
+                .by_fullname
+                .get(&service.fullname)
+                .is_some_and(|cached| cached.source.matches(service));
+            if !fresh {
+                let source = SearchSource::of(service);
+                let fields = source.fields();
+                self.by_fullname
+                    .insert(service.fullname.clone(), CachedFields { source, fields });
+            }
+        }
+        let cache = &*self;
         services
             .iter()
-            .map(|service| {
-                let key = fingerprint(service);
-                self.by_fingerprint
-                    .entry(key)
-                    .or_insert_with(|| searchable_fields(service));
-                key
+            .map(|service| match cache.by_fullname.get(&service.fullname) {
+                Some(cached) if cached.source.matches(service) => {
+                    Cow::Borrowed(cached.fields.as_slice())
+                }
+                // Another service with the same fullname replaced the entry
+                _ => Cow::Owned(SearchSource::of(service).fields()),
             })
             .collect()
     }
 
-    fn fields(&self, key: u64) -> &[String] {
-        self.by_fingerprint.get(&key).map_or(&[], Vec::as_slice)
-    }
-
-    /// Drops fields no service in `services` uses, once the cache holds
-    /// more than twice as many entries as there are services.
+    /// Drops entries of services that are gone, once the cache holds more
+    /// entries than there are services.
     pub fn prune(&mut self, services: &[ServiceEntry]) {
-        if self.by_fingerprint.len() <= 2 * services.len() {
+        if self.by_fullname.len() <= services.len() {
             return;
         }
-        let live: HashSet<u64> = services.iter().map(fingerprint).collect();
-        self.by_fingerprint.retain(|key, _| live.contains(key));
+        let live: HashSet<&str> = services
+            .iter()
+            .map(|service| service.fullname.as_str())
+            .collect();
+        self.by_fullname
+            .retain(|fullname, _| live.contains(fullname.as_str()));
     }
 
+    /// Number of cached services.
     #[cfg(test)]
     pub fn len(&self) -> usize {
-        self.by_fingerprint.len()
+        self.by_fullname.len()
     }
-}
-
-/// Hash of everything [`searchable_fields`] reads.
-fn fingerprint(service: &ServiceEntry) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    service.fullname.hash(&mut hasher);
-    service.host.hash(&mut hasher);
-    service.service_type.hash(&mut hasher);
-    service.subtype.hash(&mut hasher);
-    service.addrs.hash(&mut hasher);
-    service.port.hash(&mut hasher);
-    service.txt.hash(&mut hasher);
-    hasher.finish()
 }
 
 /// Searchable fields of candidate services, each tagged with its owner.
@@ -170,7 +238,7 @@ struct Haystack<'a> {
 }
 
 impl<'a> Haystack<'a> {
-    fn new(field_lists: &[&'a [String]]) -> Self {
+    fn new(field_lists: &'a [Cow<'a, [String]>]) -> Self {
         let mut fields = Vec::new();
         let mut owners = Vec::new();
         for (owner, list) in field_lists.iter().enumerate() {
@@ -407,8 +475,7 @@ impl QuickFilter {
         }
 
         let services: Vec<&ServiceEntry> = admitted.iter().map(|&(_, service)| service).collect();
-        let keys = cache.refresh(&services);
-        let field_lists: Vec<&[String]> = keys.iter().map(|&key| cache.fields(key)).collect();
+        let field_lists = cache.fields_of(&services);
         let mut haystack = Haystack::new(&field_lists);
         let mut relevance = vec![Some(Relevance::default()); admitted.len()];
         for term in &mut self.terms {
@@ -425,18 +492,4 @@ impl QuickFilter {
             .filter_map(|((id, _), relevance)| Some((id, relevance?)))
             .collect()
     }
-}
-
-/// Every searchable service field, lowercased.
-fn searchable_fields(service: &ServiceEntry) -> Vec<String> {
-    let mut fields = vec![
-        service.fullname.to_lowercase(),
-        service.host.to_lowercase(),
-        service.service_type.to_lowercase(),
-        service.port.to_string(),
-    ];
-    fields.extend(service.subtype.iter().map(|subtype| subtype.to_lowercase()));
-    fields.extend(formatted_service_addrs(&service.addrs).map(|addr| addr.to_lowercase()));
-    fields.extend(service.txt.iter().map(|entry| entry.to_lowercase()));
-    fields
 }

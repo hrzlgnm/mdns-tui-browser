@@ -245,7 +245,8 @@ impl Clone for AppState {
             cached_filtered_services: self.cached_filtered_services.clone(),
             cached_matches: self.cached_matches.clone(),
             quick_filter: self.quick_filter.clone(),
-            search_fields: self.search_fields.clone(),
+            // Rebuilt on demand; copying it would only slow down dumps
+            search_fields: SearchFieldCache::default(),
             cache_dirty: self.cache_dirty,
             cached_sorted: self.cached_sorted,
             popup_state: self.popup_state.clone(),
@@ -6928,30 +6929,69 @@ mod tests {
 
     #[test]
     fn test_quick_filter_sees_changed_service_fields() {
-        let mut state = setup_test_state_with_services(vec![create_test_service(
-            "kiosk",
-            "_ipp._tcp.local.",
-            631,
-        )]);
-        assert!(quick_filter_hosts(&mut state, "lobby").is_empty());
+        type SetField = fn(&mut ServiceEntry);
+        let cases: [(&str, &str, SetField); 7] = [
+            ("fullname", "lobby", |s| {
+                s.fullname = "Lobby._ipp._tcp.local.".to_string()
+            }),
+            ("host", "lobby", |s| s.host = "lobby.local.".to_string()),
+            ("service type", "lobby", |s| {
+                s.service_type = "_lobby._tcp.local.".to_string()
+            }),
+            ("subtype", "lobby", |s| {
+                s.subtype = Some("_lobby".to_string())
+            }),
+            ("txt", "lobby", |s| s.txt = vec!["room=lobby".to_string()]),
+            ("address", "10.20.30.40", |s| {
+                s.addrs = vec![scoped_ip("10.20.30.40")]
+            }),
+            ("port", "8443", |s| s.port = 8443),
+        ];
 
-        state.services[0].txt = vec!["room=lobby".to_string()];
-        assert_eq!(quick_filter_hosts(&mut state, "lobby"), ["kiosk.local."]);
+        for (field, query, set_field) in cases {
+            let mut state = setup_test_state_with_services(vec![create_test_service(
+                "scanner",
+                "_ipp._tcp.local.",
+                631,
+            )]);
+            assert!(quick_filter_hosts(&mut state, query).is_empty());
+
+            set_field(&mut state.services[0]);
+            let host = state.services[0].host.clone();
+            assert_eq!(
+                quick_filter_hosts(&mut state, query),
+                [host],
+                "changed {field} is not seen"
+            );
+        }
     }
 
     #[test]
-    fn test_quick_filter_field_cache_stays_bounded() {
-        let mut state = setup_test_state_with_services(vec![create_test_service(
-            "kiosk",
-            "_ipp._tcp.local.",
-            631,
-        )]);
-        for revision in 0..50 {
-            state.services[0].txt = vec![format!("rev={revision}")];
-            let _ = quick_filter_hosts(&mut state, "kiosk");
-        }
+    fn test_quick_filter_field_cache_drops_removed_services() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosk-a", "_ipp._tcp.local.", 631),
+            create_test_service("kiosk-b", "_ipp._tcp.local.", 632),
+            create_test_service("kiosk-c", "_ipp._tcp.local.", 633),
+        ]);
+        let _ = quick_filter_hosts(&mut state, "kiosk");
+        assert_eq!(state.search_fields.len(), 3);
 
-        assert!(state.search_fields.len() <= 2 * state.services.len() + 1);
+        state.services.truncate(1);
+        let _ = quick_filter_hosts(&mut state, "kiosk");
+        assert_eq!(state.search_fields.len(), 1);
+    }
+
+    #[test]
+    fn test_quick_filter_services_sharing_a_fullname_keep_their_fields() {
+        let mut twin = create_test_service("kiosk", "_ipp._tcp.local.", 631);
+        twin.host = "lobby.local.".to_string();
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosk", "_ipp._tcp.local.", 631),
+            twin,
+        ]);
+        state.services[0].fullname = state.services[1].fullname.clone();
+
+        assert_eq!(quick_filter_hosts(&mut state, "lobby"), ["lobby.local."]);
     }
 
     fn services_title_text(state: &AppState) -> String {
