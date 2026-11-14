@@ -10,8 +10,7 @@ use frizbee::{CaseMatching, Config, Matcher, Pattern, PatternConfig, SortStrateg
 
 use crate::models::{ServiceEntry, formatted_service_addrs};
 
-/// Shortest text term that may contain a typo; shorter terms would match
-/// too broadly with one.
+/// Shortest term that may contain a typo.
 const MIN_TYPO_TOLERANT_TERM_CHARS: usize = 4;
 
 /// How closely a term matched, best first.
@@ -143,6 +142,20 @@ impl Haystack {
     }
 }
 
+/// Whether `term` may match with one typo. Short terms would match too
+/// broadly, and in a port or address one digit off names a different
+/// service, so numeric and IP-like terms must match without a typo.
+fn tolerates_typo(term: &str) -> bool {
+    let is_numeric = term
+        .chars()
+        .all(|c| c.is_ascii_digit() || matches!(c, '.' | ':'));
+    let is_ipv6_like = term.contains(':')
+        && term
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || matches!(c, '.' | ':'));
+    term.chars().count() >= MIN_TYPO_TOLERANT_TERM_CHARS && !is_numeric && !is_ipv6_like
+}
+
 /// One text term of a quick-filter query and its compiled matchers.
 #[derive(Clone)]
 struct Term {
@@ -167,7 +180,7 @@ impl Term {
         Self {
             text: text.to_string(),
             exact: matcher(0),
-            typo: (text.chars().count() >= MIN_TYPO_TOLERANT_TERM_CHARS).then(|| matcher(1)),
+            typo: tolerates_typo(text).then(|| matcher(1)),
         }
     }
 

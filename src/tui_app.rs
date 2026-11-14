@@ -6882,6 +6882,21 @@ mod tests {
     }
 
     #[test]
+    fn test_quick_filter_numeric_terms_allow_no_typo() {
+        let mut service = create_test_service("kiosk", "_http._tcp.local.", 443);
+        service.addrs = vec![scoped_ip("192.168.1.11"), scoped_ip("fe80::1c2b")];
+        let mut state = setup_test_state_with_services(vec![service]);
+
+        assert!(quick_filter_hosts(&mut state, "8443").is_empty());
+        assert!(quick_filter_hosts(&mut state, "192.168.1.10").is_empty());
+        assert!(quick_filter_hosts(&mut state, "fe80::1c2c").is_empty());
+        assert_eq!(
+            quick_filter_hosts(&mut state, "192.168.1.11"),
+            ["kiosk.local."]
+        );
+    }
+
+    #[test]
     fn test_quick_filter_sort_change_keeps_relevance_order() {
         let mut state = setup_test_state_with_services(vec![
             create_test_service("kxixoxsxk", "_http._tcp.local.", 80),
