@@ -205,7 +205,7 @@ The application can export the complete current state to a JSON file for debuggi
 Press <kbd>Ctrl</kbd>+<kbd>J</kbd> in the TUI to trigger a state dump. The file will be saved with an ISO timestamp filename:
 
 ```text
-20260207T120102.089898-mdns-tui-browser-1.11.1.json
+20260207T120102.089898-mdns-tui-browser-1.41.2.json
 ```
 
 To load a previously exported state file for inspection (view-only mode, no browsing):
@@ -226,7 +226,7 @@ The exported JSON contains comprehensive information about the current applicati
   "metadata": {
     "dumpTimestamp": "2026-02-07T00:40:10.950885Z",
     "applicationName": "mdns-tui-browser",
-    "version": "1.11.1"
+    "version": "1.41.2"
   },
   "services": [
     {
