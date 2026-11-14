@@ -7784,7 +7784,6 @@ mod tests {
             filename.contains(env!("CARGO_PKG_VERSION")),
             "Filename should contain version"
         );
-
         assert!(
             filename.ends_with(".json"),
             "Filename should end with suffix"
