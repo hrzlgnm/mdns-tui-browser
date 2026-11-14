@@ -328,7 +328,7 @@ subtype, each address, port, and each TXT record) with typo-tolerant fuzzy match
 - **Terms**: whitespace-separated terms must all match, in any order; each term must match within a single field
 - **Fuzzy**: a term's characters must appear in order but need not be adjacent (`prn` finds `printer`)
 - **Typos**: terms of four or more characters tolerate one typo if the rest of the term matches closely together (`prinzer` finds `printer`); shorter terms tolerate none
-- **Ranking**: services where every term appears contiguously come first, in the selected sort order; fuzzy-only matches follow, closest first, with the selected sort breaking ties
+- **Ranking**: services where every term appears contiguously come first, in the selected sort order; then fuzzy matches without typos, then matches needing a typo, each closest first with the selected sort breaking ties
 
 #### Status Keywords
 The reserved words `online`, `offline`, and `flapping` filter by service status

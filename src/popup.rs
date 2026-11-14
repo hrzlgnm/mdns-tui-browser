@@ -554,7 +554,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from(" "),
         Line::from("   Terms fuzzy-match any field, case-insensitively, in any order"),
         Line::from("   Terms of 4+ characters tolerate one typo"),
-        Line::from("   Exact matches are listed first, then closest fuzzy matches"),
+        Line::from("   Exact matches first, then fuzzy matches, then typo matches"),
         Line::from(" "),
         Line::from("   Status keywords (all given must hold):"),
         Line::from("     'online'          - Only online services"),

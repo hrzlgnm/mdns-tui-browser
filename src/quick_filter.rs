@@ -14,12 +14,23 @@ use crate::models::{ServiceEntry, formatted_service_addrs};
 /// too broadly with one.
 const MIN_TYPO_TOLERANT_TERM_CHARS: usize = 4;
 
+/// How closely a term matched, best first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum MatchTier {
+    /// The term occurs contiguously.
+    Contiguous,
+    /// The term's characters occur in order, possibly spread out.
+    Fuzzy,
+    /// All but one of the term's characters occur close together.
+    Typo,
+}
+
 /// How well a service matched the text terms of a [`QuickFilter`].
 #[derive(Clone, Copy, Debug)]
 pub struct Relevance {
-    /// Every text term occurs contiguously in one of the service's fields.
-    contiguous: bool,
-    /// Sum of each term's best fuzzy score over the service's fields.
+    tier: MatchTier,
+    /// Sum of each term's best score; scores are only comparable within a
+    /// tier because typo matches are scored on short windows.
     score: u16,
 }
 
@@ -27,29 +38,40 @@ impl Default for Relevance {
     /// Relevance of a service when the query has no text terms.
     fn default() -> Self {
         Self {
-            contiguous: true,
+            tier: MatchTier::Contiguous,
             score: 0,
         }
     }
 }
 
 impl Relevance {
-    /// Orders contiguous matches first, then fuzzy-only matches by
-    /// descending score. Contiguous matches compare equal so the caller's
-    /// sort decides their order.
+    /// Orders by tier, then fuzzy and typo matches by descending score.
+    /// Contiguous matches compare equal so the caller's sort decides their
+    /// order.
     pub fn cmp_best_first(&self, other: &Self) -> Ordering {
-        match (self.contiguous, other.contiguous) {
-            (true, true) => Ordering::Equal,
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            (false, false) => other.score.cmp(&self.score),
+        self.tier.cmp(&other.tier).then_with(|| match self.tier {
+            MatchTier::Contiguous => Ordering::Equal,
+            MatchTier::Fuzzy | MatchTier::Typo => other.score.cmp(&self.score),
+        })
+    }
+
+    /// The better of two matches of the same term.
+    fn best_of(self, other: Self) -> Self {
+        match self.tier.cmp(&other.tier) {
+            Ordering::Less => self,
+            Ordering::Greater => other,
+            Ordering::Equal => Self {
+                tier: self.tier,
+                score: self.score.max(other.score),
+            },
         }
     }
 
-    /// Combines the relevance of two terms that must both match.
+    /// Combines the relevance of two terms that must both match; the
+    /// weaker tier decides.
     fn and(self, other: Self) -> Self {
         Self {
-            contiguous: self.contiguous && other.contiguous,
+            tier: self.tier.max(other.tier),
             score: self.score.saturating_add(other.score),
         }
     }
@@ -83,30 +105,30 @@ impl StatusConstraints {
     }
 }
 
-/// One text term of a quick-filter query and its compiled matcher.
+/// One text term of a quick-filter query and its compiled matchers.
 #[derive(Clone)]
 struct Term {
     text: String,
-    typo_tolerant: bool,
-    matcher: Matcher,
+    exact: Matcher,
+    /// Allows one typo; `None` for terms too short to tolerate one.
+    typo: Option<Matcher>,
 }
 
 impl Term {
     /// Terms are matched literally: frizbee's query operators are not
     /// exposed.
     fn new(text: &str) -> Self {
-        let typo_tolerant = text.chars().count() >= MIN_TYPO_TOLERANT_TERM_CHARS;
-        let pattern = Pattern::new(
-            text,
-            PatternConfig::default().max_typos(Some(u16::from(typo_tolerant))),
-        );
         let config = Config::default()
             .casing(CaseMatching::Ignore)
             .sort(SortStrategy::IndexAsc);
+        let matcher = |max_typos| {
+            let pattern = Pattern::new(text, PatternConfig::default().max_typos(Some(max_typos)));
+            Matcher::new(pattern, &config)
+        };
         Self {
             text: text.to_string(),
-            typo_tolerant,
-            matcher: Matcher::new(pattern, &config),
+            exact: matcher(0),
+            typo: (text.chars().count() >= MIN_TYPO_TOLERANT_TERM_CHARS).then(|| matcher(1)),
         }
     }
 
@@ -118,88 +140,88 @@ impl Term {
         owner_count: usize,
     ) -> Vec<Option<Relevance>> {
         let mut best: Vec<Option<Relevance>> = vec![None; owner_count];
-        for (field, score) in self.field_scores(fields) {
-            let candidate = Relevance {
-                contiguous: fields[field].contains(&self.text),
-                score,
-            };
+        for (field, relevance) in self.field_matches(fields) {
             let slot = &mut best[owners[field]];
-            *slot = Some(match *slot {
-                Some(current) => Relevance {
-                    contiguous: current.contiguous || candidate.contiguous,
-                    score: current.score.max(candidate.score),
-                },
-                None => candidate,
-            });
+            *slot = Some(slot.map_or(relevance, |current| current.best_of(relevance)));
         }
         best
     }
 
-    /// Score of every matching field, as `(field index, score)`.
-    fn field_scores(&mut self, fields: &[String]) -> Vec<(usize, u16)> {
-        if !self.typo_tolerant {
-            return self
-                .matcher
-                .match_list(fields)
-                .into_iter()
-                .map(|found| (found.index as usize, found.score))
-                .collect();
-        }
-        let mut scores = Vec::new();
-        for found in self.matcher.match_list_indices(fields) {
-            let field = found.index as usize;
-            if self.is_compact_or_typo_free(&found.indices) {
-                scores.push((field, found.score));
-            } else if let Some(score) = self.best_compact_score(&fields[field]) {
-                scores.push((field, score));
-            }
-        }
-        scores
-    }
-
-    /// Rejects a typo match whose matched characters are spread out:
-    /// frizbee counts a typo as a missing term byte, so a spread-out match
-    /// only shares a few scattered characters with the term (`http` against
-    /// `printer._ipp._tcp`). Matches without a typo may spread out, so `prn`
-    /// still finds `printer`.
-    fn is_compact_or_typo_free(&self, matched_byte_offsets: &[u32]) -> bool {
-        let has_typo = matched_byte_offsets.len() < self.text.len();
-        let (Some(&first), Some(&last)) = (
-            matched_byte_offsets.iter().min(),
-            matched_byte_offsets.iter().max(),
-        ) else {
-            return false;
-        };
-        let span = (last - first) as usize + 1;
-        !has_typo || span <= self.max_typo_span()
-    }
-
-    /// Widest byte span a typo match may cover.
-    fn max_typo_span(&self) -> usize {
-        self.text.len() + 1
-    }
-
-    /// Best score of a compact match anywhere in `field`. frizbee reports
-    /// only the highest-scoring alignment per field, which may be a
-    /// spread-out typo match hiding a compact one elsewhere, so match every
-    /// window of the widest allowed span instead.
-    fn best_compact_score(&mut self, field: &str) -> Option<u16> {
-        let windows: Vec<&str> = field
-            .char_indices()
-            .map(|(start, _)| {
-                let mut end = (start + self.max_typo_span()).min(field.len());
-                while !field.is_char_boundary(end) {
-                    end -= 1;
-                }
-                &field[start..end]
+    /// Relevance of every matching field, as `(field index, relevance)`.
+    fn field_matches(&mut self, fields: &[String]) -> Vec<(usize, Relevance)> {
+        let mut matches: Vec<(usize, Relevance)> = self
+            .exact
+            .match_list(fields)
+            .into_iter()
+            .map(|found| {
+                let field = found.index as usize;
+                let tier = if fields[field].contains(&self.text) {
+                    MatchTier::Contiguous
+                } else {
+                    MatchTier::Fuzzy
+                };
+                (
+                    field,
+                    Relevance {
+                        tier,
+                        score: found.score,
+                    },
+                )
             })
             .collect();
-        self.matcher
-            .match_list(&windows)
-            .into_iter()
-            .map(|found| found.score)
-            .max()
+
+        let Some(typo) = self.typo.as_mut() else {
+            return matches;
+        };
+        let mut matched = vec![false; fields.len()];
+        for &(field, _) in &matches {
+            matched[field] = true;
+        }
+        let unmatched: Vec<usize> = (0..fields.len()).filter(|&field| !matched[field]).collect();
+        let unmatched_fields: Vec<&str> = unmatched
+            .iter()
+            .map(|&field| fields[field].as_str())
+            .collect();
+        let max_span = self.text.len() + 1;
+        for found in typo.match_list(&unmatched_fields) {
+            let field = unmatched[found.index as usize];
+            if let Some(score) = best_window_score(typo, &fields[field], max_span) {
+                matches.push((
+                    field,
+                    Relevance {
+                        tier: MatchTier::Typo,
+                        score,
+                    },
+                ));
+            }
+        }
+        matches
     }
+}
+
+/// Best score of `matcher` over every window of `field` at most
+/// `max_span` bytes long, or `None` if no window matches.
+///
+/// frizbee counts a typo as a missing term character and lets the rest
+/// spread over the whole field, so one typo would turn `http` into any
+/// `t..t..p`. Matching windows one byte longer than the term keeps typo
+/// matches close together and scores them all the same way.
+fn best_window_score(matcher: &mut Matcher, field: &str, max_span: usize) -> Option<u16> {
+    let windows: Vec<&str> = field
+        .char_indices()
+        .map(|(start, _)| {
+            let mut end = (start + max_span).min(field.len());
+            while !field.is_char_boundary(end) {
+                end -= 1;
+            }
+            &field[start..end]
+        })
+        .collect();
+    matcher
+        .match_list(&windows)
+        .into_iter()
+        .map(|found| found.score)
+        .max()
 }
 
 /// A parsed quick-filter query: status constraints plus fuzzy text terms,

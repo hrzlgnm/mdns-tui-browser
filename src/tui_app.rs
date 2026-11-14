@@ -330,14 +330,16 @@ impl AppState {
         service.is_local(&self.local_addrs)
     }
 
-    fn update_filtered_cache(&mut self) -> bool {
+    /// Brings the filtered and sorted service list up to date.
+    fn update_filtered_cache(&mut self) {
         if self.cache_dirty {
             if self.quick_filter.query() != self.filter_input.text() {
                 self.quick_filter = QuickFilter::parse(self.filter_input.text());
             }
             let selected_type = self
                 .selected_type
-                .and_then(|idx| self.service_types.get(idx));
+                .and_then(|idx| self.service_types.get(idx))
+                .map(String::as_str);
             let candidates = self
                 .services
                 .iter()
@@ -346,9 +348,10 @@ impl AppState {
             self.cached_matches = self.quick_filter.rank(candidates);
             self.cache_dirty = false;
             self.cached_sorted = false;
-            true // Cache was rebuilt
-        } else {
-            false // Cache was not rebuilt
+        }
+        if !self.cached_sorted {
+            self.sort_filtered_services();
+            self.cached_sorted = true;
         }
     }
 
@@ -384,11 +387,7 @@ impl AppState {
 
     fn get_filtered_services(&mut self) -> &[usize] {
         // Check if we need to invalidate the cache before processing
-        let cache_was_rebuilt = self.update_filtered_cache();
-        if cache_was_rebuilt || !self.cached_sorted {
-            self.sort_filtered_services();
-            self.cached_sorted = true;
-        }
+        self.update_filtered_cache();
         self.cached_filtered_services.as_slice()
     }
 
@@ -823,11 +822,7 @@ impl AppState {
         self.validate_selected_type();
 
         // Ensure filtered cache is up to date before computing layout
-        let cache_was_rebuilt = self.update_filtered_cache();
-        if cache_was_rebuilt || !self.cached_sorted {
-            self.sort_filtered_services();
-            self.cached_sorted = true;
-        }
+        self.update_filtered_cache();
 
         let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
 
@@ -1578,7 +1573,7 @@ impl AppState {
 }
 
 /// Whether `service` belongs to `selected_type`; `None` selects all types.
-fn has_service_type(service: &ServiceEntry, selected_type: Option<&String>) -> bool {
+fn has_service_type(service: &ServiceEntry, selected_type: Option<&str>) -> bool {
     // Case-insensitive: daemon and old dumps may use mixed case
     selected_type
         .is_none_or(|selected_type| service.service_type.eq_ignore_ascii_case(selected_type))
@@ -6843,6 +6838,29 @@ mod tests {
         let mut state = setup_test_state_with_services(vec![service]);
 
         assert_eq!(quick_filter_hosts(&mut state, "abcd"), ["kiosk.local."]);
+    }
+
+    #[test]
+    fn test_quick_filter_typo_tolerant_term_keeps_spread_typo_free_match() {
+        let mut service = create_test_service("zzz", "_ipp._udp.local.", 80);
+        service.txt = vec!["k-i-o-s------------------------k".to_string()];
+        let mut state = setup_test_state_with_services(vec![service]);
+
+        assert_eq!(quick_filter_hosts(&mut state, "kiosk"), ["zzz.local."]);
+    }
+
+    #[test]
+    fn test_quick_filter_typo_free_matches_rank_before_typo_matches() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kiosx", "_http._tcp.local.", 80),
+            create_test_service("kxixoxsxk", "_http._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kxixoxsxk.local.", "kiosx.local."]
+        );
     }
 
     #[test]
