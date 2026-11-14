@@ -2162,57 +2162,7 @@ fn render_services_list(
     let visible_service_items: Vec<ListItem> =
         get_visible_items(&service_items, &app_state.services_scroll).to_vec();
 
-    let sort_field_display = format_sort_field_for_display(app_state.sort_field);
-    let sort_dir_display = format_sort_direction_for_display(app_state.sort_direction);
-    let sort_field_highlighted = Span::styled(
-        sort_field_display,
-        Style::default()
-            .fg(Color::White)
-            .add_modifier(Modifier::UNDERLINED),
-    );
-    let sort_dir_highlighted = Span::styled(
-        sort_dir_display,
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    );
-
-    let title = if offline_count > 0 {
-        Line::from(vec![
-            Span::raw("Services ["),
-            Span::styled(
-                format!("{}", online_count),
-                Style::default().fg(STATUS_OK_COLOR),
-            ),
-            Span::raw("/"),
-            Span::styled(
-                format!("{}", offline_count),
-                Style::default().fg(STATUS_ERROR_COLOR),
-            ),
-            Span::raw("/"),
-            Span::raw(format!("{}", total_count)),
-            Span::raw("] ["),
-            sort_field_highlighted,
-            Span::raw("/"),
-            sort_dir_highlighted,
-            Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
-        ])
-    } else {
-        Line::from(vec![
-            Span::raw("Services ["),
-            Span::styled(
-                format!("{}", online_count),
-                Style::default().fg(STATUS_OK_COLOR),
-            ),
-            Span::raw("/"),
-            Span::raw(format!("{}", total_count)),
-            Span::raw("] ["),
-            sort_field_highlighted,
-            Span::raw("/"),
-            sort_dir_highlighted,
-            Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
-        ])
-    };
+    let title = services_list_title(app_state, online_count, offline_count, total_count);
 
     let border_style = get_border_style(app_state.loaded_from_file);
     let services_list = List::new(visible_service_items)
@@ -2234,6 +2184,52 @@ fn render_services_list(
             .saturating_sub(app_state.services_scroll.offset),
     ));
     f.render_stateful_widget(services_list, area, &mut services_list_state);
+}
+
+/// Title of the services list: online/offline/total counts, then the
+/// sort indicator and its key hints.
+fn services_list_title(
+    app_state: &AppState,
+    online_count: usize,
+    offline_count: usize,
+    total_count: usize,
+) -> Line<'static> {
+    let mut spans = vec![
+        Span::raw("Services ["),
+        Span::styled(
+            online_count.to_string(),
+            Style::default().fg(STATUS_OK_COLOR),
+        ),
+    ];
+    if offline_count > 0 {
+        spans.extend([
+            Span::raw("/"),
+            Span::styled(
+                offline_count.to_string(),
+                Style::default().fg(STATUS_ERROR_COLOR),
+            ),
+        ]);
+    }
+    spans.extend([
+        Span::raw("/"),
+        Span::raw(total_count.to_string()),
+        Span::raw("] ["),
+        Span::styled(
+            format_sort_field_for_display(app_state.sort_field),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::UNDERLINED),
+        ),
+        Span::raw("/"),
+        Span::styled(
+            format_sort_direction_for_display(app_state.sort_direction),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("] (↑/↓, s/S to sort, o to toggle)"),
+    ]);
+    Line::from(spans)
 }
 
 fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
