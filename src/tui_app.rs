@@ -2187,7 +2187,8 @@ fn render_services_list(
 }
 
 /// Title of the services list: online/offline/total counts, then the
-/// sort indicator and its key hints.
+/// sort indicator and its key hints. While a text query ranks the results,
+/// the sort is prefixed with `Relevance ›` because it only breaks ties.
 fn services_list_title(
     app_state: &AppState,
     online_count: usize,
@@ -2214,6 +2215,11 @@ fn services_list_title(
         Span::raw("/"),
         Span::raw(total_count.to_string()),
         Span::raw("] ["),
+    ]);
+    if app_state.quick_filter.has_text_terms() {
+        spans.push(Span::raw("Relevance › "));
+    }
+    spans.extend([
         Span::styled(
             format_sort_field_for_display(app_state.sort_field),
             Style::default()
@@ -6946,6 +6952,30 @@ mod tests {
         }
 
         assert!(state.search_fields.len() <= 2 * state.services.len() + 1);
+    }
+
+    fn services_title_text(state: &AppState) -> String {
+        services_list_title(state, 1, 0, 1)
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
+
+    #[test]
+    fn test_services_title_shows_relevance_only_for_text_queries() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "kiosk",
+            "_ipp._tcp.local.",
+            631,
+        )]);
+        assert!(services_title_text(&state).contains("[Host/↑]"));
+
+        let _ = quick_filter_hosts(&mut state, "online");
+        assert!(services_title_text(&state).contains("[Host/↑]"));
+
+        let _ = quick_filter_hosts(&mut state, "online kiosk");
+        assert!(services_title_text(&state).contains("[Relevance › Host/↑]"));
     }
 
     #[test]

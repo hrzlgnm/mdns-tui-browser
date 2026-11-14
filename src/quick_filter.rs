@@ -380,6 +380,12 @@ impl QuickFilter {
         &self.query
     }
 
+    /// Whether the query has text terms, i.e. whether results are ranked
+    /// by relevance rather than only by the selected sort.
+    pub fn has_text_terms(&self) -> bool {
+        !self.terms.is_empty()
+    }
+
     /// Returns the ids of the matching candidates with their relevance.
     ///
     /// Each term is matched against every field separately, so a fuzzy
