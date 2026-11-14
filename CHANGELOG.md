@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.42.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.41.2...v1.42.0) (2026-11-14)
+
+
+### Features
+
+* add typo-tolerant fuzzy matching to the quick filter ([#803](https://github.com/hrzlgnm/mdns-tui-browser/issues/803)) ([91b664e](https://github.com/hrzlgnm/mdns-tui-browser/commit/91b664e4a3fdab6a6589ce2c063f7568ee4dc472))
+
+
+### Dependencies
+
+* lock file maintenance ([#805](https://github.com/hrzlgnm/mdns-tui-browser/issues/805)) ([ea00f57](https://github.com/hrzlgnm/mdns-tui-browser/commit/ea00f576ce897e3e3d6ef532e850eef6c1fa8d03))
+
 ## [1.41.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.41.1...v1.41.2) (2026-11-14)
 
 
