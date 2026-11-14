@@ -195,10 +195,11 @@ struct AppState {
     types_scroll: ScrollState,
     services_scroll: ScrollState,
     details_scroll: ScrollState,
+    /// Indices into `services` in display order, projected from
+    /// `cached_matches`.
     cached_filtered_services: Vec<usize>,
-    /// Quick-filter relevance per index into `services`, rebuilt with
-    /// `cached_filtered_services`.
-    cached_relevance: Vec<Relevance>,
+    /// Filtered services with their quick-filter relevance.
+    cached_matches: Vec<(usize, Relevance)>,
     cache_dirty: bool,
     cached_sorted: bool,
     popup_state: PopupState,
@@ -239,7 +240,7 @@ impl Clone for AppState {
             services_scroll: self.services_scroll.clone(),
             details_scroll: self.details_scroll.clone(),
             cached_filtered_services: self.cached_filtered_services.clone(),
-            cached_relevance: self.cached_relevance.clone(),
+            cached_matches: self.cached_matches.clone(),
             cache_dirty: self.cache_dirty,
             cached_sorted: self.cached_sorted,
             popup_state: self.popup_state.clone(),
@@ -280,7 +281,7 @@ impl AppState {
             services_scroll: ScrollState::new(),
             details_scroll: ScrollState::new(),
             cached_filtered_services: Vec::new(),
-            cached_relevance: Vec::new(),
+            cached_matches: Vec::new(),
             cache_dirty: true,
             cached_sorted: false,
             popup_state: PopupState::new(),
@@ -325,41 +326,32 @@ impl AppState {
         service.is_local(&self.local_addrs)
     }
 
-    /// Returns how well `service` matches the selected type and quick
-    /// filter, or `None` if it is filtered out.
-    fn service_relevance(
-        &self,
-        service: &ServiceEntry,
-        quick_filter: &mut QuickFilter,
-    ) -> Option<Relevance> {
+    fn matches_selected_type(&self, service: &ServiceEntry) -> bool {
         // Case-insensitive: daemon and old dumps may use mixed case
-        if let Some(selected_type_idx) = self.selected_type
-            && let Some(selected_type) = self.service_types.get(selected_type_idx)
-            && !service.service_type.eq_ignore_ascii_case(selected_type)
-        {
-            return None;
-        }
-        quick_filter.relevance(service)
+        self.selected_type
+            .and_then(|idx| self.service_types.get(idx))
+            .is_none_or(|selected_type| service.service_type.eq_ignore_ascii_case(selected_type))
     }
 
     fn update_filtered_cache(&mut self) -> bool {
         if self.cache_dirty {
-            self.cached_filtered_services.clear();
-            self.cached_relevance.clear();
-            let mut quick_filter = QuickFilter::parse(self.filter_input.text());
-            for (idx, service) in self.services.iter().enumerate() {
-                let relevance = self.service_relevance(service, &mut quick_filter);
-                if relevance.is_some() {
-                    self.cached_filtered_services.push(idx);
-                }
-                self.cached_relevance.push(relevance.unwrap_or_default());
-            }
+            let candidates = self
+                .services
+                .iter()
+                .enumerate()
+                .filter(|(_, service)| self.matches_selected_type(service));
+            self.cached_matches = QuickFilter::parse(self.filter_input.text()).rank(candidates);
+            self.project_filtered_services();
             self.cache_dirty = false;
             self.cached_sorted = false;
             true // Cache was rebuilt
         } else {
             false // Cache was not rebuilt
         }
+    }
+
+    fn project_filtered_services(&mut self) {
+        self.cached_filtered_services = self.cached_matches.iter().map(|&(idx, _)| idx).collect();
     }
 
     fn mark_cache_dirty(&mut self) {
@@ -407,20 +399,18 @@ impl AppState {
         let sort_field = self.sort_field;
         let sort_direction = self.sort_direction;
         let services = &self.services;
-        let relevance = |idx: usize| self.cached_relevance.get(idx).copied().unwrap_or_default();
 
-        self.cached_filtered_services.sort_by(|&a_idx, &b_idx| {
-            let by_field = || {
+        self.cached_matches
+            .sort_by(|&(a_idx, a_relevance), &(b_idx, b_relevance)| {
                 let (a, b) = match sort_direction {
                     SortDirection::Ascending => (a_idx, b_idx),
                     SortDirection::Descending => (b_idx, a_idx),
                 };
-                compare_services_by_field(&services[a], &services[b], sort_field)
-            };
-            relevance(a_idx)
-                .cmp_best_first(&relevance(b_idx))
-                .then_with(by_field)
-        });
+                a_relevance
+                    .cmp_best_first(&b_relevance)
+                    .then_with(|| compare_services_by_field(&services[a], &services[b], sort_field))
+            });
+        self.project_filtered_services();
     }
 
     // Helper methods for service type management
@@ -3237,8 +3227,10 @@ mod tests {
     impl AppState {
         /// Whether `service` passes the current type selection and quick filter.
         fn filter_service(&self, service: &ServiceEntry) -> bool {
-            let mut quick_filter = QuickFilter::parse(self.filter_input.text());
-            self.service_relevance(service, &mut quick_filter).is_some()
+            self.matches_selected_type(service)
+                && !QuickFilter::parse(self.filter_input.text())
+                    .rank([(0, service)])
+                    .is_empty()
         }
     }
 
@@ -6561,43 +6553,38 @@ mod tests {
 
     #[test]
     fn test_filter_service_searches_all_fields() {
+        type SetField = fn(&mut ServiceEntry);
+        let cases: [(&str, &str, SetField); 7] = [
+            ("fullname", "kiosk", |s| {
+                s.fullname = "Kiosk._ipp._udp.local.".to_string()
+            }),
+            ("host", "kiosk", |s| s.host = "kiosk.local.".to_string()),
+            ("service type", "kiosk", |s| {
+                s.service_type = "_kiosk._tcp.local.".to_string()
+            }),
+            ("subtype", "kiosk", |s| {
+                s.subtype = Some("_kiosk".to_string())
+            }),
+            ("txt", "kiosk", |s| s.txt = vec!["role=kiosk".to_string()]),
+            ("address", "10.20.30.40", |s| {
+                s.addrs = vec![scoped_ip("10.20.30.40")]
+            }),
+            ("port", "8443", |s| s.port = 8443),
+        ];
+
         let mut state = create_test_app_state();
+        let base = create_test_service("zzz", "_ipp._udp.local.", 80);
+        for (field, query, set_field) in cases {
+            state.filter_input.set_text(query);
+            assert!(
+                !state.filter_service(&base),
+                "{query} matches without {field}"
+            );
 
-        // Test fullname search
-        state.filter_input.set_text("MyService");
-        let mut service = create_test_service("test", "_http._tcp.local.", 80);
-        service.fullname = "MyService._http._tcp.local.".to_string();
-        assert!(state.filter_service(&service));
-
-        // Test host search
-        state.filter_input.set_text("myhost");
-        service.host = "myhost.local.".to_string();
-        assert!(state.filter_service(&service));
-
-        // Test service type search
-        state.filter_input.set_text("http");
-        service.service_type = "_http._tcp.local.".to_string();
-        assert!(state.filter_service(&service));
-
-        // Test address search
-        state.filter_input.set_text("192.168.1.100");
-        service.addrs = vec![scoped_ip("192.168.1.100")];
-        assert!(state.filter_service(&service));
-
-        // Test port search
-        state.filter_input.set_text("8080");
-        service.port = 8080;
-        assert!(state.filter_service(&service));
-
-        // Test TXT record search
-        state.filter_input.set_text("key1=value1");
-        service.txt = vec!["key1=value1".to_string()];
-        assert!(state.filter_service(&service));
-
-        // Test subtype search
-        state.filter_input.set_text("printer");
-        service.subtype = Some("_printer".to_string());
-        assert!(state.filter_service(&service));
+            let mut service = base.clone();
+            set_field(&mut service);
+            assert!(state.filter_service(&service), "{field} is not searched");
+        }
     }
 
     #[test]
@@ -6725,23 +6712,59 @@ mod tests {
     }
 
     #[test]
-    fn test_quick_filter_selected_sort_breaks_relevance_ties() {
+    fn test_quick_filter_contiguous_matches_follow_selected_sort() {
         let mut state = setup_test_state_with_services(vec![
-            create_test_service("kiosk-a", "_http._tcp.local.", 80),
-            create_test_service("kiosk-b", "_http._tcp.local.", 80),
+            create_test_service("lobby-kiosk", "_http._tcp.local.", 80),
+            create_test_service("kiosk", "_http._tcp.local.", 81),
+        ]);
+        state.sort_field = SortField::Host;
+
+        state.sort_direction = SortDirection::Ascending;
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["kiosk.local.", "lobby-kiosk.local."]
+        );
+
+        state.sort_direction = SortDirection::Descending;
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk"),
+            ["lobby-kiosk.local.", "kiosk.local."]
+        );
+    }
+
+    #[test]
+    fn test_quick_filter_selected_sort_breaks_fuzzy_score_ties() {
+        let mut state = setup_test_state_with_services(vec![
+            create_test_service("kxiosk-a", "_http._tcp.local.", 80),
+            create_test_service("kxiosk-b", "_http._tcp.local.", 80),
         ]);
         state.sort_field = SortField::Host;
 
         state.sort_direction = SortDirection::Descending;
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kiosk-b.local.", "kiosk-a.local."]
+            ["kxiosk-b.local.", "kxiosk-a.local."]
         );
 
         state.sort_direction = SortDirection::Ascending;
         assert_eq!(
             quick_filter_hosts(&mut state, "kiosk"),
-            ["kiosk-a.local.", "kiosk-b.local."]
+            ["kxiosk-a.local.", "kxiosk-b.local."]
+        );
+    }
+
+    #[test]
+    fn test_quick_filter_term_does_not_span_fields() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "kiosk",
+            "_http._tcp.local.",
+            631,
+        )]);
+
+        assert!(quick_filter_hosts(&mut state, "kiosk631").is_empty());
+        assert_eq!(
+            quick_filter_hosts(&mut state, "kiosk 631"),
+            ["kiosk.local."]
         );
     }
 

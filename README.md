@@ -35,7 +35,8 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
   - [Service Details Controls](#service-details-controls)
   - [Help Popup Controls](#help-popup-controls)
   - [Quick Filter Mode](#quick-filter-mode)
-    - [Special Keywords](#special-keywords)
+    - [Matching](#matching)
+    - [Status Keywords](#status-keywords)
   - [Add Service Type Mode](#add-service-type-mode)
   - [Local Device Highlight](#local-device-highlight)
   - [Opening Service URLs](#opening-service-urls)
@@ -322,12 +323,12 @@ When in filter mode (activated with <kbd>/</kbd>):
 
 #### Matching
 The quick filter searches every service field (fullname, host, service type,
-subtype, addresses, port, and TXT records) with typo-tolerant fuzzy matching:
+subtype, each address, port, and each TXT record) with typo-tolerant fuzzy matching:
 
-- **Terms**: whitespace-separated terms must all match, in any order
+- **Terms**: whitespace-separated terms must all match, in any order; each term must match within a single field
 - **Fuzzy**: a term's characters must appear in order but need not be adjacent (`prn` finds `printer`)
 - **Typos**: terms of four or more characters tolerate one typo (`prinzer` finds `printer`); shorter terms tolerate none
-- **Ranking**: services where every term appears contiguously come first, then closer fuzzy matches; the selected sort breaks ties
+- **Ranking**: services where every term appears contiguously come first, in the selected sort order; fuzzy-only matches follow, closest first, with the selected sort breaking ties
 
 #### Status Keywords
 The reserved words `online`, `offline`, and `flapping` filter by service status

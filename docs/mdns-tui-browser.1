@@ -154,7 +154,7 @@ Port number
 TXT record contents
 .RE
 .PP
-Whitespace-separated terms must all match, in any order. A term's characters must appear in order but need not be adjacent. Terms of four or more characters tolerate one typo; shorter terms tolerate none. Services where every term appears contiguously are listed first, then closer fuzzy matches; the selected sort breaks ties.
+Whitespace-separated terms must all match, in any order, and each term must match within a single field. A term's characters must appear in order but need not be adjacent. Terms of four or more characters tolerate one typo; shorter terms tolerate none. Services where every term appears contiguously are listed first, in the selected sort order; fuzzy-only matches follow, closest first, with the selected sort breaking ties.
 .PP
 The reserved words \fBonline\fR, \fBoffline\fR, and \fBflapping\fR filter by service status instead of matching text. They are case-insensitive and combine with each other and with text terms; every one must hold:
 .RS
