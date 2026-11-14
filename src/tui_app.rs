@@ -344,7 +344,6 @@ impl AppState {
                 .enumerate()
                 .filter(|(_, service)| has_service_type(service, selected_type));
             self.cached_matches = self.quick_filter.rank(candidates);
-            self.project_filtered_services();
             self.cache_dirty = false;
             self.cached_sorted = false;
             true // Cache was rebuilt
@@ -3235,15 +3234,13 @@ mod tests {
     use crate::models::tests::{create_test_service, create_test_service_with_sessions, scoped_ip};
 
     impl AppState {
-        /// Whether `service` passes the current type selection and quick filter.
+        /// Whether `service` passes the current type selection and quick
+        /// filter, checked through the real filter cache.
         fn filter_service(&self, service: &ServiceEntry) -> bool {
-            let selected_type = self
-                .selected_type
-                .and_then(|idx| self.service_types.get(idx));
-            has_service_type(service, selected_type)
-                && !QuickFilter::parse(self.filter_input.text())
-                    .rank([(0, service)])
-                    .is_empty()
+            let mut state = self.clone();
+            state.services = vec![service.clone()];
+            state.mark_cache_dirty();
+            !state.get_filtered_services().is_empty()
         }
     }
 
@@ -6826,6 +6823,26 @@ mod tests {
         );
         assert!(quick_filter_hosts(&mut state, "http").is_empty());
         assert!(quick_filter_hosts(&mut state, "8080").is_empty());
+    }
+
+    #[test]
+    fn test_quick_filter_typo_match_must_be_compact_with_accents() {
+        let mut spread = create_test_service("spread", "_http._tcp.local.", 80);
+        spread.txt = vec!["bxxxxxxxxxüxxxxxxxxxr".to_string()];
+        let mut close = create_test_service("close", "_http._tcp.local.", 81);
+        close.txt = vec!["büxo".to_string()];
+        let mut state = setup_test_state_with_services(vec![spread, close]);
+
+        assert_eq!(quick_filter_hosts(&mut state, "büro"), ["close.local."]);
+    }
+
+    #[test]
+    fn test_quick_filter_finds_compact_typo_match_behind_spread_alignment() {
+        let mut service = create_test_service("kiosk", "_http._tcp.local.", 80);
+        service.txt = vec!["a__b__c xabcx".to_string()];
+        let mut state = setup_test_state_with_services(vec![service]);
+
+        assert_eq!(quick_filter_hosts(&mut state, "abcd"), ["kiosk.local."]);
     }
 
     #[test]
