@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.41.2](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.41.1...v1.41.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* encode app name and version into dump file name ([#801](https://github.com/hrzlgnm/mdns-tui-browser/issues/801)) ([6be869a](https://github.com/hrzlgnm/mdns-tui-browser/commit/6be869a3f97f07b650f32f1b5cf8600b34242378))
+
+
+### Dependencies
+
+* lock file maintenance ([#802](https://github.com/hrzlgnm/mdns-tui-browser/issues/802)) ([29e87cb](https://github.com/hrzlgnm/mdns-tui-browser/commit/29e87cbfeecb9789532a260b5963f780405f84fd))
+* update dependency cargo-nextest to v0.9.152 ([#796](https://github.com/hrzlgnm/mdns-tui-browser/issues/796)) ([3203f6e](https://github.com/hrzlgnm/mdns-tui-browser/commit/3203f6e73b0c0e6600859abce16d04466c201f9b))
+
+
+### Miscellaneous Chores
+
+* configure repo agent skills ([#799](https://github.com/hrzlgnm/mdns-tui-browser/issues/799)) ([141053f](https://github.com/hrzlgnm/mdns-tui-browser/commit/141053fa0c4902551d5faf32cd5f2a489dc7ca22))
+* link agents.md to copilot and claude instructions ([#798](https://github.com/hrzlgnm/mdns-tui-browser/issues/798)) ([ddaafc8](https://github.com/hrzlgnm/mdns-tui-browser/commit/ddaafc8531a9fc05a06159e470b7025c5dc2f9d0))
+
 ## [1.41.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.41.0...v1.41.1) (2026-11-11)
 
 
