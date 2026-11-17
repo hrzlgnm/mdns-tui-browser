@@ -473,13 +473,41 @@ impl ServiceEntry {
     }
 }
 
+/// Converts a fullname as reported by mdns-sd, with the instance name's
+/// `.` and `\` escaped, into the readable form used as a service's key:
+/// the unescaped instance name, a `.`, and the lowercase service type.
+///
+/// Resolved and removed services must both go through this function so
+/// that a removal finds the entry its resolution created.
+pub fn display_fullname(fullname: &str) -> String {
+    let ty_domain = service_type_of_fullname(fullname).to_ascii_lowercase();
+    instance_name_unescaped(fullname) + "." + &ty_domain
+}
+
+/// Returns the part of an escaped fullname after the instance name, i.e.
+/// after its first unescaped dot. Escapes are recognized exactly as
+/// [`instance_name_unescaped`] does, so both split at the same dot.
+fn service_type_of_fullname(fullname: &str) -> &str {
+    let mut chars = fullname.char_indices().peekable();
+    while let Some((idx, ch)) = chars.next() {
+        match ch {
+            '\\' => {
+                if matches!(chars.peek(), Some((_, '.' | '\\'))) {
+                    chars.next();
+                }
+            }
+            '.' => return &fullname[idx + 1..],
+            _ => {}
+        }
+    }
+    ""
+}
+
 impl From<ResolvedService> for ServiceEntry {
     fn from(resolved_service: ResolvedService) -> Self {
         let current_timestamp = current_timestamp_micros();
         Self {
-            fullname: instance_name_unescaped(resolved_service.get_fullname())
-                + "."
-                + &resolved_service.ty_domain.to_ascii_lowercase(),
+            fullname: display_fullname(resolved_service.get_fullname()),
             host: resolved_service.get_hostname().to_string(),
             service_type: resolved_service.ty_domain.to_ascii_lowercase(),
             subtype: resolved_service
@@ -1390,5 +1418,55 @@ pub mod tests {
 
         let entry = ServiceEntry::from(resolved);
         assert_eq!(entry.fullname, "foo.bar.._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_display_fullname_unescapes_instance_dots() {
+        assert_eq!(
+            display_fullname(r"a\.a\.a._aa._tcp.local."),
+            "a.a.a._aa._tcp.local."
+        );
+    }
+
+    #[test]
+    fn test_display_fullname_unescapes_backslash() {
+        assert_eq!(
+            display_fullname(r"back\\slash._http._tcp.local."),
+            r"back\slash._http._tcp.local."
+        );
+    }
+
+    #[test]
+    fn test_display_fullname_keeps_escaped_trailing_dot() {
+        assert_eq!(
+            display_fullname(r"ends\.._http._tcp.local."),
+            "ends.._http._tcp.local."
+        );
+    }
+
+    #[test]
+    fn test_display_fullname_lowercases_service_type_only() {
+        assert_eq!(
+            display_fullname("My TV._Http._TCP.local."),
+            "My TV._http._tcp.local."
+        );
+    }
+
+    #[test]
+    fn test_display_fullname_matches_resolved_service_entry() {
+        let info = mdns_sd::ServiceInfo::new(
+            "_aa._tcp.local.",
+            "a.a.a",
+            "host.local.",
+            "192.168.1.1",
+            443,
+            None::<std::collections::HashMap<String, String>>,
+        )
+        .unwrap();
+        let resolved = info.as_resolved_service();
+        let removed_fullname = resolved.get_fullname().to_string();
+
+        let entry = ServiceEntry::from(resolved);
+        assert_eq!(display_fullname(&removed_fullname), entry.fullname);
     }
 }

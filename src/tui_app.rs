@@ -21,8 +21,8 @@ use tokio::sync::RwLock;
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
-    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, format_ip_for_display,
-    format_service_addrs, local_interface_addrs,
+    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, display_fullname,
+    format_ip_for_display, format_service_addrs, local_interface_addrs,
 };
 use crate::popup::PopupState;
 use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
@@ -1771,7 +1771,7 @@ async fn start_browsing_service_type(
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
-                    if state.mark_service_offline(&fullname) {
+                    if state.mark_service_offline(&display_fullname(&fullname)) {
                         let _ = notification_sender_inner.send(Notification::ServiceChanged);
                     }
                 }
@@ -5063,6 +5063,24 @@ mod tests {
         state.remove_service_type("_printer._tcp.local.");
         // Selection should move to nearest valid index
         assert!(state.selected_type == Some(1) || state.selected_type == Some(0));
+    }
+
+    #[test]
+    fn test_mark_service_offline_finds_escaped_instance_name() {
+        let mut state = create_test_app_state();
+        let info = mdns_sd::ServiceInfo::new(
+            "_aa._tcp.local.",
+            "a.a.a",
+            "host.local.",
+            "192.168.1.1",
+            443,
+            None::<std::collections::HashMap<String, String>>,
+        )
+        .unwrap();
+        state.add_or_update_service(ServiceEntry::from(info.as_resolved_service()));
+
+        assert!(state.mark_service_offline(&display_fullname(r"a\.a\.a._aa._tcp.local.")));
+        assert!(!state.services[0].online);
     }
 
     // Remove offline services tests
