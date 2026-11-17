@@ -2448,7 +2448,12 @@ fn strip_service_type_suffix<'a>(fullname: &'a str, service_type: &str) -> &'a s
             .get(prefix_len..)
             .is_some_and(|tail| tail.eq_ignore_ascii_case(service_type))
     {
-        fullname[..prefix_len].trim_end_matches('.')
+        // Keep any trailing dots that belong to the instance name itself:
+        // `fullname` is `instance + "." + service_type`, so only the single
+        // separator dot between them must be removed.
+        fullname[..prefix_len]
+            .strip_suffix('.')
+            .unwrap_or(&fullname[..prefix_len])
     } else {
         fullname.trim_end_matches('.')
     }

@@ -1389,6 +1389,6 @@ pub mod tests {
         let resolved = info.as_resolved_service();
 
         let entry = ServiceEntry::from(resolved);
-        assert_eq!(entry.fullname, "foo.bar._http._tcp.local.");
+        assert_eq!(entry.fullname, "foo.bar.._http._tcp.local.");
     }
 }
