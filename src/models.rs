@@ -478,6 +478,8 @@ impl From<ResolvedService> for ServiceEntry {
         let current_timestamp = current_timestamp_micros();
         Self {
             fullname: instance_name_unescaped(resolved_service.get_fullname())
+                .trim_end_matches('.')
+                .to_owned
                 + "."
                 + &resolved_service.ty_domain.to_ascii_lowercase(),
             host: resolved_service.get_hostname().to_string(),
