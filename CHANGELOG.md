@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.43.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.42.0...v1.43.0) (2026-11-17)
+
+
+### Features
+
+* unescape instance names with updated mdns-sd ([#814](https://github.com/hrzlgnm/mdns-tui-browser/issues/814)) ([b970fb2](https://github.com/hrzlgnm/mdns-tui-browser/commit/b970fb201185075476ae9cfb3115ccef520ebf59))
+
+
+### Bug Fixes
+
+* don't strip trailing dots from the instance ([#816](https://github.com/hrzlgnm/mdns-tui-browser/issues/816)) ([fcc94e8](https://github.com/hrzlgnm/mdns-tui-browser/commit/fcc94e8e8e3fe2f62c460ab88fe8947b1b0c37c9))
+* trim trailing dot of escaped instance before joining with dot ([#815](https://github.com/hrzlgnm/mdns-tui-browser/issues/815)) ([eed4297](https://github.com/hrzlgnm/mdns-tui-browser/commit/eed42970f4034d1f601de7a01c91e038a75c45f6))
+
+
+### Dependencies
+
+* lock file maintenance ([#812](https://github.com/hrzlgnm/mdns-tui-browser/issues/812)) ([95cee0a](https://github.com/hrzlgnm/mdns-tui-browser/commit/95cee0af20d1cbed20c132410349f2ff045797cd))
+* update dtolnay/rust-toolchain digest to 3900882 ([#808](https://github.com/hrzlgnm/mdns-tui-browser/issues/808)) ([7976ae3](https://github.com/hrzlgnm/mdns-tui-browser/commit/7976ae3651756e0477c80e459e0eb2f89e83b9a0))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 09fea71 ([#809](https://github.com/hrzlgnm/mdns-tui-browser/issues/809)) ([544f012](https://github.com/hrzlgnm/mdns-tui-browser/commit/544f012944325072b485752de6828d77c62bc47a))
+* update rust crate clap to v4.6.8 ([#810](https://github.com/hrzlgnm/mdns-tui-browser/issues/810)) ([294bfcf](https://github.com/hrzlgnm/mdns-tui-browser/commit/294bfcf3140af4b0791cb91965ddda95e5ad8983))
+* update rust crate mdns-sd to 0.22 ([#811](https://github.com/hrzlgnm/mdns-tui-browser/issues/811)) ([617f935](https://github.com/hrzlgnm/mdns-tui-browser/commit/617f935fb0763ce4a474f947dcaf8a8b09d0b8d4))
+* update rust crate nix to 0.32 ([#806](https://github.com/hrzlgnm/mdns-tui-browser/issues/806)) ([2f3389a](https://github.com/hrzlgnm/mdns-tui-browser/commit/2f3389a4e7e0bcb180a78d0754d6ae667ff9e73f))
+
 ## [1.42.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.41.2...v1.42.0) (2026-11-14)
 
 
