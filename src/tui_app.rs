@@ -1256,7 +1256,10 @@ impl AppState {
         }
     }
 
-    fn mark_service_offline(&mut self, fullname: &str) -> bool {
+    /// Marks the service with the given fullname, as reported by mdns-sd
+    /// in `ServiceRemoved`, offline. Returns whether a service was found.
+    fn mark_service_offline(&mut self, reported_fullname: &str) -> bool {
+        let fullname = display_fullname(reported_fullname);
         let service_idx = self.services.iter().position(|s| s.fullname == fullname);
 
         if let Some(idx) = service_idx {
@@ -1771,7 +1774,7 @@ async fn start_browsing_service_type(
             match service_event {
                 ServiceEvent::ServiceRemoved(_service_type, fullname) => {
                     let mut state = state_inner.write().await;
-                    if state.mark_service_offline(&display_fullname(&fullname)) {
+                    if state.mark_service_offline(&fullname) {
                         let _ = notification_sender_inner.send(Notification::ServiceChanged);
                     }
                 }
@@ -5065,24 +5068,6 @@ mod tests {
         assert!(state.selected_type == Some(1) || state.selected_type == Some(0));
     }
 
-    #[test]
-    fn test_mark_service_offline_finds_escaped_instance_name() {
-        let mut state = create_test_app_state();
-        let info = mdns_sd::ServiceInfo::new(
-            "_aa._tcp.local.",
-            "a.a.a",
-            "host.local.",
-            "192.168.1.1",
-            443,
-            None::<std::collections::HashMap<String, String>>,
-        )
-        .unwrap();
-        state.add_or_update_service(ServiceEntry::from(info.as_resolved_service()));
-
-        assert!(state.mark_service_offline(&display_fullname(r"a\.a\.a._aa._tcp.local.")));
-        assert!(!state.services[0].online);
-    }
-
     // Remove offline services tests
     #[test]
     fn test_remove_offline_services() {
@@ -7874,6 +7859,24 @@ mod tests {
         let updated_service = &state.services[0];
         assert!(!updated_service.online);
         assert!(updated_service.updated_at_micros > original_timestamp);
+    }
+
+    #[test]
+    fn test_mark_service_offline_finds_escaped_instance_name() {
+        let mut state = create_test_app_state();
+        let info = mdns_sd::ServiceInfo::new(
+            "_aa._tcp.local.",
+            "a.a.a",
+            "host.local.",
+            "192.168.1.1",
+            443,
+            None::<std::collections::HashMap<String, String>>,
+        )
+        .unwrap();
+        state.add_or_update_service(ServiceEntry::from(info.as_resolved_service()));
+
+        assert!(state.mark_service_offline(r"a\.a\.a._aa._tcp.local."));
+        assert!(!state.services[0].online);
     }
 
     #[test]
