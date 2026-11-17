@@ -478,8 +478,6 @@ impl From<ResolvedService> for ServiceEntry {
         let current_timestamp = current_timestamp_micros();
         Self {
             fullname: instance_name_unescaped(resolved_service.get_fullname())
-                .trim_end_matches('.')
-                .to_owned()
                 + "."
                 + &resolved_service.ty_domain.to_ascii_lowercase(),
             host: resolved_service.get_hostname().to_string(),
@@ -1344,7 +1342,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_service_entry_from_resolved_service_trims_trailing_dot_instance() {
+    fn test_service_entry_from_resolved_service_keeps_trailing_dot_instance() {
         let info = mdns_sd::ServiceInfo::new(
             "_http._tcp.local.",
             "ends.",
@@ -1357,7 +1355,7 @@ pub mod tests {
         let resolved = info.as_resolved_service();
 
         let entry = ServiceEntry::from(resolved);
-        assert_eq!(entry.fullname, "ends._http._tcp.local.");
+        assert_eq!(entry.fullname, "ends.._http._tcp.local.");
     }
 
     #[test]
@@ -1378,7 +1376,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_service_entry_from_resolved_service_trims_trailing_dot_after_internal_dots() {
+    fn test_service_entry_from_resolved_service_keeps_trailing_dot_after_internal_dots() {
         let info = mdns_sd::ServiceInfo::new(
             "_http._tcp.local.",
             "foo.bar.",
@@ -1391,6 +1389,6 @@ pub mod tests {
         let resolved = info.as_resolved_service();
 
         let entry = ServiceEntry::from(resolved);
-        assert_eq!(entry.fullname, "foo.bar._http._tcp.local.");
+        assert_eq!(entry.fullname, "foo.bar.._http._tcp.local.");
     }
 }
