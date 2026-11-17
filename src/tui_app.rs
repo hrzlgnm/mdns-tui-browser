@@ -21,8 +21,8 @@ use tokio::sync::RwLock;
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
-    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, format_ip_for_display,
-    format_service_addrs, local_interface_addrs,
+    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, display_fullname,
+    format_ip_for_display, format_service_addrs, local_interface_addrs,
 };
 use crate::popup::PopupState;
 use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
@@ -1256,7 +1256,10 @@ impl AppState {
         }
     }
 
-    fn mark_service_offline(&mut self, fullname: &str) -> bool {
+    /// Marks the service with the given fullname, as reported by mdns-sd
+    /// in `ServiceRemoved`, offline. Returns whether a service was found.
+    fn mark_service_offline(&mut self, reported_fullname: &str) -> bool {
+        let fullname = display_fullname(reported_fullname);
         let service_idx = self.services.iter().position(|s| s.fullname == fullname);
 
         if let Some(idx) = service_idx {
@@ -7856,6 +7859,24 @@ mod tests {
         let updated_service = &state.services[0];
         assert!(!updated_service.online);
         assert!(updated_service.updated_at_micros > original_timestamp);
+    }
+
+    #[test]
+    fn test_mark_service_offline_finds_escaped_instance_name() {
+        let mut state = create_test_app_state();
+        let info = mdns_sd::ServiceInfo::new(
+            "_aa._tcp.local.",
+            "a.a.a",
+            "host.local.",
+            "192.168.1.1",
+            443,
+            None::<std::collections::HashMap<String, String>>,
+        )
+        .unwrap();
+        state.add_or_update_service(ServiceEntry::from(info.as_resolved_service()));
+
+        assert!(state.mark_service_offline(r"a\.a\.a._aa._tcp.local."));
+        assert!(!state.services[0].online);
     }
 
     #[test]
