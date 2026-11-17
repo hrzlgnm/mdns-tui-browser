@@ -7,7 +7,7 @@ use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
-use mdns_sd::{ResolvedService, ScopedIp};
+use mdns_sd::{ResolvedService, ScopedIp, instance_name_unescaped};
 use serde::{Deserialize, Serialize};
 
 pub const MDNS_SD_META_SERVICE: &str = "_services._dns-sd._udp.local.";
@@ -477,7 +477,7 @@ impl From<ResolvedService> for ServiceEntry {
     fn from(resolved_service: ResolvedService) -> Self {
         let current_timestamp = current_timestamp_micros();
         Self {
-            fullname: resolved_service.get_fullname().to_string(),
+            fullname: instance_name_unescaped(resolved_service.get_fullname()),
             host: resolved_service.get_hostname().to_string(),
             service_type: resolved_service.ty_domain.to_ascii_lowercase(),
             subtype: resolved_service
