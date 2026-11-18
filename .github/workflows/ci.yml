@@ -166,6 +166,7 @@ jobs:
       branch: ${{ needs.changes.outputs.branch }}
       profile: debug
       upload_artifacts: ${{ github.event_name != 'pull_request' }}
+      full_matrix: ${{ github.event_name != 'pull_request' }}
 
   aur:
     name: AUR

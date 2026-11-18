@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: true
+      full_matrix:
+        description: "Build every target; false builds only the PR subset (one per OS family plus 32-bit arm)"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   sbom:
@@ -58,63 +63,48 @@ jobs:
           gzip -f "sbom-${{ matrix.family }}.spdx.json"
           gh release upload "$TAG_NAME" "sbom-${{ matrix.family }}.spdx.json.gz" --clobber
 
+  plan:
+    name: "🗺️ Plan build matrix"
+    runs-on: ubuntu-slim
+    outputs:
+      include: ${{ steps.matrix.outputs.include }}
+    steps:
+      - name: 🗺️ Select targets
+        id: matrix
+        shell: bash
+        env:
+          FULL: ${{ inputs.full_matrix }}
+          # Entries marked "pr" form the PR subset: one per OS family
+          # (sockets, interface enumeration and TUI suspend differ per OS)
+          # plus 32-bit arm. Pushes to main and releases build all of them.
+          TARGETS: |
+            [
+              {"os": "ubuntu-22.04", "symbol": "🐧 x86_64 glibc-2.35", "target": "x86_64-unknown-linux-gnu", "platform": "Linux-x86_64-glibc-2.35"},
+              {"os": "ubuntu-latest", "symbol": "🐧 x86_64 latest", "target": "x86_64-unknown-linux-gnu", "platform": "Linux-x86_64", "pr": true},
+              {"os": "ubuntu-latest", "symbol": "🐧 aarch64 glibc", "target": "aarch64-unknown-linux-gnu", "platform": "Linux-aarch64", "use_cross": true},
+              {"os": "ubuntu-latest", "symbol": "🐧 arm glibc", "target": "arm-unknown-linux-gnueabihf", "platform": "Linux-arm", "use_cross": true, "pr": true},
+              {"os": "ubuntu-latest", "symbol": "🐧 x86_64 musl", "target": "x86_64-unknown-linux-musl", "platform": "Linux-x86_64-musl", "use_cross": true},
+              {"os": "ubuntu-latest", "symbol": "🐧 aarch64 musl", "target": "aarch64-unknown-linux-musl", "platform": "Linux-aarch64-musl", "use_cross": true},
+              {"os": "ubuntu-latest", "symbol": "🐧 arm musl", "target": "arm-unknown-linux-musleabihf", "platform": "Linux-arm-musl", "use_cross": true},
+              {"os": "ubuntu-latest", "symbol": "🐧 riscv64 glibc", "target": "riscv64gc-unknown-linux-gnu", "platform": "Linux-riscv64", "use_cross": true},
+              {"os": "macos-latest", "symbol": "🍏 aarch64 latest", "target": "aarch64-apple-darwin", "platform": "macOS-aarch64", "pr": true},
+              {"os": "macos-latest", "symbol": "🍏 x86_64 latest", "target": "x86_64-apple-darwin", "platform": "macOS-x86_64"},
+              {"os": "windows-latest", "symbol": "🪟 x86_64 latest", "target": "x86_64-pc-windows-msvc", "platform": "Windows-x86_64", "pr": true}
+            ]
+        run: |
+          if [ "$FULL" = "true" ]; then
+            filter='.'
+          else
+            filter='map(select(.pr))'
+          fi
+          echo "include=$(jq -c "$filter | map(del(.pr))" <<<"$TARGETS")" >> "$GITHUB_OUTPUT"
+
   build:
-    needs: [sbom]
+    needs: [plan, sbom]
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: "ubuntu-22.04"
-            symbol: 🐧 x86_64 glibc-2.35
-            target: x86_64-unknown-linux-gnu
-            platform: Linux-x86_64-glibc-2.35
-          - os: "ubuntu-latest"
-            symbol: 🐧 x86_64 latest
-            target: x86_64-unknown-linux-gnu
-            platform: Linux-x86_64
-          - os: "ubuntu-latest"
-            symbol: 🐧 aarch64 glibc
-            target: aarch64-unknown-linux-gnu
-            platform: Linux-aarch64
-            use_cross: true
-          - os: "ubuntu-latest"
-            symbol: 🐧 arm glibc
-            target: arm-unknown-linux-gnueabihf
-            platform: Linux-arm
-            use_cross: true
-          - os: "ubuntu-latest"
-            symbol: 🐧 x86_64 musl
-            target: x86_64-unknown-linux-musl
-            platform: Linux-x86_64-musl
-            use_cross: true
-          - os: "ubuntu-latest"
-            symbol: 🐧 aarch64 musl
-            target: aarch64-unknown-linux-musl
-            platform: Linux-aarch64-musl
-            use_cross: true
-          - os: "ubuntu-latest"
-            symbol: 🐧 arm musl
-            target: arm-unknown-linux-musleabihf
-            platform: Linux-arm-musl
-            use_cross: true
-          - os: "ubuntu-latest"
-            symbol: 🐧 riscv64 glibc
-            target: riscv64gc-unknown-linux-gnu
-            platform: Linux-riscv64
-            use_cross: true
-          - os: "macos-latest"
-            symbol: 🍏 aarch64 latest
-            target: aarch64-apple-darwin
-            platform: macOS-aarch64
-          - os: "macos-latest"
-            symbol: 🍏 x86_64 latest
-            target: x86_64-apple-darwin
-            platform: macOS-x86_64
-          - os: "windows-latest"
-            symbol: 🪟 x86_64 latest
-            platform: Windows-x86_64
-            target: x86_64-pc-windows-msvc
-
+        include: ${{ fromJSON(needs.plan.outputs.include) }}
     name: ${{matrix.symbol}}🔨
     runs-on: ${{matrix.os}}
     steps:
@@ -144,7 +134,7 @@ jobs:
           crate: cargo-auditable
           version: 0.7.7
           locked: true
-          cache-key: ${{ github.job }}-${{ strategy.job-index }}
+          cache-key: ${{ github.job }}-${{ matrix.platform }}
 
       - name: 🛠️📦 cargo-deb
         if: contains(matrix.os, 'ubuntu') && inputs.profile == 'release'
@@ -153,7 +143,7 @@ jobs:
           crate: cargo-deb
           version: 3.8.0
           locked: true
-          cache-key: ${{ github.job }}-${{ strategy.job-index }}
+          cache-key: ${{ github.job }}-${{ matrix.platform }}
 
       - name: 🛠️ cross
         if: matrix.use_cross
@@ -162,7 +152,7 @@ jobs:
           crate: cross
           version: 0.2.5
           locked: true
-          cache-key: ${{ github.job }}-${{ strategy.job-index }}
+          cache-key: ${{ github.job }}-${{ matrix.platform }}
 
       - name: 🛠️🚀
         # sccache never sees compilations inside cross containers
