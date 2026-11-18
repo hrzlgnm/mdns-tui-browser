@@ -54,7 +54,7 @@ jobs:
         uses: ./.github/actions/setup-rust-cache
         with:
           components: clippy
-          targets: ${{ matrix.targets || '' }}
+          targets: ${{ matrix.targets }}
 
       # Clippy emits metadata only, which sccache cannot cache.
       - name: 📎 Run clippy and fail if any warnings
