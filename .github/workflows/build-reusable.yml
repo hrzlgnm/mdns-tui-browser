@@ -28,9 +28,15 @@ on:
         required: false
         type: boolean
         default: true
+      sbom:
+        description: "Create and scan the SBOM (always on for releases)"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   sbom:
+    if: inputs.sbom || inputs.tagName
     strategy:
       fail-fast: false
       matrix:
@@ -101,6 +107,8 @@ jobs:
 
   build:
     needs: [plan, sbom]
+    # Waits for the SBOM when it runs, builds without it when skipped.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.sbom.result == 'success' || needs.sbom.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +124,8 @@ jobs:
           persist-credentials: false
 
       - name: 📥 Download SBOM
+        # Only the release SBOM attestation below consumes it.
+        if: inputs.tagName
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sbom-${{ contains(matrix.os, 'windows') && 'windows' || 'unix' }}
