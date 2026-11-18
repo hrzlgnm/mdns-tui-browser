@@ -81,8 +81,9 @@ jobs:
         env:
           FULL: ${{ inputs.full_matrix }}
           # Entries marked "pr" form the PR subset: Linux, 32-bit arm and
-          # Windows. macOS runners are scarce, so PRs check macOS with
-          # clippy on Linux instead. Pushes to main and releases build all.
+          # Windows. On PRs the macOS test job already compiles and links
+          # for macOS, sparing a scarce macOS runner. Pushes to main and
+          # releases build all.
           TARGETS: |
             [
               {"os": "ubuntu-22.04", "symbol": "🐧 x86_64 glibc-2.35", "target": "x86_64-unknown-linux-gnu", "platform": "Linux-x86_64-glibc-2.35"},
