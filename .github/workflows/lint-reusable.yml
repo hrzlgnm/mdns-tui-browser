@@ -34,8 +34,12 @@ jobs:
           - os: "ubuntu-latest"
             symbol: 🐧
             platform: Linux
-          - os: "macos-latest"
+          # macOS runners are scarce: type-check the macOS cfg code on
+          # Linux. No C is compiled for Apple targets and nothing links,
+          # so no Apple SDK is needed.
+          - os: "ubuntu-latest"
             symbol: 🍏
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: "windows-latest"
             symbol: 🪟
     runs-on: ${{matrix.os}}
@@ -50,10 +54,15 @@ jobs:
         uses: ./.github/actions/setup-rust-cache
         with:
           components: clippy
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.targets }}
 
       # Clippy emits metadata only, which sccache cannot cache.
       - name: 📎 Run clippy and fail if any warnings
         shell: bash
+        env:
+          TARGETS: ${{ matrix.targets }}
         run: |
-          cargo clippy --tests -- -D warnings
+          target_args=()
+          IFS=',' read -ra targets <<<"$TARGETS"
+          for t in "${targets[@]}"; do target_args+=(--target "$t"); done
+          cargo clippy --tests "${target_args[@]}" -- -D warnings

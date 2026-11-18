@@ -24,7 +24,7 @@ on:
         type: boolean
         default: true
       full_matrix:
-        description: "Build every target; false builds only the PR subset (one per OS family plus 32-bit arm)"
+        description: "Build every target; false builds only the PR subset (Linux, 32-bit arm, Windows)"
         required: false
         type: boolean
         default: true
@@ -80,9 +80,10 @@ jobs:
         shell: bash
         env:
           FULL: ${{ inputs.full_matrix }}
-          # Entries marked "pr" form the PR subset: one per OS family
-          # (sockets, interface enumeration and TUI suspend differ per OS)
-          # plus 32-bit arm. Pushes to main and releases build all of them.
+          # Entries marked "pr" form the PR subset: Linux, 32-bit arm and
+          # Windows. On PRs the macOS test job already compiles and links
+          # for macOS, sparing a scarce macOS runner. Pushes to main and
+          # releases build all.
           TARGETS: |
             [
               {"os": "ubuntu-22.04", "symbol": "🐧 x86_64 glibc-2.35", "target": "x86_64-unknown-linux-gnu", "platform": "Linux-x86_64-glibc-2.35"},
@@ -93,7 +94,7 @@ jobs:
               {"os": "ubuntu-latest", "symbol": "🐧 aarch64 musl", "target": "aarch64-unknown-linux-musl", "platform": "Linux-aarch64-musl", "use_cross": true},
               {"os": "ubuntu-latest", "symbol": "🐧 arm musl", "target": "arm-unknown-linux-musleabihf", "platform": "Linux-arm-musl", "use_cross": true},
               {"os": "ubuntu-latest", "symbol": "🐧 riscv64 glibc", "target": "riscv64gc-unknown-linux-gnu", "platform": "Linux-riscv64", "use_cross": true},
-              {"os": "macos-latest", "symbol": "🍏 aarch64 latest", "target": "aarch64-apple-darwin", "platform": "macOS-aarch64", "pr": true},
+              {"os": "macos-latest", "symbol": "🍏 aarch64 latest", "target": "aarch64-apple-darwin", "platform": "macOS-aarch64"},
               {"os": "macos-latest", "symbol": "🍏 x86_64 latest", "target": "x86_64-apple-darwin", "platform": "macOS-x86_64"},
               {"os": "windows-latest", "symbol": "🪟 x86_64 latest", "target": "x86_64-pc-windows-msvc", "platform": "Windows-x86_64", "pr": true}
             ]
