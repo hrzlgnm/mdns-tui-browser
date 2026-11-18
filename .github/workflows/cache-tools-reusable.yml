@@ -53,14 +53,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # One macOS job warms both macOS targets: both build on the same
+          # arm64 runner, and macOS runners are scarce.
           - os: "macos-latest"
-            symbol: 🍏 aarch64 latest
-            target: aarch64-apple-darwin
-            platform: macOS-aarch64
-          - os: "macos-latest"
-            symbol: 🍏 x86_64 latest
-            target: x86_64-apple-darwin
-            platform: macOS-x86_64
+            symbol: 🍏 latest
+            target: aarch64-apple-darwin,x86_64-apple-darwin
+            platform: macOS
           - os: "windows-latest"
             symbol: 🪟 x86_64 latest
             platform: Windows-x86_64
