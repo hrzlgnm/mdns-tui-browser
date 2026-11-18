@@ -57,12 +57,12 @@ jobs:
           # arm64 runner, and macOS runners are scarce.
           - os: "macos-latest"
             symbol: 🍏 latest
-            target: aarch64-apple-darwin,x86_64-apple-darwin
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
             platform: macOS
           - os: "windows-latest"
             symbol: 🪟 x86_64 latest
             platform: Windows-x86_64
-            target: x86_64-pc-windows-msvc
+            targets: x86_64-pc-windows-msvc
 
     name: ${{matrix.symbol}}🔨
     runs-on: ${{matrix.os}}
@@ -76,7 +76,7 @@ jobs:
       - name: 🦀🚀
         uses: ./.github/actions/setup-rust-cache
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.targets }}
           save-cache: ${{ github.ref == 'refs/heads/main' }}
 
       - name: 🔧 Install cargo-auditable
