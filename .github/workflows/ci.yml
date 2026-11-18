@@ -75,6 +75,7 @@ jobs:
       aur: ${{ steps.filter.outputs.aur }}
       branch: ${{ steps.branch.outputs.branch }}
       code: ${{ steps.filter.outputs.code }}
+      deps: ${{ steps.filter.outputs.deps }}
       lint: ${{ steps.filter.outputs.lint }}
       tests: ${{ steps.filter.outputs.tests }}
       winget: ${{ steps.filter.outputs.winget }}
@@ -107,6 +108,10 @@ jobs:
               - 'packaging/linux/**'
               - 'packaging/macos/**'
               - 'packaging/windows/**'
+            deps:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/actions/sbom/**'
             lint:
               - '.github/workflows/lint-reusable.yml'
             tests:
@@ -166,6 +171,9 @@ jobs:
       branch: ${{ needs.changes.outputs.branch }}
       profile: debug
       upload_artifacts: ${{ github.event_name != 'pull_request' }}
+      full_matrix: ${{ github.event_name != 'pull_request' }}
+      # PRs scan the SBOM only when dependencies change; main always does.
+      sbom: ${{ github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true' }}
 
   aur:
     name: AUR
