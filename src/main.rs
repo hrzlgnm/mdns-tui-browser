@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #![forbid(unsafe_code)]
 
+mod daemon_status;
 mod input;
 mod models;
 mod popup;

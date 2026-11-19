@@ -64,7 +64,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🖥️ **Interactive TUI**: Full terminal UI with keyboard navigation
 - 📊 **Service Details**: Display IP address with interface info, port, and TXT records
 - 🔄 **Real-time Updates**: Async architecture for live service discovery
-- 📈 **Live Metrics**: Comprehensive ServiceDaemon and application metrics
+- 📈 **Live Metrics & Daemon Health**: ServiceDaemon and application metrics, socket and multicast-join status per interface, with a warning when binding or joining fails
 - 🎛️ **Service Type Filtering**: Browse different service types separately
 - 🔍 **Quick Filter**: Typo-tolerant fuzzy search across all service fields, plus status keywords
 - 📋 **Advanced Sorting**: Sort by Host, Type, Name, Port, Address, or Time in both directions
@@ -299,7 +299,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>n</kbd> - Clear current filter
 - <kbd>d</kbd> - Remove offline services
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
-- <kbd>m</kbd> - Show service metrics
+- <kbd>m</kbd> - Show daemon status (sockets, interfaces, multicast joins) and metrics
 - <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> - Suspend the application (Unix only)
 - <kbd>?</kbd> - Toggle help popup
@@ -436,6 +436,7 @@ This project follows a **Safe Rust Only** policy:
 ```
 src/
 ├── main.rs       # Entry point with CLI argument handling
+├── daemon_status.rs # Daemon socket/interface status and derived problems
 ├── tui_app.rs    # Main TUI application logic
 ├── input.rs      # User input handling (filter, service type)
 ├── popup.rs      # Popup UI components (help, metrics)

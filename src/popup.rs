@@ -13,6 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
+use crate::daemon_status::{DaemonSnapshot, IpVersion, RunningSnapshot};
 use crate::scroll::ScrollState;
 use crate::terminal::{colors_disabled, with_monochrome_selection};
 
@@ -141,6 +142,7 @@ impl MetricsPopup {
         key: KeyEvent,
         terminal_area: Rect,
         metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
     ) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
@@ -155,7 +157,7 @@ impl MetricsPopup {
 
                 self.scroll.visible_items = max_visible_lines;
 
-                let metrics_content = generate_metrics_content(metrics);
+                let metrics_content = generate_metrics_content(metrics, daemon);
                 let total_wrapped_lines =
                     calculate_wrapped_line_count(&metrics_content, inner_area.width) + 1;
 
@@ -175,9 +177,15 @@ impl MetricsPopup {
         }
     }
 
-    pub fn render(&self, f: &mut Frame, terminal_area: Rect, metrics: &BTreeMap<String, u64>) {
+    pub fn render(
+        &self,
+        f: &mut Frame,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
         if self.active {
-            render_metrics_popup(f, terminal_area, self.scroll.offset, metrics);
+            render_metrics_popup(f, terminal_area, self.scroll.offset, metrics, daemon);
         }
     }
 }
@@ -378,6 +386,7 @@ impl PopupState {
         key: KeyEvent,
         terminal_area: Rect,
         metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
     ) -> bool {
         if self.url_selection_popup.is_active() {
             self.url_selection_popup
@@ -386,16 +395,22 @@ impl PopupState {
             self.help_popup.handle_key_event(key, terminal_area)
         } else if self.metrics_popup.is_active() {
             self.metrics_popup
-                .handle_key_event(key, terminal_area, metrics)
+                .handle_key_event(key, terminal_area, metrics, daemon)
         } else {
             false
         }
     }
 
-    pub fn render(&self, f: &mut Frame, terminal_area: Rect, metrics: &BTreeMap<String, u64>) {
+    pub fn render(
+        &self,
+        f: &mut Frame,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
         self.help_popup.render(f);
         if !self.help_popup.is_active() {
-            self.metrics_popup.render(f, terminal_area, metrics);
+            self.metrics_popup.render(f, terminal_area, metrics, daemon);
         }
         self.url_selection_popup.render(f, terminal_area);
     }
@@ -467,8 +482,9 @@ pub fn render_metrics_popup(
     terminal_area: Rect,
     metrics_scroll_offset: usize,
     metrics: &BTreeMap<String, u64>,
+    daemon: Option<&DaemonSnapshot>,
 ) {
-    let metrics_content = generate_metrics_content(metrics);
+    let metrics_content = generate_metrics_content(metrics, daemon);
 
     let popup_area = create_centered_popup(terminal_area, 60, 70);
 
@@ -494,7 +510,7 @@ pub fn render_metrics_popup(
 
     let border_block = Block::default()
         .borders(Borders::ALL)
-        .title("Service Metrics")
+        .title("Daemon Status & Metrics")
         .title_style(ratatui::style::Style::default().add_modifier(ratatui::style::Modifier::BOLD));
     f.render_widget(border_block, popup_area);
 }
@@ -524,7 +540,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         ),
         Line::from("   d                 - Remove offline services"),
         Line::from("   D                 - Clear stale service types"),
-        Line::from("   m                 - Show service metrics"),
+        Line::from("   m                 - Show daemon status and metrics"),
         Line::from("   /                 - Enter quick filter mode"),
         Line::from("   n                 - Clear current filter"),
         Line::from("   a                 - Enter add new service type mode"),
@@ -570,16 +586,84 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
     lines
 }
 
-pub fn generate_metrics_content(metrics: &BTreeMap<String, u64>) -> Vec<Line<'static>> {
+/// Lines describing the daemon's sockets and interfaces, with failures
+/// highlighted.
+fn generate_daemon_status_content(daemon: &DaemonSnapshot) -> Vec<Line<'static>> {
+    let failure_style = Style::default().fg(Color::Yellow);
+    let running = match daemon {
+        DaemonSnapshot::Running(running) => running,
+        DaemonSnapshot::Shutdown => {
+            return vec![Line::styled("   Daemon has SHUT DOWN", failure_style)];
+        }
+    };
+    let mut lines = Vec::new();
+    for version in [IpVersion::V4, IpVersion::V6] {
+        lines.push(match running.bind_error(version) {
+            None => Line::from(format!("   {} socket: bound", version.label())),
+            Some(err) => Line::styled(
+                format!("   {} socket: FAILED ({})", version.label(), err),
+                failure_style,
+            ),
+        });
+    }
+    lines.extend(generate_interface_lines(running, failure_style));
+    lines
+}
+
+fn generate_interface_lines(running: &RunningSnapshot, failure_style: Style) -> Vec<Line<'static>> {
+    if running.interfaces.is_empty() {
+        return vec![Line::from("   Interfaces: none enabled")];
+    }
+    let mut lines = vec![Line::from("   Interfaces:")];
+    for intf in &running.interfaces {
+        lines.push(Line::from(format!("     {} (#{})", intf.name, intf.index)));
+        for version in [IpVersion::V4, IpVersion::V6] {
+            let Some(membership) = intf.membership(version) else {
+                continue;
+            };
+            let addrs = membership
+                .addrs
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            lines.push(match &membership.join_error {
+                None => Line::from(format!("       {} {}: joined", version.label(), addrs)),
+                Some(err) => Line::styled(
+                    format!(
+                        "       {} {}: JOIN FAILED ({})",
+                        version.label(),
+                        addrs,
+                        err
+                    ),
+                    failure_style,
+                ),
+            });
+        }
+    }
+    lines
+}
+
+pub fn generate_metrics_content(
+    metrics: &BTreeMap<String, u64>,
+    daemon: Option<&DaemonSnapshot>,
+) -> Vec<Line<'static>> {
     let mut metrics_content: Vec<Line> = vec![
         Line::from(""),
         Line::from(" Metrics Controls:"),
         Line::from("   ↑/↓               - Scroll this metrics content"),
         Line::from("   Any other key     - Close this metrics popup"),
         Line::from(" "),
-        Line::from(" Service Discovery Metrics:"),
-        Line::from(" "),
     ];
+
+    if let Some(daemon) = daemon {
+        metrics_content.push(Line::from(" Daemon Status:"));
+        metrics_content.extend(generate_daemon_status_content(daemon));
+        metrics_content.push(Line::from(" "));
+    }
+
+    metrics_content.push(Line::from(" Service Discovery Metrics:"));
+    metrics_content.push(Line::from(" "));
 
     let mut custom_metrics = Vec::new();
     let mut daemon_metrics = Vec::new();
@@ -859,7 +943,7 @@ mod tests {
     #[test]
     fn test_generate_metrics_content_empty() {
         let metrics: BTreeMap<String, u64> = BTreeMap::new();
-        let content = generate_metrics_content(&metrics);
+        let content = generate_metrics_content(&metrics, None);
         assert!(!content.is_empty());
         assert!(
             content
@@ -873,8 +957,81 @@ mod tests {
         let mut metrics = BTreeMap::new();
         metrics.insert("test_metric".to_string(), 42);
         metrics.insert("daemon_events_received".to_string(), 100);
-        let content = generate_metrics_content(&metrics);
+        let content = generate_metrics_content(&metrics, None);
         assert!(!content.is_empty());
+    }
+
+    fn content_text(content: &[Line]) -> Vec<String> {
+        content.iter().map(|line| line.to_string()).collect()
+    }
+
+    #[test]
+    fn test_generate_metrics_content_without_daemon_omits_status_section() {
+        let content = generate_metrics_content(&BTreeMap::new(), None);
+        assert!(
+            !content_text(&content)
+                .iter()
+                .any(|line| line.contains("Daemon Status"))
+        );
+    }
+
+    #[test]
+    fn test_generate_metrics_content_with_daemon_lists_sockets_and_interfaces() {
+        use crate::daemon_status::{InterfaceSnapshot, MembershipSnapshot};
+
+        let daemon = DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: Some("Address family not supported".to_string()),
+            interfaces: vec![InterfaceSnapshot {
+                name: "wlan0".to_string(),
+                index: 3,
+                ipv4: Some(MembershipSnapshot {
+                    addrs: vec!["10.0.0.7".parse().unwrap()],
+                    join_error: Some("No such device".to_string()),
+                }),
+                ipv6: None,
+            }],
+        });
+        let text = content_text(&generate_metrics_content(&BTreeMap::new(), Some(&daemon)));
+        for expected in [
+            " Daemon Status:",
+            "   IPv4 socket: bound",
+            "   IPv6 socket: FAILED (Address family not supported)",
+            "   Interfaces:",
+            "     wlan0 (#3)",
+            "       IPv4 10.0.0.7: JOIN FAILED (No such device)",
+        ] {
+            assert!(
+                text.iter().any(|line| line == expected),
+                "missing {expected:?}"
+            );
+        }
+        let status_pos = text.iter().position(|l| l == " Daemon Status:");
+        let metrics_pos = text.iter().position(|l| l == " Service Discovery Metrics:");
+        assert!(status_pos < metrics_pos);
+    }
+
+    #[test]
+    fn test_generate_metrics_content_shutdown_daemon_shown() {
+        let text = content_text(&generate_metrics_content(
+            &BTreeMap::new(),
+            Some(&DaemonSnapshot::Shutdown),
+        ));
+        assert!(text.iter().any(|line| line == "   Daemon has SHUT DOWN"));
+    }
+
+    #[test]
+    fn test_generate_metrics_content_no_interfaces_says_none_enabled() {
+        let daemon = DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: None,
+            interfaces: Vec::new(),
+        });
+        let text = content_text(&generate_metrics_content(&BTreeMap::new(), Some(&daemon)));
+        assert!(
+            text.iter()
+                .any(|line| line == "   Interfaces: none enabled")
+        );
     }
 
     #[test]
@@ -931,7 +1088,7 @@ mod tests {
             crossterm::event::KeyCode::Down,
             crossterm::event::KeyModifiers::NONE,
         );
-        let result = popup.handle_key_event(key, terminal_area, &metrics);
+        let result = popup.handle_key_event(key, terminal_area, &metrics, None);
         assert!(result);
         assert!(popup.is_active());
     }
@@ -948,7 +1105,7 @@ mod tests {
             crossterm::event::KeyCode::Char('x'),
             crossterm::event::KeyModifiers::NONE,
         );
-        let result = popup.handle_key_event(key, terminal_area, &metrics);
+        let result = popup.handle_key_event(key, terminal_area, &metrics, None);
         assert!(result);
         assert!(!popup.is_active());
         assert_eq!(popup.scroll.offset, 0);
@@ -1096,7 +1253,7 @@ mod tests {
             popup.scroll.offset = test_case.initial_offset;
 
             let terminal_area = Rect::new(0, 0, 80, 24);
-            popup.handle_key_event(test_case.key_event, terminal_area, &metrics);
+            popup.handle_key_event(test_case.key_event, terminal_area, &metrics, None);
 
             if let Some(expected_offset) = test_case.expected_offset {
                 assert_eq!(
@@ -1344,7 +1501,7 @@ mod tests {
         let metrics = BTreeMap::new();
 
         let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
-        let result = state.handle_key_event(key, terminal_area, &metrics);
+        let result = state.handle_key_event(key, terminal_area, &metrics, None);
 
         assert!(result);
         assert_eq!(state.url_selection_popup.selected_index, 1);
@@ -1359,7 +1516,7 @@ mod tests {
         let metrics = BTreeMap::new();
 
         let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
-        let result = state.handle_key_event(key, terminal_area, &metrics);
+        let result = state.handle_key_event(key, terminal_area, &metrics, None);
 
         assert!(result);
         assert_eq!(state.url_selection_popup.selected_index, 1);
