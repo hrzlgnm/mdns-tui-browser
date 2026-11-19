@@ -367,6 +367,13 @@ impl PopupState {
         }
     }
 
+    /// Whether any popup is open and takes key input.
+    pub fn any_active(&self) -> bool {
+        self.help_popup.is_active()
+            || self.metrics_popup.is_active()
+            || self.url_selection_popup.is_active()
+    }
+
     pub fn toggle_help(&mut self) {
         self.help_popup.toggle();
     }

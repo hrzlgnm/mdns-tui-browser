@@ -882,10 +882,22 @@ impl AppState {
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
-        if let Ok(mut msg) = self.status_message.try_lock()
-            && !msg.is_empty()
-        {
-            msg.clear();
+        let dismissed = match self.status_message.try_lock() {
+            Ok(mut msg) if !msg.is_empty() => {
+                msg.clear();
+                true
+            }
+            _ => false,
+        };
+        if dismissed {
+            // Daemon warnings say "press m for details", so `m` also opens
+            // the metrics popup instead of needing a second press.
+            if key.code == KeyCode::Char('m')
+                && !self.is_input_active()
+                && !self.popup_state.any_active()
+            {
+                self.toggle_metrics();
+            }
             return true;
         }
         if self.popup_state.help_popup.active
@@ -5196,6 +5208,57 @@ mod tests {
         assert!(state.popup_state.metrics_popup.active);
 
         assert!(state.handle_key_event(key));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    fn show_status_message(state: &AppState, msg: &str) {
+        *state.status_message.try_lock().unwrap() = msg.to_string();
+    }
+
+    fn status_message_is_empty(state: &AppState) -> bool {
+        state.status_message.try_lock().unwrap().is_empty()
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_status_message_dismisses_and_opens_metrics() {
+        let mut state = create_test_app_state();
+        show_status_message(&state, "mDNS: problem; press m for details");
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_other_key_on_status_message_only_dismisses() {
+        let mut state = create_test_app_state();
+        show_status_message(&state, "some message");
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('x'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_status_message_keeps_open_metrics_popup() {
+        let mut state = create_test_app_state();
+        state.popup_state.metrics_popup.active = true;
+        show_status_message(&state, "mDNS: problem; press m for details");
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_status_message_over_help_only_dismisses() {
+        let mut state = create_test_app_state();
+        state.popup_state.help_popup.active = true;
+        show_status_message(&state, "mDNS: problem; press m for details");
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(state.popup_state.help_popup.active);
         assert!(!state.popup_state.metrics_popup.active);
     }
 
