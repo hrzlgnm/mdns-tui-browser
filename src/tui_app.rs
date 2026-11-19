@@ -18,7 +18,7 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
-use crate::daemon_status::{DaemonSnapshot, Problem, problems_transition_message};
+use crate::daemon_status::{DETAILS_HINT, DaemonSnapshot, Problem, problems_transition_message};
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
@@ -884,19 +884,17 @@ impl AppState {
         // Dismiss status message on any key press if it's displayed
         let dismissed = match self.status_message.try_lock() {
             Ok(mut msg) if !msg.is_empty() => {
+                let offers_details = msg.ends_with(DETAILS_HINT);
                 msg.clear();
-                true
+                Some(offers_details)
             }
-            _ => false,
+            _ => None,
         };
-        if dismissed {
-            // Daemon warnings say "press m for details", so `m` also opens
-            // the metrics popup instead of needing a second press.
-            if key.code == KeyCode::Char('m')
-                && !self.is_input_active()
-                && !self.popup_state.any_active()
-            {
-                self.toggle_metrics();
+        if let Some(offers_details) = dismissed {
+            // Keep the hint's promise whatever is on screen: an active input
+            // stays active beneath the popup and resumes once it closes.
+            if offers_details && key.code == KeyCode::Char('m') {
+                self.popup_state.show_only_metrics();
             }
             return true;
         }
@@ -5214,10 +5212,12 @@ mod tests {
         state.status_message.try_lock().unwrap().is_empty()
     }
 
+    const DAEMON_WARNING: &str = "mDNS: IPv4 socket failed to bind; press m for details";
+
     #[test]
-    fn test_handle_key_event_m_on_status_message_dismisses_and_opens_metrics() {
+    fn test_handle_key_event_m_on_daemon_warning_dismisses_and_opens_metrics() {
         let mut state = create_test_app_state();
-        show_status_message(&state, "mDNS: problem; press m for details");
+        show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
@@ -5225,9 +5225,19 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_key_event_other_key_on_status_message_only_dismisses() {
+    fn test_handle_key_event_m_on_other_status_message_only_dismisses() {
         let mut state = create_test_app_state();
-        show_status_message(&state, "some message");
+        show_status_message(&state, "Failed to open URL: no browser");
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_other_key_on_daemon_warning_only_dismisses() {
+        let mut state = create_test_app_state();
+        show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('x'))));
         assert!(status_message_is_empty(&state));
@@ -5235,10 +5245,10 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_key_event_m_on_status_message_keeps_open_metrics_popup() {
+    fn test_handle_key_event_m_on_daemon_warning_keeps_open_metrics_popup() {
         let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
-        show_status_message(&state, "mDNS: problem; press m for details");
+        show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
@@ -5246,27 +5256,47 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_key_event_m_on_status_message_during_input_only_dismisses() {
+    fn test_handle_key_event_m_on_daemon_warning_over_help_replaces_it_with_metrics() {
         let mut state = create_test_app_state();
-        state.filter_input.activate();
-        show_status_message(&state, "mDNS: problem; press m for details");
+        state.popup_state.help_popup.active = true;
+        show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
-        assert!(!state.popup_state.metrics_popup.active);
-        assert_eq!(state.filter_input.text(), "");
+        assert!(!state.popup_state.help_popup.active);
+        assert!(state.popup_state.metrics_popup.active);
     }
 
     #[test]
-    fn test_handle_key_event_m_on_status_message_over_help_only_dismisses() {
+    fn test_handle_key_event_m_on_daemon_warning_over_url_selection_replaces_it() {
         let mut state = create_test_app_state();
-        state.popup_state.help_popup.active = true;
-        show_status_message(&state, "mDNS: problem; press m for details");
+        state
+            .popup_state
+            .show_url_selection(vec!["http://a".to_string(), "http://b".to_string()]);
+        show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
-        assert!(status_message_is_empty(&state));
-        assert!(state.popup_state.help_popup.active);
+        assert!(!state.popup_state.url_selection_popup.is_active());
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_warning_during_input_opens_metrics_then_resumes_input() {
+        let mut state = create_test_app_state();
+        state.filter_input.activate();
+        show_status_message(&state, DAEMON_WARNING);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(state.popup_state.metrics_popup.active);
+        assert!(state.filter_input.is_active());
+        assert_eq!(state.filter_input.text(), "");
+
+        // Closing the popup returns to the untouched input.
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Esc)));
         assert!(!state.popup_state.metrics_popup.active);
+        assert!(state.filter_input.is_active());
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('a'))));
+        assert_eq!(state.filter_input.text(), "a");
     }
 
     #[test]

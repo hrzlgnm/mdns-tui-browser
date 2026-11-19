@@ -207,6 +207,10 @@ impl DaemonSnapshot {
     }
 }
 
+/// Ends status messages whose details the `m` key shows; the key handler
+/// recognizes such messages by it.
+pub const DETAILS_HINT: &str = "press m for details";
+
 /// The status message to show when the daemon's problems change from
 /// `previous` to `current`, or `None` when nothing worth announcing changed.
 ///
@@ -222,7 +226,7 @@ pub fn problems_transition_message(previous: &[Problem], current: &[Problem]) ->
             } else {
                 format!(" (+{} more)", rest.len())
             };
-            Some(format!("mDNS: {first}{more}; press m for details"))
+            Some(format!("mDNS: {first}{more}; {DETAILS_HINT}"))
         }
         None if current.is_empty() && !previous.is_empty() => {
             Some("mDNS: all sockets and multicast joins are working again".to_string())
