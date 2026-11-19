@@ -146,21 +146,16 @@ impl MetricsPopup {
     ) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                let popup_area = create_centered_popup(terminal_area, 60, 70);
-                let inner_area = Rect::new(
-                    popup_area.x + 1,
-                    popup_area.y + 1,
-                    popup_area.width.saturating_sub(2),
-                    popup_area.height.saturating_sub(2),
-                );
+                let (_, inner_area) = metrics_popup_areas(terminal_area);
                 let max_visible_lines = inner_area.height as usize;
 
                 self.scroll.visible_items = max_visible_lines;
 
                 let metrics_content = generate_metrics_content(metrics, daemon);
-                let total_wrapped_lines =
-                    calculate_wrapped_line_count(&metrics_content, inner_area.width) + 1;
+                let total_wrapped_lines = metrics_content_height(&metrics_content, inner_area);
 
+                self.scroll.offset =
+                    clamp_metrics_scroll(self.scroll.offset, &metrics_content, inner_area);
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
@@ -484,6 +479,34 @@ pub fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     f.render_widget(border_block, popup_area);
 }
 
+/// The metrics popup's outer area and the content area inside its border.
+fn metrics_popup_areas(terminal_area: Rect) -> (Rect, Rect) {
+    let popup_area = create_centered_popup(terminal_area, 60, 70);
+    let inner_area = Rect::new(
+        popup_area.x + 1,
+        popup_area.y + 1,
+        popup_area.width.saturating_sub(2),
+        popup_area.height.saturating_sub(2),
+    );
+    (popup_area, inner_area)
+}
+
+/// Height of the wrapped metrics content, plus one line of bottom padding.
+fn metrics_content_height(content: &[Line], inner_area: Rect) -> usize {
+    calculate_wrapped_line_count(content, inner_area.width) + 1
+}
+
+/// Limits `offset` to the last position that still shows content.
+///
+/// The content shrinks between polls when the daemon drops an interface,
+/// and a smaller terminal wraps it differently, so an offset that was
+/// valid when scrolled can point past the end and blank the popup.
+fn clamp_metrics_scroll(offset: usize, content: &[Line], inner_area: Rect) -> usize {
+    let max_offset =
+        metrics_content_height(content, inner_area).saturating_sub(inner_area.height as usize);
+    offset.min(max_offset)
+}
+
 pub fn render_metrics_popup(
     f: &mut Frame,
     terminal_area: Rect,
@@ -493,7 +516,7 @@ pub fn render_metrics_popup(
 ) {
     let metrics_content = generate_metrics_content(metrics, daemon);
 
-    let popup_area = create_centered_popup(terminal_area, 60, 70);
+    let (popup_area, inner_area) = metrics_popup_areas(terminal_area);
 
     f.render_widget(ratatui::widgets::Clear, popup_area);
 
@@ -501,12 +524,8 @@ pub fn render_metrics_popup(
         .style(ratatui::style::Style::default().bg(ratatui::style::Color::Black));
     f.render_widget(background_block, popup_area);
 
-    let inner_area = Rect::new(
-        popup_area.x + 1,
-        popup_area.y + 1,
-        popup_area.width.saturating_sub(2),
-        popup_area.height.saturating_sub(2),
-    );
+    let metrics_scroll_offset =
+        clamp_metrics_scroll(metrics_scroll_offset, &metrics_content, inner_area);
 
     let metrics_paragraph = Paragraph::new(metrics_content)
         .style(ratatui::style::Style::default().fg(Color::White))
@@ -1018,6 +1037,98 @@ mod tests {
         let status_pos = text.iter().position(|l| l == " Daemon Status:");
         let metrics_pos = text.iter().position(|l| l == " Service Discovery Metrics:");
         assert!(status_pos < metrics_pos);
+    }
+
+    fn daemon_with_interfaces(count: u32) -> DaemonSnapshot {
+        DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: None,
+            interfaces: (0..count)
+                .map(|index| InterfaceSnapshot {
+                    name: format!("veth{index}"),
+                    index,
+                    ipv4: Some(MembershipSnapshot {
+                        addrs: vec![format!("10.0.{}.1", index % 256).parse().unwrap()],
+                        join_error: None,
+                    }),
+                    ipv6: None,
+                })
+                .collect(),
+        })
+    }
+
+    #[test]
+    fn test_clamp_metrics_scroll_shrunk_content_limits_offset() {
+        let terminal_area = Rect::new(0, 0, 100, 40);
+        let (_, inner_area) = metrics_popup_areas(terminal_area);
+        let metrics = BTreeMap::new();
+
+        let large = generate_metrics_content(&metrics, Some(&daemon_with_interfaces(100)));
+        let scrolled_to_end = clamp_metrics_scroll(usize::MAX, &large, inner_area);
+        assert!(scrolled_to_end > 0);
+        assert_eq!(
+            clamp_metrics_scroll(scrolled_to_end, &large, inner_area),
+            scrolled_to_end
+        );
+
+        let small = generate_metrics_content(&metrics, Some(&daemon_with_interfaces(1)));
+        assert_eq!(clamp_metrics_scroll(scrolled_to_end, &small, inner_area), 0);
+    }
+
+    #[test]
+    fn test_metrics_popup_up_after_shrink_scrolls_from_last_valid_offset() {
+        let terminal_area = Rect::new(0, 0, 100, 40);
+        let metrics = BTreeMap::new();
+        let large = daemon_with_interfaces(100);
+        let mut popup = MetricsPopup::new();
+        popup.active = true;
+        for _ in 0..500 {
+            popup.handle_key_event(
+                KeyEvent::from(KeyCode::Down),
+                terminal_area,
+                &metrics,
+                Some(&large),
+            );
+        }
+        assert!(popup.scroll.offset > 0);
+
+        let medium = daemon_with_interfaces(10);
+        let (_, inner_area) = metrics_popup_areas(terminal_area);
+        let medium_max = clamp_metrics_scroll(
+            usize::MAX,
+            &generate_metrics_content(&metrics, Some(&medium)),
+            inner_area,
+        );
+        assert!(medium_max > 0 && medium_max < popup.scroll.offset);
+
+        popup.handle_key_event(
+            KeyEvent::from(KeyCode::Up),
+            terminal_area,
+            &metrics,
+            Some(&medium),
+        );
+        assert_eq!(popup.scroll.offset, medium_max - 1);
+    }
+
+    #[test]
+    fn test_render_metrics_popup_scrolled_past_shrunk_content_stays_visible() {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
+        let small = daemon_with_interfaces(1);
+        terminal
+            .draw(|f| {
+                render_metrics_popup(f, f.area(), 1_000, &BTreeMap::new(), Some(&small));
+            })
+            .unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(rendered.contains("Metrics Controls"));
+        assert!(rendered.contains("veth0"));
     }
 
     #[test]
