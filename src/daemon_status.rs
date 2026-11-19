@@ -12,7 +12,9 @@ use mdns_sd::{DaemonStatus, Membership, RunningState, SocketState};
 /// An IP version the daemon runs a multicast socket for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpVersion {
+    /// IPv4.
     V4,
+    /// IPv6.
     V6,
 }
 
@@ -29,7 +31,9 @@ impl IpVersion {
 /// Multicast group membership of one IP version on an interface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MembershipSnapshot {
+    /// Addresses of this IP version on the interface.
     pub addrs: Vec<IpAddr>,
+    /// Error from the last failed join attempt; `None` when joined.
     pub join_error: Option<String>,
 }
 
@@ -45,9 +49,13 @@ impl From<&Membership> for MembershipSnapshot {
 /// An interface the daemon has enabled.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterfaceSnapshot {
+    /// Interface name, e.g. `eth0`.
     pub name: String,
+    /// Interface index assigned by the OS.
     pub index: u32,
+    /// IPv4 membership, `None` without IPv4 addresses.
     pub ipv4: Option<MembershipSnapshot>,
+    /// IPv6 membership, `None` without IPv6 addresses.
     pub ipv6: Option<MembershipSnapshot>,
 }
 
@@ -67,8 +75,11 @@ impl InterfaceSnapshot {
 /// so the logic built on it stays testable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunningSnapshot {
+    /// Error from binding the IPv4 socket; `None` when bound.
     pub ipv4_bind_error: Option<String>,
+    /// Error from binding the IPv6 socket; `None` when bound.
     pub ipv6_bind_error: Option<String>,
+    /// Enabled interfaces, ordered by interface index.
     pub interfaces: Vec<InterfaceSnapshot>,
 }
 
@@ -108,7 +119,9 @@ impl From<&RunningState> for RunningSnapshot {
 /// What the daemon reported about itself on the last status request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DaemonSnapshot {
+    /// The daemon runs with this setup.
     Running(RunningSnapshot),
+    /// The daemon has shut down.
     Shutdown,
 }
 

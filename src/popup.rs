@@ -644,6 +644,8 @@ fn generate_interface_lines(running: &RunningSnapshot, failure_style: Style) -> 
     lines
 }
 
+/// Lines of the metrics popup: controls, the daemon status when known,
+/// then application and daemon metrics.
 pub fn generate_metrics_content(
     metrics: &BTreeMap<String, u64>,
     daemon: Option<&DaemonSnapshot>,
@@ -725,6 +727,8 @@ pub fn create_centered_popup(parent_area: Rect, width_percent: u16, height_perce
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::daemon_status::{InterfaceSnapshot, MembershipSnapshot};
 
     #[test]
     fn test_calculate_wrapped_line_count_empty_slice() {
@@ -977,8 +981,6 @@ mod tests {
 
     #[test]
     fn test_generate_metrics_content_with_daemon_lists_sockets_and_interfaces() {
-        use crate::daemon_status::{InterfaceSnapshot, MembershipSnapshot};
-
         let daemon = DaemonSnapshot::Running(RunningSnapshot {
             ipv4_bind_error: None,
             ipv6_bind_error: Some("Address family not supported".to_string()),
