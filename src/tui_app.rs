@@ -18,7 +18,7 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
-use crate::daemon_status::{DETAILS_HINT, DaemonSnapshot, Problem, problems_transition_message};
+use crate::daemon_status::{DaemonSnapshot, Problem, problems_transition_message};
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
@@ -188,6 +188,23 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     &items[start..end]
 }
 
+/// A message shown over the UI until the next key press dismisses it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StatusMessage {
+    text: String,
+    /// Whether dismissing it with `m` opens the daemon details popup.
+    offers_details: bool,
+}
+
+impl From<String> for StatusMessage {
+    fn from(text: String) -> Self {
+        Self {
+            text,
+            offers_details: false,
+        }
+    }
+}
+
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -224,7 +241,7 @@ struct AppState {
     /// `service_types` (lowercase canonical): the daemon matches keys
     /// exactly, so mixed-case wire names are browsed verbatim.
     active_browse_keys: HashSet<String>,
-    status_message: Arc<tokio::sync::Mutex<String>>,
+    status_message: Arc<tokio::sync::Mutex<Option<StatusMessage>>>,
     disable_ipv4: bool,
     disable_ipv6: bool,
     interfaces: Option<Vec<String>>,
@@ -314,7 +331,7 @@ impl AppState {
             user_service_types,
             pending_service_types: HashSet::new(),
             active_browse_keys: HashSet::new(),
-            status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
+            status_message: Arc::new(tokio::sync::Mutex::new(None)),
             disable_ipv4,
             disable_ipv6,
             interfaces,
@@ -882,18 +899,15 @@ impl AppState {
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
-        let dismissed = match self.status_message.try_lock() {
-            Ok(mut msg) if !msg.is_empty() => {
-                let offers_details = msg.ends_with(DETAILS_HINT);
-                msg.clear();
-                Some(offers_details)
-            }
-            _ => None,
-        };
-        if let Some(offers_details) = dismissed {
+        let dismissed = self
+            .status_message
+            .try_lock()
+            .ok()
+            .and_then(|mut msg| msg.take());
+        if let Some(dismissed) = dismissed {
             // Keep the hint's promise whatever is on screen: an active input
             // stays active beneath the popup and resumes once it closes.
-            if offers_details && key.code == KeyCode::Char('m') {
+            if dismissed.offers_details && key.code == KeyCode::Char('m') {
                 self.popup_state.show_only_metrics();
             }
             return true;
@@ -914,7 +928,7 @@ impl AppState {
                 if let Err(err) = open::that_detached(&release_url)
                     && let Ok(mut msg) = self.status_message.try_lock()
                 {
-                    *msg = format!("Failed to open browser: {}", err);
+                    *msg = Some(format!("Failed to open browser: {}", err).into());
                 }
             }
             if self.popup_state.url_selection_popup.is_active()
@@ -923,7 +937,7 @@ impl AppState {
                 && let Err(e) = open::that_detached(&url)
                 && let Ok(mut msg) = self.status_message.try_lock()
             {
-                *msg = format!("Failed to open URL: {}", e);
+                *msg = Some(format!("Failed to open URL: {}", e).into());
             }
             true
         } else if self.is_input_active()
@@ -1074,7 +1088,7 @@ impl AppState {
                             Err(e) => format!("Failed to save JSON dump: {}", e),
                         }
                     };
-                    *state_clone.status_message.lock().await = result_str;
+                    *state_clone.status_message.lock().await = Some(result_str.into());
                 });
                 true
             }
@@ -1221,8 +1235,13 @@ impl AppState {
             return false;
         }
         let problems = snapshot.problems(self.disable_ipv4, self.disable_ipv6);
-        if let Some(msg) = problems_transition_message(&self.daemon_problems, &problems) {
-            *self.status_message.lock().await = msg;
+        if let Some(text) = problems_transition_message(&self.daemon_problems, &problems) {
+            // Only warnings carry the "press m for details" hint.
+            let offers_details = !problems.is_empty();
+            *self.status_message.lock().await = Some(StatusMessage {
+                text,
+                offers_details,
+            });
         }
         self.daemon_problems = problems;
         self.daemon_snapshot = Some(snapshot);
@@ -1596,14 +1615,14 @@ impl AppState {
             match urls.len() {
                 0 => {
                     if let Ok(mut msg) = self.status_message.try_lock() {
-                        *msg = "No URL found for this service".to_string();
+                        *msg = Some("No URL found for this service".to_string().into());
                     }
                 }
                 1 => {
                     if let Err(e) = open::that_detached(&urls[0])
                         && let Ok(mut msg) = self.status_message.try_lock()
                     {
-                        *msg = format!("Failed to open URL: {}", e);
+                        *msg = Some(format!("Failed to open URL: {}", e).into());
                     }
                 }
                 _ => {
@@ -1903,7 +1922,7 @@ async fn handle_browse_failure(
     state.update_metric(failure_metric_key);
     if display_failure {
         let msg = format!("Failed to browse {}: {}", service_type, error);
-        *state.status_message.lock().await = msg;
+        *state.status_message.lock().await = Some(msg.into());
     }
     let _ = notification_sender.send(Notification::ServiceChanged);
 }
@@ -2348,7 +2367,7 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layo
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
     // Try to read the message without blocking
     if let Ok(msg) = app_state.status_message.try_lock()
-        && !msg.is_empty()
+        && let Some(StatusMessage { text: msg, .. }) = msg.as_ref()
     {
         // Position status message centered on the screen
         let area = f.area();
@@ -3164,7 +3183,7 @@ pub async fn run_tui(
                                     let normalized = normalize_service_type(&input);
                                     if normalized.is_empty() {
                                         let msg = "Invalid empty service type".to_string();
-                                        *state.status_message.lock().await = msg;
+                                        *state.status_message.lock().await = Some(msg.into());
                                     } else if state.user_service_types.contains(&normalized) {
                                         // Already user-tracked: no-op
                                     } else if state.service_types.iter().any(|t| t == &normalized) {
@@ -5205,11 +5224,18 @@ mod tests {
     }
 
     fn show_status_message(state: &AppState, msg: &str) {
-        *state.status_message.try_lock().unwrap() = msg.to_string();
+        *state.status_message.try_lock().unwrap() = Some(msg.to_string().into());
+    }
+
+    fn show_daemon_warning(state: &AppState) {
+        *state.status_message.try_lock().unwrap() = Some(StatusMessage {
+            text: DAEMON_WARNING.to_string(),
+            offers_details: true,
+        });
     }
 
     fn status_message_is_empty(state: &AppState) -> bool {
-        state.status_message.try_lock().unwrap().is_empty()
+        state.status_message.try_lock().unwrap().is_none()
     }
 
     const DAEMON_WARNING: &str = "mDNS: IPv4 socket failed to bind; press m for details";
@@ -5217,7 +5243,7 @@ mod tests {
     #[test]
     fn test_handle_key_event_m_on_daemon_warning_dismisses_and_opens_metrics() {
         let mut state = create_test_app_state();
-        show_status_message(&state, DAEMON_WARNING);
+        show_daemon_warning(&state);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
@@ -5227,7 +5253,8 @@ mod tests {
     #[test]
     fn test_handle_key_event_m_on_other_status_message_only_dismisses() {
         let mut state = create_test_app_state();
-        show_status_message(&state, "Failed to open URL: no browser");
+        // Only the flag decides; text alone never offers details.
+        show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
@@ -5250,7 +5277,7 @@ mod tests {
     #[test]
     fn test_handle_key_event_other_key_on_daemon_warning_only_dismisses() {
         let mut state = create_test_app_state();
-        show_status_message(&state, DAEMON_WARNING);
+        show_daemon_warning(&state);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('x'))));
         assert!(status_message_is_empty(&state));
@@ -5261,7 +5288,7 @@ mod tests {
     fn test_handle_key_event_m_on_daemon_warning_keeps_open_metrics_popup() {
         let mut state = create_test_app_state();
         state.popup_state.metrics_popup.active = true;
-        show_status_message(&state, DAEMON_WARNING);
+        show_daemon_warning(&state);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
@@ -5272,7 +5299,7 @@ mod tests {
     fn test_handle_key_event_m_on_daemon_warning_over_help_replaces_it_with_metrics() {
         let mut state = create_test_app_state();
         state.popup_state.help_popup.active = true;
-        show_status_message(&state, DAEMON_WARNING);
+        show_daemon_warning(&state);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
@@ -5286,7 +5313,7 @@ mod tests {
         state
             .popup_state
             .show_url_selection(vec!["http://a".to_string(), "http://b".to_string()]);
-        show_status_message(&state, DAEMON_WARNING);
+        show_daemon_warning(&state);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(!state.popup_state.url_selection_popup.is_active());
@@ -5297,7 +5324,7 @@ mod tests {
     fn test_handle_key_event_m_on_daemon_warning_during_input_opens_metrics_then_resumes_input() {
         let mut state = create_test_app_state();
         state.filter_input.activate();
-        show_status_message(&state, DAEMON_WARNING);
+        show_daemon_warning(&state);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(state.popup_state.metrics_popup.active);
@@ -8135,16 +8162,19 @@ mod tests {
         );
         assert_eq!(
             *state.status_message.lock().await,
-            "mDNS: IPv6 socket failed to bind; press m for details"
+            Some(StatusMessage {
+                text: "mDNS: IPv6 socket failed to bind; press m for details".to_string(),
+                offers_details: true,
+            })
         );
 
-        state.status_message.lock().await.clear();
+        *state.status_message.lock().await = None;
         assert!(
             !state
                 .update_daemon_snapshot(daemon_with_ipv6_bind_error(Some("nope")))
                 .await
         );
-        assert!(state.status_message.lock().await.is_empty());
+        assert!(state.status_message.lock().await.is_none());
 
         assert!(
             state
@@ -8153,7 +8183,10 @@ mod tests {
         );
         assert_eq!(
             *state.status_message.lock().await,
-            "mDNS: all sockets and multicast joins are working again"
+            Some(StatusMessage {
+                text: "mDNS: all sockets and multicast joins are working again".to_string(),
+                offers_details: false,
+            })
         );
     }
 
@@ -8165,7 +8198,7 @@ mod tests {
                 .update_daemon_snapshot(daemon_with_ipv6_bind_error(None))
                 .await
         );
-        assert!(state.status_message.lock().await.is_empty());
+        assert!(state.status_message.lock().await.is_none());
         assert!(state.daemon_snapshot.is_some());
     }
 
@@ -8175,7 +8208,7 @@ mod tests {
         state
             .update_daemon_snapshot(daemon_with_ipv6_bind_error(Some("nope")))
             .await;
-        assert!(state.status_message.lock().await.is_empty());
+        assert!(state.status_message.lock().await.is_none());
     }
 
     #[tokio::test]
