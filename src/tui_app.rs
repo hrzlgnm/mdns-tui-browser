@@ -18,6 +18,7 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
+use crate::daemon_status::{DaemonSnapshot, Problem, problems_transition_message};
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
@@ -27,6 +28,7 @@ use crate::models::{
 use crate::popup::PopupState;
 use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
 use crate::scroll::ScrollState;
+use crate::status_message::StatusMessage;
 use crate::terminal::{TuiTerminal, colors_disabled, with_monochrome_selection};
 
 const STATUS_OK_COLOR: Color = Color::Blue;
@@ -207,6 +209,10 @@ struct AppState {
     cached_sorted: bool,
     popup_state: PopupState,
     metrics: BTreeMap<String, u64>,
+    /// Last daemon status; `None` until the first poll and in view-only mode.
+    daemon_snapshot: Option<DaemonSnapshot>,
+    /// Problems derived from `daemon_snapshot`, kept to announce only changes.
+    daemon_problems: Vec<Problem>,
     sort_field: SortField,
     sort_direction: SortDirection,
     filter_input: InputState,
@@ -219,7 +225,7 @@ struct AppState {
     /// `service_types` (lowercase canonical): the daemon matches keys
     /// exactly, so mixed-case wire names are browsed verbatim.
     active_browse_keys: HashSet<String>,
-    status_message: Arc<tokio::sync::Mutex<String>>,
+    status_message: Arc<tokio::sync::Mutex<Option<StatusMessage>>>,
     disable_ipv4: bool,
     disable_ipv6: bool,
     interfaces: Option<Vec<String>>,
@@ -251,6 +257,8 @@ impl Clone for AppState {
             cached_sorted: self.cached_sorted,
             popup_state: self.popup_state.clone(),
             metrics: self.metrics.clone(),
+            daemon_snapshot: self.daemon_snapshot.clone(),
+            daemon_problems: self.daemon_problems.clone(),
             sort_field: self.sort_field,
             sort_direction: self.sort_direction,
             filter_input: self.filter_input.clone(),
@@ -294,6 +302,8 @@ impl AppState {
             cached_sorted: false,
             popup_state: PopupState::new(),
             metrics: BTreeMap::new(),
+            daemon_snapshot: None,
+            daemon_problems: Vec::new(),
             sort_field: SortField::Host,
             sort_direction: SortDirection::Ascending,
             filter_input: InputState::new(
@@ -305,7 +315,7 @@ impl AppState {
             user_service_types,
             pending_service_types: HashSet::new(),
             active_browse_keys: HashSet::new(),
-            status_message: Arc::new(tokio::sync::Mutex::new(String::new())),
+            status_message: Arc::new(tokio::sync::Mutex::new(None)),
             disable_ipv4,
             disable_ipv6,
             interfaces,
@@ -873,22 +883,27 @@ impl AppState {
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
-        if let Ok(mut msg) = self.status_message.try_lock()
-            && !msg.is_empty()
-        {
-            msg.clear();
+        let dismissed = self
+            .status_message
+            .try_lock()
+            .ok()
+            .and_then(|mut msg| msg.take());
+        if let Some(dismissed) = dismissed {
+            // Keep the hint's promise whatever is on screen: an active input
+            // stays active beneath the popup and resumes once it closes.
+            if dismissed.offers_details && key.code == KeyCode::Char('m') {
+                self.popup_state.show_only_metrics();
+            }
             return true;
         }
-        if self.popup_state.help_popup.active
-            || self.popup_state.metrics_popup.active
-            || self.popup_state.url_selection_popup.is_active()
-        {
-            let popup_active = self.popup_state.help_popup.active
-                || self.popup_state.metrics_popup.active
-                || self.popup_state.url_selection_popup.is_active();
-            let result = self
-                .popup_state
-                .handle_key_event(key, self.terminal_area, &self.metrics);
+        if self.popup_state.any_active() {
+            // An open popup consumes every key, so the frame always redraws.
+            self.popup_state.handle_key_event(
+                key,
+                self.terminal_area,
+                &self.metrics,
+                self.daemon_snapshot.as_ref(),
+            );
             if self.popup_state.help_popup.take_release_notes_flag() {
                 let release_url = format!(
                     "https://github.com/hrzlgnm/mdns-tui-browser/releases/tag/v{}",
@@ -897,7 +912,7 @@ impl AppState {
                 if let Err(err) = open::that_detached(&release_url)
                     && let Ok(mut msg) = self.status_message.try_lock()
                 {
-                    *msg = format!("Failed to open browser: {}", err);
+                    *msg = Some(format!("Failed to open browser: {}", err).into());
                 }
             }
             if self.popup_state.url_selection_popup.is_active()
@@ -906,9 +921,9 @@ impl AppState {
                 && let Err(e) = open::that_detached(&url)
                 && let Ok(mut msg) = self.status_message.try_lock()
             {
-                *msg = format!("Failed to open URL: {}", e);
+                *msg = Some(format!("Failed to open URL: {}", e).into());
             }
-            result || popup_active
+            true
         } else if self.is_input_active()
             && matches!(
                 key.code,
@@ -1057,7 +1072,7 @@ impl AppState {
                             Err(e) => format!("Failed to save JSON dump: {}", e),
                         }
                     };
-                    *state_clone.status_message.lock().await = result_str;
+                    *state_clone.status_message.lock().await = Some(result_str.into());
                 });
                 true
             }
@@ -1195,6 +1210,21 @@ impl AppState {
         }
         // Return whether metrics changed
         metrics_updated
+    }
+
+    /// Stores `snapshot` and shows a status message when its problems
+    /// appeared or cleared. Returns whether the snapshot changed.
+    async fn update_daemon_snapshot(&mut self, snapshot: DaemonSnapshot) -> bool {
+        if self.daemon_snapshot.as_ref() == Some(&snapshot) {
+            return false;
+        }
+        let problems = snapshot.problems(self.disable_ipv4, self.disable_ipv6);
+        if let Some(msg) = problems_transition_message(&self.daemon_problems, &problems) {
+            *self.status_message.lock().await = Some(msg);
+        }
+        self.daemon_problems = problems;
+        self.daemon_snapshot = Some(snapshot);
+        true
     }
 
     fn toggle_metrics(&mut self) {
@@ -1564,14 +1594,14 @@ impl AppState {
             match urls.len() {
                 0 => {
                     if let Ok(mut msg) = self.status_message.try_lock() {
-                        *msg = "No URL found for this service".to_string();
+                        *msg = Some("No URL found for this service".to_string().into());
                     }
                 }
                 1 => {
                     if let Err(e) = open::that_detached(&urls[0])
                         && let Ok(mut msg) = self.status_message.try_lock()
                     {
-                        *msg = format!("Failed to open URL: {}", e);
+                        *msg = Some(format!("Failed to open URL: {}", e).into());
                     }
                 }
                 _ => {
@@ -1871,7 +1901,7 @@ async fn handle_browse_failure(
     state.update_metric(failure_metric_key);
     if display_failure {
         let msg = format!("Failed to browse {}: {}", service_type, error);
-        *state.status_message.lock().await = msg;
+        *state.status_message.lock().await = Some(msg.into());
     }
     let _ = notification_sender.send(Notification::ServiceChanged);
 }
@@ -1906,9 +1936,12 @@ fn ui(f: &mut Frame, app_state: &AppState) {
     }
 
     // Render popups if active
-    app_state
-        .popup_state
-        .render(f, app_state.terminal_area, &app_state.metrics);
+    app_state.popup_state.render(
+        f,
+        app_state.terminal_area,
+        &app_state.metrics,
+        app_state.daemon_snapshot.as_ref(),
+    );
 
     // Render status message if present (after popups so errors appear on top)
     render_status_message(f, app_state);
@@ -2313,12 +2346,12 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layo
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
     // Try to read the message without blocking
     if let Ok(msg) = app_state.status_message.try_lock()
-        && !msg.is_empty()
+        && let Some(StatusMessage { text, .. }) = msg.as_ref()
     {
         // Position status message centered on the screen
         let area = f.area();
         // Calculate width with padding and border (2 for left/right borders, 2 for padding)
-        let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
+        let msg_width = (text.len() + 4).min(area.width.saturating_sub(4) as usize);
         let popup_area = Rect::new(
             (area.width.saturating_sub(msg_width as u16)) / 2,
             (area.height.saturating_sub(3)) / 2,
@@ -2341,7 +2374,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
         f.render_widget(block, popup_area);
 
         // Render the message text centered in the inner area
-        let paragraph = Paragraph::new(msg.as_str())
+        let paragraph = Paragraph::new(text.as_str())
             .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center);
 
@@ -2940,7 +2973,7 @@ pub async fn run_tui(
 
     let mdns_for_metrics = mdns.clone();
 
-    // Start background task to periodically collect ServiceDaemon metrics (skip in view-only mode)
+    // Start background task to periodically collect ServiceDaemon metrics and status (skip in view-only mode)
     if !is_view_only {
         let state_for_metrics = Arc::clone(&state);
         let notification_sender_for_metrics = notification_sender.clone();
@@ -2964,6 +2997,18 @@ pub async fn run_tui(
                         Err(_) => {
                             // If we can't get metrics, just continue
                         }
+                    }
+
+                    if let Ok(status_receiver) = mdns_ref.status()
+                        && let Ok(status) = status_receiver.recv_async().await
+                        && let Some(snapshot) = DaemonSnapshot::from_status(&status)
+                        && state_for_metrics
+                            .write()
+                            .await
+                            .update_daemon_snapshot(snapshot)
+                            .await
+                    {
+                        let _ = notification_sender_for_metrics.send(Notification::MetricsUpdated);
                     }
                 }
             }
@@ -3117,7 +3162,7 @@ pub async fn run_tui(
                                     let normalized = normalize_service_type(&input);
                                     if normalized.is_empty() {
                                         let msg = "Invalid empty service type".to_string();
-                                        *state.status_message.lock().await = msg;
+                                        *state.status_message.lock().await = Some(msg.into());
                                     } else if state.user_service_types.contains(&normalized) {
                                         // Already user-tracked: no-op
                                     } else if state.service_types.iter().any(|t| t == &normalized) {
@@ -3239,6 +3284,7 @@ mod tests {
 
     use std::net::IpAddr;
 
+    use crate::daemon_status::RunningSnapshot;
     use crate::models::SerializableServiceEntry;
     use crate::models::SerializableServiceSession;
     use crate::models::ServiceSession;
@@ -5154,6 +5200,121 @@ mod tests {
 
         assert!(state.handle_key_event(key));
         assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    fn show_status_message(state: &AppState, msg: &str) {
+        *state.status_message.try_lock().unwrap() = Some(msg.to_string().into());
+    }
+
+    fn show_daemon_warning(state: &AppState) {
+        *state.status_message.try_lock().unwrap() = Some(StatusMessage::with_details(
+            "mDNS: IPv4 socket failed to bind",
+        ));
+    }
+
+    fn status_message_is_empty(state: &AppState) -> bool {
+        state.status_message.try_lock().unwrap().is_none()
+    }
+
+    const DAEMON_WARNING: &str = "mDNS: IPv4 socket failed to bind; press m for details";
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_warning_dismisses_and_opens_metrics() {
+        let mut state = create_test_app_state();
+        show_daemon_warning(&state);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_unflagged_message_with_hint_text_only_dismisses() {
+        let mut state = create_test_app_state();
+        // Only the flag decides; the hint text alone never offers details.
+        show_status_message(&state, DAEMON_WARNING);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_recovery_message_only_dismisses() {
+        let mut state = create_test_app_state();
+        show_status_message(
+            &state,
+            "mDNS: all sockets and multicast joins are working again",
+        );
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_other_key_on_daemon_warning_only_dismisses() {
+        let mut state = create_test_app_state();
+        show_daemon_warning(&state);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('x'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_warning_keeps_open_metrics_popup() {
+        let mut state = create_test_app_state();
+        state.popup_state.metrics_popup.active = true;
+        show_daemon_warning(&state);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_warning_over_help_replaces_it_with_metrics() {
+        let mut state = create_test_app_state();
+        state.popup_state.help_popup.active = true;
+        show_daemon_warning(&state);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.help_popup.active);
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_warning_over_url_selection_replaces_it() {
+        let mut state = create_test_app_state();
+        state
+            .popup_state
+            .show_url_selection(vec!["http://a".to_string(), "http://b".to_string()]);
+        show_daemon_warning(&state);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(!state.popup_state.url_selection_popup.is_active());
+        assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_daemon_warning_during_input_opens_metrics_then_resumes_input() {
+        let mut state = create_test_app_state();
+        state.filter_input.activate();
+        show_daemon_warning(&state);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(state.popup_state.metrics_popup.active);
+        assert!(state.filter_input.is_active());
+        assert_eq!(state.filter_input.text(), "");
+
+        // Closing the popup returns to the untouched input.
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Esc)));
+        assert!(!state.popup_state.metrics_popup.active);
+        assert!(state.filter_input.is_active());
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('a'))));
+        assert_eq!(state.filter_input.text(), "a");
     }
 
     #[test]
@@ -7958,6 +8119,73 @@ mod tests {
         state.clear_stale_service_types();
 
         assert_eq!(state.service_types.len(), 2);
+    }
+
+    fn daemon_with_ipv6_bind_error(error: Option<&str>) -> DaemonSnapshot {
+        DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: error.map(str::to_string),
+            interfaces: Vec::new(),
+        })
+    }
+
+    #[tokio::test]
+    async fn test_update_daemon_snapshot_announces_problem_and_recovery_once() {
+        let mut state = AppState::new(HashSet::new(), false, false, None);
+
+        assert!(
+            state
+                .update_daemon_snapshot(daemon_with_ipv6_bind_error(Some("nope")))
+                .await
+        );
+        assert_eq!(
+            *state.status_message.lock().await,
+            Some(StatusMessage {
+                text: "mDNS: IPv6 socket failed to bind; press m for details".to_string(),
+                offers_details: true,
+            })
+        );
+
+        *state.status_message.lock().await = None;
+        assert!(
+            !state
+                .update_daemon_snapshot(daemon_with_ipv6_bind_error(Some("nope")))
+                .await
+        );
+        assert!(state.status_message.lock().await.is_none());
+
+        assert!(
+            state
+                .update_daemon_snapshot(daemon_with_ipv6_bind_error(None))
+                .await
+        );
+        assert_eq!(
+            *state.status_message.lock().await,
+            Some(StatusMessage::from(
+                "mDNS: all sockets and multicast joins are working again".to_string()
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_daemon_snapshot_healthy_start_stays_silent() {
+        let mut state = AppState::new(HashSet::new(), false, false, None);
+        assert!(
+            state
+                .update_daemon_snapshot(daemon_with_ipv6_bind_error(None))
+                .await
+        );
+        assert!(state.status_message.lock().await.is_none());
+        assert!(state.daemon_snapshot.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_update_daemon_snapshot_disabled_ipv6_bind_error_silent() {
+        let mut state = AppState::new(HashSet::new(), false, true, None);
+        state
+            .update_daemon_snapshot(daemon_with_ipv6_bind_error(Some("nope")))
+            .await;
+        assert!(state.status_message.lock().await.is_none());
     }
 
     #[tokio::test]

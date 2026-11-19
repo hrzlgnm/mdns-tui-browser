@@ -13,6 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
+use crate::daemon_status::{DaemonSnapshot, IpVersion, RunningSnapshot};
 use crate::scroll::ScrollState;
 use crate::terminal::{colors_disabled, with_monochrome_selection};
 
@@ -58,6 +59,12 @@ impl HelpPopup {
         self.active = !self.active;
     }
 
+    /// Closes the popup and scrolls it back to the top.
+    pub fn hide(&mut self) {
+        self.active = false;
+        self.scroll.reset();
+    }
+
     pub fn handle_key_event(&mut self, key: KeyEvent, terminal_area: Rect) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
@@ -89,8 +96,7 @@ impl HelpPopup {
                 true
             }
             _ => {
-                self.active = false;
-                self.scroll.reset();
+                self.hide();
                 true
             }
         }
@@ -141,24 +147,22 @@ impl MetricsPopup {
         key: KeyEvent,
         terminal_area: Rect,
         metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
     ) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                let popup_area = create_centered_popup(terminal_area, 60, 70);
-                let inner_area = Rect::new(
-                    popup_area.x + 1,
-                    popup_area.y + 1,
-                    popup_area.width.saturating_sub(2),
-                    popup_area.height.saturating_sub(2),
-                );
+                let (_, inner_area) = metrics_popup_areas(terminal_area);
                 let max_visible_lines = inner_area.height as usize;
 
                 self.scroll.visible_items = max_visible_lines;
 
-                let metrics_content = generate_metrics_content(metrics);
-                let total_wrapped_lines =
-                    calculate_wrapped_line_count(&metrics_content, inner_area.width) + 1;
+                let metrics_content = generate_metrics_content(metrics, daemon);
+                let total_wrapped_lines = metrics_content_height(&metrics_content, inner_area);
 
+                self.scroll.offset = self
+                    .scroll
+                    .offset
+                    .min(max_scroll_offset(total_wrapped_lines, max_visible_lines));
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
@@ -175,9 +179,15 @@ impl MetricsPopup {
         }
     }
 
-    pub fn render(&self, f: &mut Frame, terminal_area: Rect, metrics: &BTreeMap<String, u64>) {
+    pub fn render(
+        &self,
+        f: &mut Frame,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
         if self.active {
-            render_metrics_popup(f, terminal_area, self.scroll.offset, metrics);
+            render_metrics_popup(f, terminal_area, self.scroll.offset, metrics, daemon);
         }
     }
 }
@@ -359,12 +369,27 @@ impl PopupState {
         }
     }
 
+    /// Whether any popup is open and takes key input.
+    pub fn any_active(&self) -> bool {
+        self.help_popup.is_active()
+            || self.metrics_popup.is_active()
+            || self.url_selection_popup.is_active()
+    }
+
     pub fn toggle_help(&mut self) {
         self.help_popup.toggle();
     }
 
     pub fn toggle_metrics(&mut self) {
         self.metrics_popup.toggle();
+    }
+
+    /// Closes the other popups and opens the metrics popup, keeping its
+    /// scroll position when it is already open.
+    pub fn show_only_metrics(&mut self) {
+        self.help_popup.hide();
+        self.url_selection_popup.hide();
+        self.metrics_popup.active = true;
     }
 
     /// Shows the URL selection popup with the given URLs.
@@ -378,6 +403,7 @@ impl PopupState {
         key: KeyEvent,
         terminal_area: Rect,
         metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
     ) -> bool {
         if self.url_selection_popup.is_active() {
             self.url_selection_popup
@@ -386,16 +412,22 @@ impl PopupState {
             self.help_popup.handle_key_event(key, terminal_area)
         } else if self.metrics_popup.is_active() {
             self.metrics_popup
-                .handle_key_event(key, terminal_area, metrics)
+                .handle_key_event(key, terminal_area, metrics, daemon)
         } else {
             false
         }
     }
 
-    pub fn render(&self, f: &mut Frame, terminal_area: Rect, metrics: &BTreeMap<String, u64>) {
+    pub fn render(
+        &self,
+        f: &mut Frame,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
         self.help_popup.render(f);
         if !self.help_popup.is_active() {
-            self.metrics_popup.render(f, terminal_area, metrics);
+            self.metrics_popup.render(f, terminal_area, metrics, daemon);
         }
         self.url_selection_popup.render(f, terminal_area);
     }
@@ -421,8 +453,10 @@ pub fn handle_popup_scroll(
             true
         }
         KeyCode::Down => {
-            let max_scroll_offset = total_content_lines.saturating_sub(max_visible_lines);
-            *scroll_offset = std::cmp::min(*scroll_offset + 1, max_scroll_offset);
+            *scroll_offset = std::cmp::min(
+                *scroll_offset + 1,
+                max_scroll_offset(total_content_lines, max_visible_lines),
+            );
             true
         }
         _ => false,
@@ -462,15 +496,50 @@ pub fn render_help_popup(f: &mut Frame, help_scroll_offset: usize) {
     f.render_widget(border_block, popup_area);
 }
 
+/// The metrics popup's outer area and the content area inside its border.
+fn metrics_popup_areas(terminal_area: Rect) -> (Rect, Rect) {
+    let popup_area = create_centered_popup(terminal_area, 60, 70);
+    let inner_area = Rect::new(
+        popup_area.x + 1,
+        popup_area.y + 1,
+        popup_area.width.saturating_sub(2),
+        popup_area.height.saturating_sub(2),
+    );
+    (popup_area, inner_area)
+}
+
+/// Height of the wrapped metrics content, plus one line of bottom padding.
+fn metrics_content_height(content: &[Line], inner_area: Rect) -> usize {
+    calculate_wrapped_line_count(content, inner_area.width) + 1
+}
+
+/// Limits `offset` to the last position that still shows content.
+///
+/// The content shrinks between polls when the daemon drops an interface,
+/// and a smaller terminal wraps it differently, so an offset that was
+/// valid when scrolled can point past the end and blank the popup.
+fn clamp_metrics_scroll(offset: usize, content: &[Line], inner_area: Rect) -> usize {
+    offset.min(max_scroll_offset(
+        metrics_content_height(content, inner_area),
+        inner_area.height as usize,
+    ))
+}
+
+/// The last scroll offset at which `total_lines` still fill `visible_lines`.
+fn max_scroll_offset(total_lines: usize, visible_lines: usize) -> usize {
+    total_lines.saturating_sub(visible_lines)
+}
+
 pub fn render_metrics_popup(
     f: &mut Frame,
     terminal_area: Rect,
     metrics_scroll_offset: usize,
     metrics: &BTreeMap<String, u64>,
+    daemon: Option<&DaemonSnapshot>,
 ) {
-    let metrics_content = generate_metrics_content(metrics);
+    let metrics_content = generate_metrics_content(metrics, daemon);
 
-    let popup_area = create_centered_popup(terminal_area, 60, 70);
+    let (popup_area, inner_area) = metrics_popup_areas(terminal_area);
 
     f.render_widget(ratatui::widgets::Clear, popup_area);
 
@@ -478,12 +547,8 @@ pub fn render_metrics_popup(
         .style(ratatui::style::Style::default().bg(ratatui::style::Color::Black));
     f.render_widget(background_block, popup_area);
 
-    let inner_area = Rect::new(
-        popup_area.x + 1,
-        popup_area.y + 1,
-        popup_area.width.saturating_sub(2),
-        popup_area.height.saturating_sub(2),
-    );
+    let metrics_scroll_offset =
+        clamp_metrics_scroll(metrics_scroll_offset, &metrics_content, inner_area);
 
     let metrics_paragraph = Paragraph::new(metrics_content)
         .style(ratatui::style::Style::default().fg(Color::White))
@@ -494,7 +559,7 @@ pub fn render_metrics_popup(
 
     let border_block = Block::default()
         .borders(Borders::ALL)
-        .title("Service Metrics")
+        .title("Daemon Status & Metrics")
         .title_style(ratatui::style::Style::default().add_modifier(ratatui::style::Modifier::BOLD));
     f.render_widget(border_block, popup_area);
 }
@@ -524,7 +589,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         ),
         Line::from("   d                 - Remove offline services"),
         Line::from("   D                 - Clear stale service types"),
-        Line::from("   m                 - Show service metrics"),
+        Line::from("   m                 - Show daemon status and metrics"),
         Line::from("   /                 - Enter quick filter mode"),
         Line::from("   n                 - Clear current filter"),
         Line::from("   a                 - Enter add new service type mode"),
@@ -570,16 +635,86 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
     lines
 }
 
-pub fn generate_metrics_content(metrics: &BTreeMap<String, u64>) -> Vec<Line<'static>> {
+/// Lines describing the daemon's sockets and interfaces, with failures
+/// highlighted.
+fn generate_daemon_status_content(daemon: &DaemonSnapshot) -> Vec<Line<'static>> {
+    let failure_style = Style::default().fg(Color::Yellow);
+    let running = match daemon {
+        DaemonSnapshot::Running(running) => running,
+        DaemonSnapshot::Shutdown => {
+            return vec![Line::styled("   Daemon has SHUT DOWN", failure_style)];
+        }
+    };
+    let mut lines = Vec::new();
+    for version in IpVersion::ALL {
+        lines.push(match running.bind_error(version) {
+            None => Line::from(format!("   {} socket: bound", version.label())),
+            Some(err) => Line::styled(
+                format!("   {} socket: FAILED ({})", version.label(), err),
+                failure_style,
+            ),
+        });
+    }
+    lines.extend(generate_interface_lines(running, failure_style));
+    lines
+}
+
+fn generate_interface_lines(running: &RunningSnapshot, failure_style: Style) -> Vec<Line<'static>> {
+    if running.interfaces.is_empty() {
+        return vec![Line::from("   Interfaces: none enabled")];
+    }
+    let mut lines = vec![Line::from("   Interfaces:")];
+    for intf in &running.interfaces {
+        lines.push(Line::from(format!("     {} (#{})", intf.name, intf.index)));
+        for version in IpVersion::ALL {
+            let Some(membership) = intf.membership(version) else {
+                continue;
+            };
+            let addrs = membership
+                .addrs
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            lines.push(match &membership.join_error {
+                None => Line::from(format!("       {} {}: joined", version.label(), addrs)),
+                Some(err) => Line::styled(
+                    format!(
+                        "       {} {}: JOIN FAILED ({})",
+                        version.label(),
+                        addrs,
+                        err
+                    ),
+                    failure_style,
+                ),
+            });
+        }
+    }
+    lines
+}
+
+/// Lines of the metrics popup: controls, the daemon status when known,
+/// then application and daemon metrics.
+pub fn generate_metrics_content(
+    metrics: &BTreeMap<String, u64>,
+    daemon: Option<&DaemonSnapshot>,
+) -> Vec<Line<'static>> {
     let mut metrics_content: Vec<Line> = vec![
         Line::from(""),
         Line::from(" Metrics Controls:"),
         Line::from("   ↑/↓               - Scroll this metrics content"),
         Line::from("   Any other key     - Close this metrics popup"),
         Line::from(" "),
-        Line::from(" Service Discovery Metrics:"),
-        Line::from(" "),
     ];
+
+    if let Some(daemon) = daemon {
+        metrics_content.push(Line::from(" Daemon Status:"));
+        metrics_content.extend(generate_daemon_status_content(daemon));
+        metrics_content.push(Line::from(" "));
+    }
+
+    metrics_content.push(Line::from(" Service Discovery Metrics:"));
+    metrics_content.push(Line::from(" "));
 
     let mut custom_metrics = Vec::new();
     let mut daemon_metrics = Vec::new();
@@ -641,6 +776,8 @@ pub fn create_centered_popup(parent_area: Rect, width_percent: u16, height_perce
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::daemon_status::{InterfaceSnapshot, MembershipSnapshot};
 
     #[test]
     fn test_calculate_wrapped_line_count_empty_slice() {
@@ -859,7 +996,7 @@ mod tests {
     #[test]
     fn test_generate_metrics_content_empty() {
         let metrics: BTreeMap<String, u64> = BTreeMap::new();
-        let content = generate_metrics_content(&metrics);
+        let content = generate_metrics_content(&metrics, None);
         assert!(!content.is_empty());
         assert!(
             content
@@ -873,8 +1010,171 @@ mod tests {
         let mut metrics = BTreeMap::new();
         metrics.insert("test_metric".to_string(), 42);
         metrics.insert("daemon_events_received".to_string(), 100);
-        let content = generate_metrics_content(&metrics);
+        let content = generate_metrics_content(&metrics, None);
         assert!(!content.is_empty());
+    }
+
+    fn content_text(content: &[Line]) -> Vec<String> {
+        content.iter().map(|line| line.to_string()).collect()
+    }
+
+    #[test]
+    fn test_generate_metrics_content_without_daemon_omits_status_section() {
+        let content = generate_metrics_content(&BTreeMap::new(), None);
+        assert!(
+            !content_text(&content)
+                .iter()
+                .any(|line| line.contains("Daemon Status"))
+        );
+    }
+
+    #[test]
+    fn test_generate_metrics_content_with_daemon_lists_sockets_and_interfaces() {
+        let daemon = DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: Some("Address family not supported".to_string()),
+            interfaces: vec![InterfaceSnapshot {
+                name: "wlan0".to_string(),
+                index: 3,
+                ipv4: Some(MembershipSnapshot {
+                    addrs: vec!["10.0.0.7".parse().unwrap()],
+                    join_error: Some("No such device".to_string()),
+                }),
+                ipv6: None,
+            }],
+        });
+        let text = content_text(&generate_metrics_content(&BTreeMap::new(), Some(&daemon)));
+        for expected in [
+            " Daemon Status:",
+            "   IPv4 socket: bound",
+            "   IPv6 socket: FAILED (Address family not supported)",
+            "   Interfaces:",
+            "     wlan0 (#3)",
+            "       IPv4 10.0.0.7: JOIN FAILED (No such device)",
+        ] {
+            assert!(
+                text.iter().any(|line| line == expected),
+                "missing {expected:?}"
+            );
+        }
+        let status_pos = text.iter().position(|l| l == " Daemon Status:");
+        let metrics_pos = text.iter().position(|l| l == " Service Discovery Metrics:");
+        assert!(status_pos < metrics_pos);
+    }
+
+    fn daemon_with_interfaces(count: u32) -> DaemonSnapshot {
+        DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: None,
+            interfaces: (0..count)
+                .map(|index| InterfaceSnapshot {
+                    name: format!("veth{index}"),
+                    index,
+                    ipv4: Some(MembershipSnapshot {
+                        addrs: vec![format!("10.0.{}.1", index % 256).parse().unwrap()],
+                        join_error: None,
+                    }),
+                    ipv6: None,
+                })
+                .collect(),
+        })
+    }
+
+    #[test]
+    fn test_clamp_metrics_scroll_shrunk_content_limits_offset() {
+        let terminal_area = Rect::new(0, 0, 100, 40);
+        let (_, inner_area) = metrics_popup_areas(terminal_area);
+        let metrics = BTreeMap::new();
+
+        let large = generate_metrics_content(&metrics, Some(&daemon_with_interfaces(100)));
+        let scrolled_to_end = clamp_metrics_scroll(usize::MAX, &large, inner_area);
+        assert!(scrolled_to_end > 0);
+        assert_eq!(
+            clamp_metrics_scroll(scrolled_to_end, &large, inner_area),
+            scrolled_to_end
+        );
+
+        let small = generate_metrics_content(&metrics, Some(&daemon_with_interfaces(1)));
+        assert_eq!(clamp_metrics_scroll(scrolled_to_end, &small, inner_area), 0);
+    }
+
+    #[test]
+    fn test_metrics_popup_up_after_shrink_scrolls_from_last_valid_offset() {
+        let terminal_area = Rect::new(0, 0, 100, 40);
+        let metrics = BTreeMap::new();
+        let large = daemon_with_interfaces(100);
+        let mut popup = MetricsPopup::new();
+        popup.active = true;
+        for _ in 0..500 {
+            popup.handle_key_event(
+                KeyEvent::from(KeyCode::Down),
+                terminal_area,
+                &metrics,
+                Some(&large),
+            );
+        }
+        assert!(popup.scroll.offset > 0);
+
+        let medium = daemon_with_interfaces(10);
+        let (_, inner_area) = metrics_popup_areas(terminal_area);
+        let medium_max = clamp_metrics_scroll(
+            usize::MAX,
+            &generate_metrics_content(&metrics, Some(&medium)),
+            inner_area,
+        );
+        assert!(medium_max > 0 && medium_max < popup.scroll.offset);
+
+        popup.handle_key_event(
+            KeyEvent::from(KeyCode::Up),
+            terminal_area,
+            &metrics,
+            Some(&medium),
+        );
+        assert_eq!(popup.scroll.offset, medium_max - 1);
+    }
+
+    #[test]
+    fn test_render_metrics_popup_scrolled_past_shrunk_content_stays_visible() {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
+        let small = daemon_with_interfaces(1);
+        terminal
+            .draw(|f| {
+                render_metrics_popup(f, f.area(), 1_000, &BTreeMap::new(), Some(&small));
+            })
+            .unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(rendered.contains("Metrics Controls"));
+        assert!(rendered.contains("veth0"));
+    }
+
+    #[test]
+    fn test_generate_metrics_content_shutdown_daemon_shown() {
+        let text = content_text(&generate_metrics_content(
+            &BTreeMap::new(),
+            Some(&DaemonSnapshot::Shutdown),
+        ));
+        assert!(text.iter().any(|line| line == "   Daemon has SHUT DOWN"));
+    }
+
+    #[test]
+    fn test_generate_metrics_content_no_interfaces_says_none_enabled() {
+        let daemon = DaemonSnapshot::Running(RunningSnapshot {
+            ipv4_bind_error: None,
+            ipv6_bind_error: None,
+            interfaces: Vec::new(),
+        });
+        let text = content_text(&generate_metrics_content(&BTreeMap::new(), Some(&daemon)));
+        assert!(
+            text.iter()
+                .any(|line| line == "   Interfaces: none enabled")
+        );
     }
 
     #[test]
@@ -931,7 +1231,7 @@ mod tests {
             crossterm::event::KeyCode::Down,
             crossterm::event::KeyModifiers::NONE,
         );
-        let result = popup.handle_key_event(key, terminal_area, &metrics);
+        let result = popup.handle_key_event(key, terminal_area, &metrics, None);
         assert!(result);
         assert!(popup.is_active());
     }
@@ -948,7 +1248,7 @@ mod tests {
             crossterm::event::KeyCode::Char('x'),
             crossterm::event::KeyModifiers::NONE,
         );
-        let result = popup.handle_key_event(key, terminal_area, &metrics);
+        let result = popup.handle_key_event(key, terminal_area, &metrics, None);
         assert!(result);
         assert!(!popup.is_active());
         assert_eq!(popup.scroll.offset, 0);
@@ -1096,7 +1396,7 @@ mod tests {
             popup.scroll.offset = test_case.initial_offset;
 
             let terminal_area = Rect::new(0, 0, 80, 24);
-            popup.handle_key_event(test_case.key_event, terminal_area, &metrics);
+            popup.handle_key_event(test_case.key_event, terminal_area, &metrics, None);
 
             if let Some(expected_offset) = test_case.expected_offset {
                 assert_eq!(
@@ -1344,7 +1644,7 @@ mod tests {
         let metrics = BTreeMap::new();
 
         let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
-        let result = state.handle_key_event(key, terminal_area, &metrics);
+        let result = state.handle_key_event(key, terminal_area, &metrics, None);
 
         assert!(result);
         assert_eq!(state.url_selection_popup.selected_index, 1);
@@ -1359,7 +1659,7 @@ mod tests {
         let metrics = BTreeMap::new();
 
         let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
-        let result = state.handle_key_event(key, terminal_area, &metrics);
+        let result = state.handle_key_event(key, terminal_area, &metrics, None);
 
         assert!(result);
         assert_eq!(state.url_selection_popup.selected_index, 1);
