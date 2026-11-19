@@ -59,6 +59,12 @@ impl HelpPopup {
         self.active = !self.active;
     }
 
+    /// Closes the popup and scrolls it back to the top.
+    pub fn hide(&mut self) {
+        self.active = false;
+        self.scroll.reset();
+    }
+
     pub fn handle_key_event(&mut self, key: KeyEvent, terminal_area: Rect) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
@@ -90,8 +96,7 @@ impl HelpPopup {
                 true
             }
             _ => {
-                self.active = false;
-                self.scroll.reset();
+                self.hide();
                 true
             }
         }
@@ -382,8 +387,7 @@ impl PopupState {
     /// Closes the other popups and opens the metrics popup, keeping its
     /// scroll position when it is already open.
     pub fn show_only_metrics(&mut self) {
-        self.help_popup.active = false;
-        self.help_popup.scroll.reset();
+        self.help_popup.hide();
         self.url_selection_popup.hide();
         self.metrics_popup.active = true;
     }

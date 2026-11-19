@@ -5235,6 +5235,19 @@ mod tests {
     }
 
     #[test]
+    fn test_handle_key_event_m_on_daemon_recovery_message_only_dismisses() {
+        let mut state = create_test_app_state();
+        show_status_message(
+            &state,
+            "mDNS: all sockets and multicast joins are working again",
+        );
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
     fn test_handle_key_event_other_key_on_daemon_warning_only_dismisses() {
         let mut state = create_test_app_state();
         show_status_message(&state, DAEMON_WARNING);
