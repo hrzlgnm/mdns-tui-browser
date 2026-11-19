@@ -900,14 +900,9 @@ impl AppState {
             }
             return true;
         }
-        if self.popup_state.help_popup.active
-            || self.popup_state.metrics_popup.active
-            || self.popup_state.url_selection_popup.is_active()
-        {
-            let popup_active = self.popup_state.help_popup.active
-                || self.popup_state.metrics_popup.active
-                || self.popup_state.url_selection_popup.is_active();
-            let result = self.popup_state.handle_key_event(
+        if self.popup_state.any_active() {
+            // An open popup consumes every key, so the frame always redraws.
+            self.popup_state.handle_key_event(
                 key,
                 self.terminal_area,
                 &self.metrics,
@@ -932,7 +927,7 @@ impl AppState {
             {
                 *msg = format!("Failed to open URL: {}", e);
             }
-            result || popup_active
+            true
         } else if self.is_input_active()
             && matches!(
                 key.code,
@@ -5248,6 +5243,18 @@ mod tests {
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
         assert!(status_message_is_empty(&state));
         assert!(state.popup_state.metrics_popup.active);
+    }
+
+    #[test]
+    fn test_handle_key_event_m_on_status_message_during_input_only_dismisses() {
+        let mut state = create_test_app_state();
+        state.filter_input.activate();
+        show_status_message(&state, "mDNS: problem; press m for details");
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
+        assert!(status_message_is_empty(&state));
+        assert!(!state.popup_state.metrics_popup.active);
+        assert_eq!(state.filter_input.text(), "");
     }
 
     #[test]

@@ -154,8 +154,10 @@ impl MetricsPopup {
                 let metrics_content = generate_metrics_content(metrics, daemon);
                 let total_wrapped_lines = metrics_content_height(&metrics_content, inner_area);
 
-                self.scroll.offset =
-                    clamp_metrics_scroll(self.scroll.offset, &metrics_content, inner_area);
+                self.scroll.offset = self
+                    .scroll
+                    .offset
+                    .min(max_scroll_offset(total_wrapped_lines, max_visible_lines));
                 handle_popup_scroll(
                     key.code,
                     &mut self.scroll.offset,
@@ -438,7 +440,7 @@ pub fn handle_popup_scroll(
             true
         }
         KeyCode::Down => {
-            let max_scroll_offset = total_content_lines.saturating_sub(max_visible_lines);
+            let max_scroll_offset = max_scroll_offset(total_content_lines, max_visible_lines);
             *scroll_offset = std::cmp::min(*scroll_offset + 1, max_scroll_offset);
             true
         }
@@ -502,9 +504,15 @@ fn metrics_content_height(content: &[Line], inner_area: Rect) -> usize {
 /// and a smaller terminal wraps it differently, so an offset that was
 /// valid when scrolled can point past the end and blank the popup.
 fn clamp_metrics_scroll(offset: usize, content: &[Line], inner_area: Rect) -> usize {
-    let max_offset =
-        metrics_content_height(content, inner_area).saturating_sub(inner_area.height as usize);
-    offset.min(max_offset)
+    offset.min(max_scroll_offset(
+        metrics_content_height(content, inner_area),
+        inner_area.height as usize,
+    ))
+}
+
+/// The last scroll offset at which `total_lines` still fill `visible_lines`.
+fn max_scroll_offset(total_lines: usize, visible_lines: usize) -> usize {
+    total_lines.saturating_sub(visible_lines)
 }
 
 pub fn render_metrics_popup(
