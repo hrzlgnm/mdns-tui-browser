@@ -597,7 +597,7 @@ fn generate_daemon_status_content(daemon: &DaemonSnapshot) -> Vec<Line<'static>>
         }
     };
     let mut lines = Vec::new();
-    for version in [IpVersion::V4, IpVersion::V6] {
+    for version in IpVersion::ALL {
         lines.push(match running.bind_error(version) {
             None => Line::from(format!("   {} socket: bound", version.label())),
             Some(err) => Line::styled(
@@ -617,7 +617,7 @@ fn generate_interface_lines(running: &RunningSnapshot, failure_style: Style) -> 
     let mut lines = vec![Line::from("   Interfaces:")];
     for intf in &running.interfaces {
         lines.push(Line::from(format!("     {} (#{})", intf.name, intf.index)));
-        for version in [IpVersion::V4, IpVersion::V6] {
+        for version in IpVersion::ALL {
             let Some(membership) = intf.membership(version) else {
                 continue;
             };

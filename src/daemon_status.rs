@@ -20,6 +20,9 @@ pub enum IpVersion {
 }
 
 impl IpVersion {
+    /// Both versions, in display order.
+    pub const ALL: [IpVersion; 2] = [IpVersion::V4, IpVersion::V6];
+
     /// Display label such as `IPv4`.
     pub fn label(self) -> &'static str {
         match self {
@@ -188,7 +191,7 @@ impl DaemonSnapshot {
             }
         }
         for intf in &running.interfaces {
-            for version in [IpVersion::V4, IpVersion::V6] {
+            for version in IpVersion::ALL {
                 if intf
                     .membership(version)
                     .is_some_and(|m| m.join_error.is_some())
@@ -347,12 +350,12 @@ mod tests {
 
     #[test]
     fn test_transition_message_counts_additional_new_problems() {
-        let previous = vec![Problem::Shutdown];
+        let previous = vec![join_failed(IpVersion::V6, "eth0")];
         let current = vec![
-            Problem::Shutdown,
             Problem::BindFailed(IpVersion::V4),
             Problem::BindFailed(IpVersion::V6),
             join_failed(IpVersion::V4, "eth0"),
+            join_failed(IpVersion::V6, "eth0"),
         ];
         assert_eq!(
             problems_transition_message(&previous, &current),

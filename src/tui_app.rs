@@ -3281,6 +3281,7 @@ mod tests {
 
     use std::net::IpAddr;
 
+    use crate::daemon_status::RunningSnapshot;
     use crate::models::SerializableServiceEntry;
     use crate::models::SerializableServiceSession;
     use crate::models::ServiceSession;
@@ -8003,7 +8004,7 @@ mod tests {
     }
 
     fn daemon_with_ipv6_bind_error(error: Option<&str>) -> DaemonSnapshot {
-        DaemonSnapshot::Running(crate::daemon_status::RunningSnapshot {
+        DaemonSnapshot::Running(RunningSnapshot {
             ipv4_bind_error: None,
             ipv6_bind_error: error.map(str::to_string),
             interfaces: Vec::new(),
