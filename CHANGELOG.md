@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.44.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.43.0...v1.44.0) (2026-11-19)
+
+
+### Features
+
+* show daemon socket and multicast-join status ([#826](https://github.com/hrzlgnm/mdns-tui-browser/issues/826)) ([d2eddb2](https://github.com/hrzlgnm/mdns-tui-browser/commit/d2eddb27a8127e1bdcbad5f3a3012d0b8a7162e0))
+
+
+### Bug Fixes
+
+* mark services with dots in the instance name offline ([#818](https://github.com/hrzlgnm/mdns-tui-browser/issues/818)) ([e5aec6a](https://github.com/hrzlgnm/mdns-tui-browser/commit/e5aec6a2caa08758f883a9d648df5144fcf93348))
+
+
+### Dependencies
+
+* lock file maintenance ([#827](https://github.com/hrzlgnm/mdns-tui-browser/issues/827)) ([f075844](https://github.com/hrzlgnm/mdns-tui-browser/commit/f075844815bed2e72dcceed9954784fc06b148cd))
+* update hrzlgnm/actions action to v2.15.0 ([#824](https://github.com/hrzlgnm/mdns-tui-browser/issues/824)) ([5d83aba](https://github.com/hrzlgnm/mdns-tui-browser/commit/5d83abaf8ea44f027eb5f6d1c350993ec7297f7b))
+
+
+### Documentation
+
+* **agents:** name the committing tool in AI attribution trailers ([#820](https://github.com/hrzlgnm/mdns-tui-browser/issues/820)) ([af0d96c](https://github.com/hrzlgnm/mdns-tui-browser/commit/af0d96cd14d137e5eeaa06e64086a877e9d66aa9))
+
+
+### Miscellaneous Chores
+
+* add missing SPDX license headers ([#823](https://github.com/hrzlgnm/mdns-tui-browser/issues/823)) ([c8d593d](https://github.com/hrzlgnm/mdns-tui-browser/commit/c8d593deb7a96a0358977c1173a2d02b7d2d3227))
+
+
+### Continuous Integration
+
+* check SPDX headers with the shared reusable workflow ([#825](https://github.com/hrzlgnm/mdns-tui-browser/issues/825)) ([bf92485](https://github.com/hrzlgnm/mdns-tui-browser/commit/bf92485bafbaae50338bd149a10e5744ec469b33))
+* spare macOS runners on PRs and cache warming ([#822](https://github.com/hrzlgnm/mdns-tui-browser/issues/822)) ([d84c50e](https://github.com/hrzlgnm/mdns-tui-browser/commit/d84c50ec898c709b6691a899c01537b3439d4cc7))
+* trim PR builds to one target per OS family and skip the unchanged-deps SBOM ([#821](https://github.com/hrzlgnm/mdns-tui-browser/issues/821)) ([2593b86](https://github.com/hrzlgnm/mdns-tui-browser/commit/2593b86d6e0016fc3763fc9f78842c6a77054242))
+
 ## [1.43.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.42.0...v1.43.0) (2026-11-17)
 
 
