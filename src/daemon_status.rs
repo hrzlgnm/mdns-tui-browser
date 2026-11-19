@@ -5,6 +5,7 @@
 //! Snapshot of the mDNS daemon's local setup (sockets and multicast
 //! memberships) and the problems derived from it.
 
+use std::fmt;
 use std::net::IpAddr;
 
 use mdns_sd::{DaemonStatus, Membership, RunningState, SocketState};
@@ -116,6 +117,40 @@ impl From<&RunningState> for RunningSnapshot {
     }
 }
 
+/// Something that keeps the daemon from discovering on all of its sockets
+/// and interfaces.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Problem {
+    /// The daemon has shut down.
+    Shutdown,
+    /// The multicast socket of this IP version failed to bind.
+    BindFailed(IpVersion),
+    /// Joining the multicast group failed on an interface.
+    JoinFailed {
+        /// IP version of the failed membership.
+        version: IpVersion,
+        /// Name of the interface.
+        interface: String,
+    },
+}
+
+impl fmt::Display for Problem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Problem::Shutdown => write!(f, "mDNS daemon has shut down"),
+            Problem::BindFailed(version) => write!(f, "{} socket failed to bind", version.label()),
+            Problem::JoinFailed { version, interface } => {
+                write!(
+                    f,
+                    "{} multicast join failed on {}",
+                    version.label(),
+                    interface
+                )
+            }
+        }
+    }
+}
+
 /// What the daemon reported about itself on the last status request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DaemonSnapshot {
@@ -136,20 +171,20 @@ impl DaemonSnapshot {
         }
     }
 
-    /// Short, user-facing descriptions of everything that keeps the daemon
-    /// from discovering on all of its sockets and interfaces.
+    /// Everything that keeps the daemon from discovering on all of its
+    /// sockets and interfaces.
     ///
     /// Bind failures of an IP version the user disabled are expected (e.g.
     /// `--disable-ipv6` on a host without IPv6) and not reported.
-    pub fn problems(&self, disable_ipv4: bool, disable_ipv6: bool) -> Vec<String> {
+    pub fn problems(&self, disable_ipv4: bool, disable_ipv6: bool) -> Vec<Problem> {
         let running = match self {
             DaemonSnapshot::Running(running) => running,
-            DaemonSnapshot::Shutdown => return vec!["mDNS daemon has shut down".to_string()],
+            DaemonSnapshot::Shutdown => return vec![Problem::Shutdown],
         };
         let mut problems = Vec::new();
         for (version, disabled) in [(IpVersion::V4, disable_ipv4), (IpVersion::V6, disable_ipv6)] {
             if !disabled && running.bind_error(version).is_some() {
-                problems.push(format!("{} socket failed to bind", version.label()));
+                problems.push(Problem::BindFailed(version));
             }
         }
         for intf in &running.interfaces {
@@ -158,11 +193,10 @@ impl DaemonSnapshot {
                     .membership(version)
                     .is_some_and(|m| m.join_error.is_some())
                 {
-                    problems.push(format!(
-                        "{} multicast join failed on {}",
-                        version.label(),
-                        intf.name
-                    ));
+                    problems.push(Problem::JoinFailed {
+                        version,
+                        interface: intf.name.clone(),
+                    });
                 }
             }
         }
@@ -176,8 +210,8 @@ impl DaemonSnapshot {
 /// Announces newly appeared problems, and recovery once all are gone;
 /// problems that persist or merely shrink stay silent so the 1s poll does
 /// not keep re-raising the message.
-pub fn problems_transition_message(previous: &[String], current: &[String]) -> Option<String> {
-    let new: Vec<&String> = current.iter().filter(|p| !previous.contains(p)).collect();
+pub fn problems_transition_message(previous: &[Problem], current: &[Problem]) -> Option<String> {
+    let new: Vec<&Problem> = current.iter().filter(|p| !previous.contains(p)).collect();
     match new.split_first() {
         Some((first, rest)) => {
             let more = if rest.is_empty() {
@@ -217,8 +251,11 @@ mod tests {
         })
     }
 
-    fn strings(items: &[&str]) -> Vec<String> {
-        items.iter().map(|s| s.to_string()).collect()
+    fn join_failed(version: IpVersion, interface: &str) -> Problem {
+        Problem::JoinFailed {
+            version,
+            interface: interface.to_string(),
+        }
     }
 
     #[test]
@@ -258,11 +295,11 @@ mod tests {
         );
         assert_eq!(
             snapshot.problems(false, false),
-            strings(&[
-                "IPv6 socket failed to bind",
-                "IPv4 multicast join failed on eth0",
-                "IPv6 multicast join failed on wlan0",
-            ])
+            vec![
+                Problem::BindFailed(IpVersion::V6),
+                join_failed(IpVersion::V4, "eth0"),
+                join_failed(IpVersion::V6, "wlan0"),
+            ]
         );
     }
 
@@ -271,11 +308,11 @@ mod tests {
         let snapshot = running(Some("v4 error"), Some("v6 error"), Vec::new());
         assert_eq!(
             snapshot.problems(false, true),
-            strings(&["IPv4 socket failed to bind"])
+            vec![Problem::BindFailed(IpVersion::V4)]
         );
         assert_eq!(
             snapshot.problems(true, false),
-            strings(&["IPv6 socket failed to bind"])
+            vec![Problem::BindFailed(IpVersion::V6)]
         );
     }
 
@@ -283,42 +320,60 @@ mod tests {
     fn test_problems_shutdown_reported() {
         assert_eq!(
             DaemonSnapshot::Shutdown.problems(false, false),
-            strings(&["mDNS daemon has shut down"])
+            vec![Problem::Shutdown]
+        );
+    }
+
+    #[test]
+    fn test_problem_display_describes_problem() {
+        assert_eq!(Problem::Shutdown.to_string(), "mDNS daemon has shut down");
+        assert_eq!(
+            Problem::BindFailed(IpVersion::V6).to_string(),
+            "IPv6 socket failed to bind"
+        );
+        assert_eq!(
+            join_failed(IpVersion::V4, "eth0").to_string(),
+            "IPv4 multicast join failed on eth0"
         );
     }
 
     #[test]
     fn test_transition_message_new_problem_announced() {
         assert_eq!(
-            problems_transition_message(&[], &strings(&["IPv4 multicast join failed on eth0"])),
+            problems_transition_message(&[], &[join_failed(IpVersion::V4, "eth0")]),
             Some("mDNS: IPv4 multicast join failed on eth0; press m for details".to_string())
         );
     }
 
     #[test]
     fn test_transition_message_counts_additional_new_problems() {
-        let previous = strings(&["a"]);
-        let current = strings(&["a", "b", "c", "d"]);
+        let previous = vec![Problem::Shutdown];
+        let current = vec![
+            Problem::Shutdown,
+            Problem::BindFailed(IpVersion::V4),
+            Problem::BindFailed(IpVersion::V6),
+            join_failed(IpVersion::V4, "eth0"),
+        ];
         assert_eq!(
             problems_transition_message(&previous, &current),
-            Some("mDNS: b (+2 more); press m for details".to_string())
+            Some("mDNS: IPv4 socket failed to bind (+2 more); press m for details".to_string())
         );
     }
 
     #[test]
     fn test_transition_message_persisting_or_shrinking_problems_silent() {
-        let problems = strings(&["a", "b"]);
+        let problems = vec![
+            join_failed(IpVersion::V4, "eth0"),
+            join_failed(IpVersion::V4, "wlan0"),
+        ];
         assert_eq!(problems_transition_message(&problems, &problems), None);
-        assert_eq!(
-            problems_transition_message(&problems, &strings(&["a"])),
-            None
-        );
+        assert_eq!(problems_transition_message(&problems, &problems[..1]), None);
     }
 
     #[test]
     fn test_transition_message_recovery_announced() {
         assert_eq!(
-            problems_transition_message(&strings(&["a"]), &[]),
+            problems_transition_message(&[Problem::Shutdown], &[]),
             Some("mDNS: all sockets and multicast joins are working again".to_string())
         );
     }

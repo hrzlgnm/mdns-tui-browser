@@ -18,7 +18,7 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
-use crate::daemon_status::{DaemonSnapshot, problems_transition_message};
+use crate::daemon_status::{DaemonSnapshot, Problem, problems_transition_message};
 use crate::input::InputState;
 use crate::models::{
     AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
@@ -211,7 +211,7 @@ struct AppState {
     /// Last daemon status; `None` until the first poll and in view-only mode.
     daemon_snapshot: Option<DaemonSnapshot>,
     /// Problems derived from `daemon_snapshot`, kept to announce only changes.
-    daemon_problems: Vec<String>,
+    daemon_problems: Vec<Problem>,
     sort_field: SortField,
     sort_direction: SortDirection,
     filter_input: InputState,
