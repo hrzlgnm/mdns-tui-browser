@@ -5207,8 +5207,9 @@ mod tests {
     }
 
     fn show_daemon_warning(state: &AppState) {
-        *state.status_message.try_lock().unwrap() =
-            Some(StatusMessage::with_details(DAEMON_WARNING.to_string()));
+        *state.status_message.try_lock().unwrap() = Some(StatusMessage::with_details(
+            "mDNS: IPv4 socket failed to bind",
+        ));
     }
 
     fn status_message_is_empty(state: &AppState) -> bool {
@@ -8139,9 +8140,10 @@ mod tests {
         );
         assert_eq!(
             *state.status_message.lock().await,
-            Some(StatusMessage::with_details(
-                "mDNS: IPv6 socket failed to bind; press m for details".to_string()
-            ))
+            Some(StatusMessage {
+                text: "mDNS: IPv6 socket failed to bind; press m for details".to_string(),
+                offers_details: true,
+            })
         );
 
         *state.status_message.lock().await = None;

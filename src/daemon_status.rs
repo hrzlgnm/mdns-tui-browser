@@ -227,9 +227,7 @@ pub fn problems_transition_message(
             } else {
                 format!(" (+{} more)", rest.len())
             };
-            Some(StatusMessage::with_details(format!(
-                "mDNS: {first}{more}; press m for details"
-            )))
+            Some(StatusMessage::with_details(&format!("mDNS: {first}{more}")))
         }
         None if current.is_empty() && !previous.is_empty() => Some(
             "mDNS: all sockets and multicast joins are working again"
@@ -353,9 +351,10 @@ mod tests {
     fn test_transition_message_new_problem_announced() {
         assert_eq!(
             problems_transition_message(&[], &[join_failed(IpVersion::V4, "eth0")]),
-            Some(StatusMessage::with_details(
-                "mDNS: IPv4 multicast join failed on eth0; press m for details".to_string()
-            ))
+            Some(StatusMessage {
+                text: "mDNS: IPv4 multicast join failed on eth0; press m for details".to_string(),
+                offers_details: true,
+            })
         );
     }
 
@@ -370,9 +369,10 @@ mod tests {
         ];
         assert_eq!(
             problems_transition_message(&previous, &current),
-            Some(StatusMessage::with_details(
-                "mDNS: IPv4 socket failed to bind (+2 more); press m for details".to_string()
-            ))
+            Some(StatusMessage {
+                text: "mDNS: IPv4 socket failed to bind (+2 more); press m for details".to_string(),
+                offers_details: true,
+            })
         );
     }
 

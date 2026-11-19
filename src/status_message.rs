@@ -14,10 +14,11 @@ pub struct StatusMessage {
 }
 
 impl StatusMessage {
-    /// A message whose text tells the user to press `m` for details.
-    pub fn with_details(text: String) -> Self {
+    /// A message offering details on `m`, with a hint saying so appended
+    /// to `text`.
+    pub fn with_details(text: &str) -> Self {
         Self {
-            text,
+            text: format!("{text}; press m for details"),
             offers_details: true,
         }
     }
@@ -29,5 +30,32 @@ impl From<String> for StatusMessage {
             text,
             offers_details: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_with_details_appends_hint_and_offers_details() {
+        assert_eq!(
+            StatusMessage::with_details("mDNS: trouble"),
+            StatusMessage {
+                text: "mDNS: trouble; press m for details".to_string(),
+                offers_details: true,
+            }
+        );
+    }
+
+    #[test]
+    fn test_from_string_keeps_text_without_details() {
+        assert_eq!(
+            StatusMessage::from("plain".to_string()),
+            StatusMessage {
+                text: "plain".to_string(),
+                offers_details: false,
+            }
+        );
     }
 }
