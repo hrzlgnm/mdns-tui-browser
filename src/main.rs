@@ -8,6 +8,7 @@ mod models;
 mod popup;
 mod quick_filter;
 mod scroll;
+mod status_message;
 mod terminal;
 mod tui_app;
 

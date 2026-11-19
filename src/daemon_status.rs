@@ -10,6 +10,8 @@ use std::net::IpAddr;
 
 use mdns_sd::{DaemonStatus, Membership, RunningState, SocketState};
 
+use crate::status_message::StatusMessage;
+
 /// An IP version the daemon runs a multicast socket for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpVersion {
@@ -210,10 +212,13 @@ impl DaemonSnapshot {
 /// The status message to show when the daemon's problems change from
 /// `previous` to `current`, or `None` when nothing worth announcing changed.
 ///
-/// Announces newly appeared problems, and recovery once all are gone;
-/// problems that persist or merely shrink stay silent so the 1s poll does
-/// not keep re-raising the message.
-pub fn problems_transition_message(previous: &[Problem], current: &[Problem]) -> Option<String> {
+/// Announces newly appeared problems, offering details on them, and
+/// recovery once all are gone; problems that persist or merely shrink stay
+/// silent so the 1s poll does not keep re-raising the message.
+pub fn problems_transition_message(
+    previous: &[Problem],
+    current: &[Problem],
+) -> Option<StatusMessage> {
     let new: Vec<&Problem> = current.iter().filter(|p| !previous.contains(p)).collect();
     match new.split_first() {
         Some((first, rest)) => {
@@ -222,11 +227,15 @@ pub fn problems_transition_message(previous: &[Problem], current: &[Problem]) ->
             } else {
                 format!(" (+{} more)", rest.len())
             };
-            Some(format!("mDNS: {first}{more}; press m for details"))
+            Some(StatusMessage::with_details(format!(
+                "mDNS: {first}{more}; press m for details"
+            )))
         }
-        None if current.is_empty() && !previous.is_empty() => {
-            Some("mDNS: all sockets and multicast joins are working again".to_string())
-        }
+        None if current.is_empty() && !previous.is_empty() => Some(
+            "mDNS: all sockets and multicast joins are working again"
+                .to_string()
+                .into(),
+        ),
         None => None,
     }
 }
@@ -344,7 +353,9 @@ mod tests {
     fn test_transition_message_new_problem_announced() {
         assert_eq!(
             problems_transition_message(&[], &[join_failed(IpVersion::V4, "eth0")]),
-            Some("mDNS: IPv4 multicast join failed on eth0; press m for details".to_string())
+            Some(StatusMessage::with_details(
+                "mDNS: IPv4 multicast join failed on eth0; press m for details".to_string()
+            ))
         );
     }
 
@@ -359,7 +370,9 @@ mod tests {
         ];
         assert_eq!(
             problems_transition_message(&previous, &current),
-            Some("mDNS: IPv4 socket failed to bind (+2 more); press m for details".to_string())
+            Some(StatusMessage::with_details(
+                "mDNS: IPv4 socket failed to bind (+2 more); press m for details".to_string()
+            ))
         );
     }
 
@@ -377,7 +390,9 @@ mod tests {
     fn test_transition_message_recovery_announced() {
         assert_eq!(
             problems_transition_message(&[Problem::Shutdown], &[]),
-            Some("mDNS: all sockets and multicast joins are working again".to_string())
+            Some(StatusMessage::from(
+                "mDNS: all sockets and multicast joins are working again".to_string()
+            ))
         );
     }
 

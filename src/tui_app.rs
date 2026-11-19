@@ -28,6 +28,7 @@ use crate::models::{
 use crate::popup::PopupState;
 use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
 use crate::scroll::ScrollState;
+use crate::status_message::StatusMessage;
 use crate::terminal::{TuiTerminal, colors_disabled, with_monochrome_selection};
 
 const STATUS_OK_COLOR: Color = Color::Blue;
@@ -186,23 +187,6 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     }
     let end = std::cmp::min(end, items.len());
     &items[start..end]
-}
-
-/// A message shown over the UI until the next key press dismisses it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct StatusMessage {
-    text: String,
-    /// Whether dismissing it with `m` opens the daemon details popup.
-    offers_details: bool,
-}
-
-impl From<String> for StatusMessage {
-    fn from(text: String) -> Self {
-        Self {
-            text,
-            offers_details: false,
-        }
-    }
 }
 
 struct AppState {
@@ -1235,13 +1219,8 @@ impl AppState {
             return false;
         }
         let problems = snapshot.problems(self.disable_ipv4, self.disable_ipv6);
-        if let Some(text) = problems_transition_message(&self.daemon_problems, &problems) {
-            // Only warnings carry the "press m for details" hint.
-            let offers_details = !problems.is_empty();
-            *self.status_message.lock().await = Some(StatusMessage {
-                text,
-                offers_details,
-            });
+        if let Some(msg) = problems_transition_message(&self.daemon_problems, &problems) {
+            *self.status_message.lock().await = Some(msg);
         }
         self.daemon_problems = problems;
         self.daemon_snapshot = Some(snapshot);
@@ -2367,12 +2346,12 @@ fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layo
 fn render_status_message(f: &mut Frame, app_state: &AppState) {
     // Try to read the message without blocking
     if let Ok(msg) = app_state.status_message.try_lock()
-        && let Some(StatusMessage { text: msg, .. }) = msg.as_ref()
+        && let Some(StatusMessage { text, .. }) = msg.as_ref()
     {
         // Position status message centered on the screen
         let area = f.area();
         // Calculate width with padding and border (2 for left/right borders, 2 for padding)
-        let msg_width = (msg.len() + 4).min(area.width.saturating_sub(4) as usize);
+        let msg_width = (text.len() + 4).min(area.width.saturating_sub(4) as usize);
         let popup_area = Rect::new(
             (area.width.saturating_sub(msg_width as u16)) / 2,
             (area.height.saturating_sub(3)) / 2,
@@ -2395,7 +2374,7 @@ fn render_status_message(f: &mut Frame, app_state: &AppState) {
         f.render_widget(block, popup_area);
 
         // Render the message text centered in the inner area
-        let paragraph = Paragraph::new(msg.as_str())
+        let paragraph = Paragraph::new(text.as_str())
             .style(Style::default().fg(STATUS_OK_COLOR).bg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center);
 
@@ -5228,10 +5207,8 @@ mod tests {
     }
 
     fn show_daemon_warning(state: &AppState) {
-        *state.status_message.try_lock().unwrap() = Some(StatusMessage {
-            text: DAEMON_WARNING.to_string(),
-            offers_details: true,
-        });
+        *state.status_message.try_lock().unwrap() =
+            Some(StatusMessage::with_details(DAEMON_WARNING.to_string()));
     }
 
     fn status_message_is_empty(state: &AppState) -> bool {
@@ -5251,9 +5228,9 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_key_event_m_on_other_status_message_only_dismisses() {
+    fn test_handle_key_event_m_on_unflagged_message_with_hint_text_only_dismisses() {
         let mut state = create_test_app_state();
-        // Only the flag decides; text alone never offers details.
+        // Only the flag decides; the hint text alone never offers details.
         show_status_message(&state, DAEMON_WARNING);
 
         assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('m'))));
@@ -8162,10 +8139,9 @@ mod tests {
         );
         assert_eq!(
             *state.status_message.lock().await,
-            Some(StatusMessage {
-                text: "mDNS: IPv6 socket failed to bind; press m for details".to_string(),
-                offers_details: true,
-            })
+            Some(StatusMessage::with_details(
+                "mDNS: IPv6 socket failed to bind; press m for details".to_string()
+            ))
         );
 
         *state.status_message.lock().await = None;
@@ -8183,10 +8159,9 @@ mod tests {
         );
         assert_eq!(
             *state.status_message.lock().await,
-            Some(StatusMessage {
-                text: "mDNS: all sockets and multicast joins are working again".to_string(),
-                offers_details: false,
-            })
+            Some(StatusMessage::from(
+                "mDNS: all sockets and multicast joins are working again".to_string()
+            ))
         );
     }
 

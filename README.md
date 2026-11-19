@@ -442,6 +442,7 @@ src/
 ├── popup.rs      # Popup UI components (help, metrics)
 ├── quick_filter.rs # Quick filter query parsing and fuzzy matching
 ├── scroll.rs     # Scroll state management
+├── status_message.rs # Dismissible messages shown over the UI
 ├── models.rs     # Data models
 └── terminal.rs  # Terminal management
 ```
