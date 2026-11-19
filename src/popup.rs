@@ -440,8 +440,10 @@ pub fn handle_popup_scroll(
             true
         }
         KeyCode::Down => {
-            let max_scroll_offset = max_scroll_offset(total_content_lines, max_visible_lines);
-            *scroll_offset = std::cmp::min(*scroll_offset + 1, max_scroll_offset);
+            *scroll_offset = std::cmp::min(
+                *scroll_offset + 1,
+                max_scroll_offset(total_content_lines, max_visible_lines),
+            );
             true
         }
         _ => false,
