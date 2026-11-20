@@ -717,6 +717,10 @@ pub struct AppOptions {
     #[serde(default)]
     pub disable_ipv6: bool,
     pub interfaces: Option<Vec<String>>,
+    #[serde(default)]
+    pub log_file: Option<String>,
+    #[serde(default)]
+    pub log_level: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

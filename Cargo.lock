@@ -1003,6 +1003,7 @@ dependencies = [
  "flume",
  "frizbee",
  "if-addrs",
+ "log",
  "mdns-sd",
  "nix 0.32.0",
  "open",

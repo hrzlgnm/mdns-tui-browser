@@ -74,6 +74,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 💾 **JSON State Dump**: Export complete application state to JSON with Ctrl+J
 - 📍 **Local Device Highlight**: Services advertised by this device stand out with `◉` marker and green highlighting
 - 🔗 **Smart URL Opening**: Open service URLs from TXT records or constructed hostname/IP URLs, with selection popup for multiple URLs
+- 🧾 **File Logging**: Diagnostics rotate to a platform log file (`--log-file`, `--log-level`), never printing into the TUI
 - 🌐 **Interface-Aware Addresses**: Show which network interface an address was seen on in the details pane (`via eth0`, `%eth0`)
 
 ## Quick Start
@@ -170,6 +171,12 @@ mdns-tui-browser --no-ipv6
 # Load state from a JSON file (view-only mode, no browsing)
 mdns-tui-browser --load-state state-dump.json
 mdns-tui-browser -l state-dump.json
+
+# Log diagnostics to a specific file instead of the platform default
+mdns-tui-browser --log-file /tmp/mdns-tui-browser.log
+
+# Record debug-level diagnostics (also captures mDNS library internals)
+mdns-tui-browser --log-level debug
 ```
 
 #### Service Types Argument (`--service-types/-s`)
@@ -198,6 +205,14 @@ Disable IPv4 or IPv6 mDNS discovery. Disabling both at once is rejected, unless 
 #### Load State Argument (`--load-state/-l`)
 
 Load state from a JSON file for inspection (view-only mode, no browsing). See [JSON State Dump](#json-state-dump) for details.
+
+#### Log File Argument (`--log-file`)
+
+Override the default log file. Diagnostics never print to the terminal while the TUI runs; they are appended to the file and rotated past 5 MiB with 3 backups kept. The cap applies per session: concurrent sessions sharing one log file are not coordinated — one session's rotation can delete records another session is still appending — so give each concurrent session its own `--log-file`. Default location: `$XDG_STATE_HOME/mdns-tui-browser/mdns-tui-browser.log` (else `~/.local/state/mdns-tui-browser/mdns-tui-browser.log`) on Linux, `~/Library/Logs/mdns-tui-browser/mdns-tui-browser.log` on macOS, `%LOCALAPPDATA%\mdns-tui-browser\logs\mdns-tui-browser.log` on Windows. A bad explicit path aborts startup with a clear error; an unusable default directory disables logging silently.
+
+#### Log Level Argument (`--log-level`)
+
+Minimum level recorded to the log file: `error`, `warn`, `info`, `debug`, `trace` (case-insensitive). Default: `info` and above. With `debug` or `trace`, the mDNS library's internal records are captured too.
 
 ## JSON State Dump
 
