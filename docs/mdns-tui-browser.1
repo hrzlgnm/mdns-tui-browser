@@ -36,7 +36,7 @@ Disable IPv6 mDNS discovery
 Load state from a JSON file for inspection (view-only mode, no browsing)
 .TP
 .B \-\-log\-file \fIFILE\fR
-Override the default log file ($XDG_STATE_HOME/mdns\-tui\-browser/mdns\-tui\-browser.log, else ~/.local/state/mdns\-tui\-browser/mdns\-tui\-browser.log on Linux; ~/Library/Logs/mdns\-tui\-browser/mdns\-tui\-browser.log on macOS; %LOCALAPPDATA%\\mdns\-tui\-browser\\logs\\mdns\-tui\-browser.log on Windows). Appended; rotated past 5 MiB with 3 backups kept, capped per session \- concurrent sessions sharing one log file can exceed the cap while their records stay interleaved. Diagnostics never print to the terminal. A bad path aborts startup; an unusable default directory disables logging.
+Override the default log file ($XDG_STATE_HOME/mdns\-tui\-browser/mdns\-tui\-browser.log, else ~/.local/state/mdns\-tui\-browser/mdns\-tui\-browser.log on Linux; ~/Library/Logs/mdns\-tui\-browser/mdns\-tui\-browser.log on macOS; %LOCALAPPDATA%\\mdns\-tui\-browser\\logs\\mdns\-tui\-browser.log on Windows). Appended; rotated past 5 MiB with 3 backups kept, capped per session. Concurrent sessions sharing one log file are not coordinated: one session's rotation can delete records another is still appending, so give each session its own \-\-log\-file. Diagnostics never print to the terminal. A bad path aborts startup; an unusable default directory disables logging.
 .TP
 .B \-\-log\-level \fILEVEL\fR
 Minimum log level recorded to the log file (error, warn, info, debug, trace). Default: info and above. With debug or trace, the mDNS library's internal records are captured too.

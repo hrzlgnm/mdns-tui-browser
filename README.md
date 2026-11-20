@@ -208,7 +208,7 @@ Load state from a JSON file for inspection (view-only mode, no browsing). See [J
 
 #### Log File Argument (`--log-file`)
 
-Override the default log file. Diagnostics never print to the terminal while the TUI runs; they are appended to the file and rotated past 5 MiB with 3 backups kept, capped per session — concurrent sessions sharing one log file can exceed the cap while their records stay interleaved. Default location: `$XDG_STATE_HOME/mdns-tui-browser/mdns-tui-browser.log` (else `~/.local/state/mdns-tui-browser/mdns-tui-browser.log`) on Linux, `~/Library/Logs/mdns-tui-browser/mdns-tui-browser.log` on macOS, `%LOCALAPPDATA%\mdns-tui-browser\logs\mdns-tui-browser.log` on Windows. A bad explicit path aborts startup with a clear error; an unusable default directory disables logging silently.
+Override the default log file. Diagnostics never print to the terminal while the TUI runs; they are appended to the file and rotated past 5 MiB with 3 backups kept. The cap applies per session: concurrent sessions sharing one log file are not coordinated — one session's rotation can delete records another session is still appending — so give each concurrent session its own `--log-file`. Default location: `$XDG_STATE_HOME/mdns-tui-browser/mdns-tui-browser.log` (else `~/.local/state/mdns-tui-browser/mdns-tui-browser.log`) on Linux, `~/Library/Logs/mdns-tui-browser/mdns-tui-browser.log` on macOS, `%LOCALAPPDATA%\mdns-tui-browser\logs\mdns-tui-browser.log` on Windows. A bad explicit path aborts startup with a clear error; an unusable default directory disables logging silently.
 
 #### Log Level Argument (`--log-level`)
 

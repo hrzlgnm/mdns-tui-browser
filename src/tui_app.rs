@@ -915,12 +915,10 @@ impl AppState {
         self.prune_verifications();
         // Surface a retained log write failure terminal-safely (the
         // status message, not stderr, so the TUI is not corrupted).
-        // Take only after the lock is held, so a momentarily contended
-        // status message cannot silently discard the notice.
-        if let Ok(mut msg) = self.status_message.try_lock()
-            && let Some(log_failure) = crate::logging::take_log_error()
-        {
-            *msg = Some(log_failure.into());
+        // Take only with the message lock held, so a momentarily
+        // contended status message cannot silently discard the notice.
+        if let Ok(mut msg) = self.status_message.try_lock() {
+            surface_log_failure(&mut msg, crate::logging::take_log_error());
         }
         self.validate_selected_type();
 
@@ -1820,6 +1818,14 @@ fn has_service_type(service: &ServiceEntry, selected_type: Option<&str>) -> bool
     // Case-insensitive: daemon and old dumps may use mixed case
     selected_type
         .is_none_or(|selected_type| service.service_type.eq_ignore_ascii_case(selected_type))
+}
+
+/// Shows a retained log write failure as the transient status message,
+/// so the notice reaches the user without printing into the TUI.
+fn surface_log_failure(status_message: &mut Option<StatusMessage>, log_failure: Option<String>) {
+    if let Some(log_failure) = log_failure {
+        *status_message = Some(log_failure.into());
+    }
 }
 
 fn compare_services_by_field(
@@ -8700,11 +8706,18 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_for_rendering_surfaces_log_write_failure_once() {
-        let mut state = create_test_app_state();
-        crate::logging::set_log_error_for_test("log write failed: boom");
+    fn test_surface_log_failure_sets_status_message_only_when_present() {
+        let state = create_test_app_state();
 
-        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 80, 24));
+        // Tested with a local failure so no global logger state is
+        // involved; the retention and take-once behavior of the
+        // logging module are covered by its own tests.
+        {
+            let mut msg = state.status_message.try_lock().unwrap();
+            surface_log_failure(&mut msg, None);
+            assert!(msg.is_none(), "no failure leaves the message unset");
+            surface_log_failure(&mut msg, Some("log write failed: boom".to_string()));
+        }
 
         let surfaced_text = {
             let msg = state.status_message.try_lock().unwrap();
@@ -8714,10 +8727,6 @@ mod tests {
                 .clone()
         };
         assert_eq!(surfaced_text, "log write failed: boom");
-        assert!(
-            crate::logging::take_log_error().is_none(),
-            "surfacing takes the retained failure"
-        );
     }
 
     #[tokio::test]

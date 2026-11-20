@@ -72,14 +72,6 @@ pub fn take_log_error() -> Option<String> {
     LAST_LOG_ERROR.lock().ok().and_then(|mut e| e.take())
 }
 
-/// Records a write failure as the logger would, for tests only.
-#[cfg(test)]
-pub fn set_log_error_for_test(message: &str) {
-    if let Ok(mut last_error) = LAST_LOG_ERROR.lock() {
-        *last_error = Some(message.to_string());
-    }
-}
-
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         LOGGER_STATE
