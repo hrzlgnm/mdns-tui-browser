@@ -6,9 +6,15 @@
 //!
 //! A minimal sink over the `log` facade with no new dependencies:
 //! records go to a size-rotated file in the platform log directory,
-//! and the terminal is never written to. Ported from the reference
-//! implementation in the mex project and adapted to this app being
-//! always a full-screen TUI.
+//! and the terminal is never written to.
+
+use std::fs::File;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use chrono::Local;
+use log::{LevelFilter, Log, Metadata, Record};
 
 /// Live log size cap: past it the file rotates into numbered backups.
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
@@ -20,13 +26,16 @@ const KEEP_LOG_GENERATIONS: u32 = 3;
 /// the threshold even after the (process-wide, first-wins) logger has
 /// been installed; this keeps level changes observable in tests.
 struct LoggerState {
-    file: Option<std::sync::Mutex<RotatingLog>>,
-    file_level: log::LevelFilter,
+    file: Option<Mutex<RotatingLog>>,
+    file_level: LevelFilter,
 }
 
-static LOGGER_STATE: std::sync::Mutex<LoggerState> = std::sync::Mutex::new(LoggerState {
+/// A plain lock rather than the tokio one used elsewhere: the `log`
+/// facade calls synchronously from any thread, and a static needs a
+/// const-constructible lock.
+static LOGGER_STATE: Mutex<LoggerState> = Mutex::new(LoggerState {
     file: None,
-    file_level: log::LevelFilter::Info,
+    file_level: LevelFilter::Info,
 });
 
 /// Minimal log sink: records go to the size-rotated file at the given
@@ -42,10 +51,10 @@ impl Logger {
     /// first use. A test binary shares one process-wide logger: first
     /// install wins, later ones are ignored, but the state is always
     /// updated.
-    fn install(file: Option<RotatingLog>, log_level: Option<log::LevelFilter>) {
-        let file_level = log_level.unwrap_or(log::LevelFilter::Info);
+    fn install(file: Option<RotatingLog>, log_level: Option<LevelFilter>) {
+        let file_level = log_level.unwrap_or(LevelFilter::Info);
         if let Ok(mut state) = LOGGER_STATE.lock() {
-            state.file = file.map(std::sync::Mutex::new);
+            state.file = file.map(Mutex::new);
             state.file_level = file_level;
         }
         let _ = log::set_logger(&LOGGER);
@@ -54,8 +63,9 @@ impl Logger {
 }
 
 /// Last retained log write failure, if any. Global because the logger
-/// is a leaked static and cannot be downcast through `dyn log::Log`.
-static LAST_LOG_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+/// is only reachable as a `dyn log::Log` once installed, so its state
+/// cannot be accessed back through the trait object.
+static LAST_LOG_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 /// Takes the last retained log write failure, if any.
 pub fn take_log_error() -> Option<String> {
@@ -70,21 +80,21 @@ pub fn set_log_error_for_test(message: &str) {
     }
 }
 
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
+impl Log for Logger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
         LOGGER_STATE
             .lock()
             .map(|state| state.file.is_some() && metadata.level() <= state.file_level)
             .unwrap_or(false)
     }
 
-    fn log(&self, record: &log::Record) {
+    fn log(&self, record: &Record) {
         if !self.enabled(record.metadata()) {
             return;
         }
         let line = format!(
             "{} [{}] {}\n",
-            chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f"),
+            Local::now().format("%Y-%m-%dT%H:%M:%S%.3f"),
             record.level(),
             record.args()
         );
@@ -105,16 +115,14 @@ impl log::Log for Logger {
 /// (`$XDG_STATE_HOME/<app>`, else `~/.local/state/<app>`),
 /// `~/Library/Logs/<app>` on macOS, `%LOCALAPPDATA%\<app>\logs` on
 /// Windows, temp dir as a last resort.
-fn default_log_dir() -> std::path::PathBuf {
+fn default_log_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-        return std::path::PathBuf::from(dir)
-            .join(env!("CARGO_PKG_NAME"))
-            .join("logs");
+        return PathBuf::from(dir).join(env!("CARGO_PKG_NAME")).join("logs");
     }
     #[cfg(target_os = "macos")]
     if let Some(home) = std::env::var_os("HOME") {
-        return std::path::PathBuf::from(home)
+        return PathBuf::from(home)
             .join("Library")
             .join("Logs")
             .join(env!("CARGO_PKG_NAME"));
@@ -123,11 +131,11 @@ fn default_log_dir() -> std::path::PathBuf {
     if let Some(state) = std::env::var_os("XDG_STATE_HOME")
         && !state.is_empty()
     {
-        return std::path::PathBuf::from(state).join(env!("CARGO_PKG_NAME"));
+        return PathBuf::from(state).join(env!("CARGO_PKG_NAME"));
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     if let Some(home) = std::env::var_os("HOME") {
-        return std::path::PathBuf::from(home)
+        return PathBuf::from(home)
             .join(".local")
             .join("state")
             .join(env!("CARGO_PKG_NAME"));
@@ -142,10 +150,10 @@ fn default_log_dir() -> std::path::PathBuf {
 /// not be printed to and browsing is worth more than diagnostics.
 pub fn init_logging(
     log_file: Option<&str>,
-    log_level: Option<log::LevelFilter>,
+    log_level: Option<LevelFilter>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = match log_file {
-        Some(p) => std::path::PathBuf::from(p),
+        Some(p) => PathBuf::from(p),
         None => default_log_dir().join(format!("{}.log", env!("CARGO_PKG_NAME"))),
     };
     match RotatingLog::open(&path, MAX_LOG_BYTES, KEEP_LOG_GENERATIONS) {
@@ -163,19 +171,26 @@ pub fn init_logging(
     }
 }
 
+/// Backup path `name.log.N` for generation `n`.
+fn backup_path(path: &Path, n: u32) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{n}"));
+    path.with_file_name(name)
+}
+
 /// Size-based log rotation: the live file plus `path.N` backups.
 struct RotatingLog {
     /// `None` only while closed for renaming: Windows cannot rename an
     /// open file, so `rotate` drops the handle first.
-    file: Option<std::fs::File>,
-    path: std::path::PathBuf,
+    file: Option<File>,
+    path: PathBuf,
     written: u64,
     max_bytes: u64,
     keep: u32,
 }
 
 impl RotatingLog {
-    fn open(path: &std::path::Path, max_bytes: u64, keep: u32) -> std::io::Result<Self> {
+    fn open(path: &Path, max_bytes: u64, keep: u32) -> std::io::Result<Self> {
         if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()
         {
@@ -194,18 +209,11 @@ impl RotatingLog {
         Ok(log)
     }
 
-    fn append(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    fn append(path: &Path) -> std::io::Result<File> {
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
-    }
-
-    /// Backup path `name.log.N` for generation `n`.
-    fn backup_path(&self, n: u32) -> std::path::PathBuf {
-        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
-        name.push(format!(".{n}"));
-        self.path.with_file_name(name)
     }
 
     /// Append one line, rotating first when it would exceed the cap, so
@@ -215,7 +223,6 @@ impl RotatingLog {
             self.rotate()?;
         }
         if let Some(f) = self.file.as_mut() {
-            use std::io::Write;
             f.write_all(line.as_bytes())?;
             self.written += line.len() as u64;
         }
@@ -232,10 +239,10 @@ impl RotatingLog {
             let from = if i == 1 {
                 self.path.clone()
             } else {
-                self.backup_path(i - 1)
+                backup_path(&self.path, i - 1)
             };
             if from.exists() {
-                let to = self.backup_path(i);
+                let to = backup_path(&self.path, i);
                 let _ = std::fs::remove_file(&to);
                 std::fs::rename(&from, &to)?;
             }
@@ -261,13 +268,7 @@ mod tests {
         ))
     }
 
-    fn backup_path(path: &std::path::Path, n: u32) -> std::path::PathBuf {
-        let mut name = path.file_name().unwrap_or_default().to_os_string();
-        name.push(format!(".{n}"));
-        path.with_file_name(name)
-    }
-
-    fn cleanup(path: &std::path::Path, keep: u32) {
+    fn cleanup(path: &Path, keep: u32) {
         let _ = std::fs::remove_file(path);
         for n in 1..=keep {
             let _ = std::fs::remove_file(backup_path(path, n));
@@ -388,6 +389,24 @@ mod tests {
         );
 
         cleanup(&blocker, 3);
+    }
+
+    #[test]
+    fn test_rotating_log_rotates_on_open_when_file_exceeds_cap() {
+        let path = temp_log_path("open-rotate");
+        cleanup(&path, 3);
+        std::fs::write(&path, "0123456789").unwrap();
+
+        // Opening a file at or past the cap rotates it immediately; the
+        // fresh live file only holds new records.
+        let mut log = RotatingLog::open(&path, 8, 3).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(backup_path(&path, 1)).unwrap(),
+            "0123456789"
+        );
+        log.write_line("new\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new\n");
+        cleanup(&path, 3);
     }
 
     #[test]

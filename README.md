@@ -212,7 +212,7 @@ Override the default log file. Diagnostics never print to the terminal while the
 
 #### Log Level Argument (`--log-level`)
 
-Minimum level recorded to the log file: `off`, `error`, `warn`, `info`, `debug`, `trace` (case-insensitive). Default: `info` and above. With `debug` or `trace`, the mDNS library's internal records are captured too.
+Minimum level recorded to the log file: `error`, `warn`, `info`, `debug`, `trace` (case-insensitive). Default: `info` and above. With `debug` or `trace`, the mDNS library's internal records are captured too.
 
 ## JSON State Dump
 

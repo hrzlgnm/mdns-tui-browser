@@ -74,8 +74,8 @@ struct Cli {
         long,
         value_name = "LEVEL",
         value_parser = parse_log_level,
-        help = "Minimum log level recorded (off, error, warn, info, debug, trace)",
-        long_help = "Minimum log level recorded (off, error, warn, info, debug, trace). When omitted, info and above is recorded."
+        help = "Minimum log level recorded (error, warn, info, debug, trace)",
+        long_help = "Minimum log level recorded (error, warn, info, debug, trace). When omitted, info and above is recorded."
     )]
     log_level: Option<log::LevelFilter>,
 }
@@ -175,7 +175,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         disable_ipv6,
         loaded_state,
         cli.log_file,
-        cli.log_level.map(|level| level.to_string()),
+        // Lowercase so the dump records the level exactly as the user
+        // typed it and as the docs spell it.
+        cli.log_level.map(|level| level.to_string().to_lowercase()),
     ))
 }
 

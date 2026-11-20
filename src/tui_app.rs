@@ -915,8 +915,10 @@ impl AppState {
         self.prune_verifications();
         // Surface a retained log write failure terminal-safely (the
         // status message, not stderr, so the TUI is not corrupted).
-        if let Some(log_failure) = crate::logging::take_log_error()
-            && let Ok(mut msg) = self.status_message.try_lock()
+        // Take only after the lock is held, so a momentarily contended
+        // status message cannot silently discard the notice.
+        if let Ok(mut msg) = self.status_message.try_lock()
+            && let Some(log_failure) = crate::logging::take_log_error()
         {
             *msg = Some(log_failure.into());
         }
