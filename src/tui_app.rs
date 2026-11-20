@@ -48,7 +48,6 @@ const VERIFY_TIMEOUT: Duration = Duration::from_secs(5);
 /// first; otherwise a service that did not answer could be briefly
 /// called verified.
 const VERIFY_DEADLINE_GRACE: Duration = Duration::from_millis(500);
-const VERIFY_VIEW_ONLY_MESSAGE: &str = "Verify is unavailable in view-only mode";
 
 // Flapping service colors (color-blind friendly)
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
@@ -214,9 +213,11 @@ struct ServiceVerification {
 }
 
 impl ServiceVerification {
-    /// Whether the verify query is still awaiting resolution.
+    /// Whether the verification is still awaiting resolution. The
+    /// deadline task owns flipping this once the window (plus grace)
+    /// has closed, so a just-closed window still counts.
     fn in_flight(&self) -> bool {
-        self.verified_at_micros.is_none() && self.deadline > Instant::now()
+        self.verified_at_micros.is_none()
     }
 
     /// Whether the window closed with the service still online.
@@ -1382,7 +1383,7 @@ impl AppState {
     fn request_verify_selected_service(&mut self) {
         if self.loaded_from_file {
             if let Ok(mut msg) = self.status_message.try_lock() {
-                *msg = Some(VERIFY_VIEW_ONLY_MESSAGE.to_string().into());
+                *msg = Some("Verify is unavailable in view-only mode".to_string().into());
             }
             return;
         }
@@ -1432,11 +1433,11 @@ impl AppState {
         );
     }
 
-    /// Resolves a verification whose window just closed. There is no
+    /// Resolves a verification whose window has closed. There is no
     /// distinct response event: a service still online answered the
     /// daemon's queries and is verified; a service that is gone or
     /// offline did not answer and keeps no verification.
-    fn note_verification_deadline(&mut self, display_fullname: &str) {
+    fn resolve_verification(&mut self, display_fullname: &str) {
         let online = self
             .services
             .iter()
@@ -2080,19 +2081,13 @@ async fn handle_browse_failure(
 /// verified; when it closes, a service still online is verified and a
 /// service that did not respond goes offline via the daemon's flush.
 async fn handle_verify_request(
-    mdns: &Option<ServiceDaemon>,
+    mdns: &ServiceDaemon,
     state: &mut AppState,
     state_arc: &Arc<RwLock<AppState>>,
     notification_sender: &flume::Sender<Notification>,
     target: VerifyTarget,
 ) {
-    let Some(mdns_ref) = mdns else {
-        // AppState already refuses view-only requests; keep a message
-        // here so a stray request cannot vanish silently.
-        *state.status_message.lock().await = Some(VERIFY_VIEW_ONLY_MESSAGE.to_string().into());
-        return;
-    };
-    match mdns_ref.verify(target.wire_fullname, VERIFY_TIMEOUT) {
+    match mdns.verify(target.wire_fullname, VERIFY_TIMEOUT) {
         Ok(()) => {
             // The list marker and details line are the indication; no
             // popup, so several services can be verified at once.
@@ -2108,7 +2103,7 @@ async fn handle_verify_request(
             tokio::spawn(async move {
                 tokio::time::sleep(VERIFY_TIMEOUT + VERIFY_DEADLINE_GRACE).await;
                 let mut state = timer_state.write().await;
-                state.note_verification_deadline(&timer_fullname);
+                state.resolve_verification(&timer_fullname);
                 let _ = timer_sender.send(Notification::ServiceChanged);
             });
         }
@@ -3492,9 +3487,11 @@ pub async fn run_tui(
                                         }
                                     }
                                 }
-                                if let Some(verify_target) = state.take_verify_request() {
+                                if let Some(verify_target) = state.take_verify_request()
+                                    && let Some(mdns_ref) = mdns.as_ref()
+                                {
                                     handle_verify_request(
-                                        &mdns,
+                                        mdns_ref,
                                         &mut state,
                                         &state_arc,
                                         &notification_sender,
@@ -9371,7 +9368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_verification_deadline_marks_online_service_verified() {
+    fn test_resolve_verification_marks_online_service_verified() {
         let mut state = setup_test_state_with_services(vec![create_verifiable_service(
             "test1",
             "_http._tcp.local.",
@@ -9383,7 +9380,7 @@ mod tests {
         state.verifications.get_mut(fullname).unwrap().deadline =
             Instant::now() - Duration::from_secs(1);
 
-        state.note_verification_deadline(fullname);
+        state.resolve_verification(fullname);
 
         let verification = state.verifications.get(fullname).expect("kept entry");
         assert!(verification.is_verified());
@@ -9392,12 +9389,12 @@ mod tests {
         assert_eq!(state.metrics.get("services_verified"), Some(&1));
 
         // A second resolution must not verify or count again.
-        state.note_verification_deadline(fullname);
+        state.resolve_verification(fullname);
         assert_eq!(state.metrics.get("services_verified"), Some(&1));
     }
 
     #[test]
-    fn test_note_verification_deadline_removes_entry_for_offline_service() {
+    fn test_resolve_verification_removes_entry_for_offline_service() {
         let mut state = setup_test_state_with_services(vec![create_verifiable_service(
             "test1",
             "_http._tcp.local.",
@@ -9409,14 +9406,14 @@ mod tests {
             Instant::now() - Duration::from_secs(1);
         state.services[0].online = false;
 
-        state.note_verification_deadline(fullname);
+        state.resolve_verification(fullname);
 
         assert!(!state.verifications.contains_key(fullname));
         assert!(!state.metrics.contains_key("services_verified"));
     }
 
     #[test]
-    fn test_note_verification_deadline_ignores_open_window_and_missing_entry() {
+    fn test_resolve_verification_ignores_open_window_and_missing_entry() {
         let mut state = setup_test_state_with_services(vec![create_verifiable_service(
             "test1",
             "_http._tcp.local.",
@@ -9427,11 +9424,11 @@ mod tests {
         // A window still open belongs to a newer verify press whose own
         // deadline task will resolve the entry.
         state.begin_verification(fullname);
-        state.note_verification_deadline(fullname);
+        state.resolve_verification(fullname);
         assert!(state.verifications.get(fullname).unwrap().in_flight());
 
         // Without an entry there is nothing to resolve.
-        state.note_verification_deadline("gone._http._tcp.local.");
+        state.resolve_verification("gone._http._tcp.local.");
     }
 
     #[test]
@@ -9465,7 +9462,7 @@ mod tests {
             .get_mut("test1._http._tcp.local.")
             .unwrap()
             .deadline = Instant::now() - Duration::from_secs(1);
-        state.note_verification_deadline("test1._http._tcp.local.");
+        state.resolve_verification("test1._http._tcp.local.");
 
         assert!(
             state
@@ -9482,6 +9479,7 @@ mod tests {
                 .in_flight()
         );
     }
+
     #[test]
     fn test_mark_service_offline_clears_pending_verification() {
         let mut state = setup_test_state_with_services(vec![create_verifiable_service(
@@ -9620,6 +9618,12 @@ mod tests {
             deadline: Instant::now() + VERIFY_TIMEOUT,
             verified_at_micros: None,
         };
+        // A window that just closed stays "in progress" until the
+        // deadline task resolves it, matching the list's ↻ marker.
+        let grace = ServiceVerification {
+            deadline: Instant::now() - Duration::from_millis(100),
+            verified_at_micros: None,
+        };
         let verified = ServiceVerification {
             deadline: Instant::now(),
             verified_at_micros: Some(1_600_000_000_000_000),
@@ -9640,6 +9644,10 @@ mod tests {
         assert!(checking.contains("Verification:"));
         assert!(checking.contains("in progress"));
         assert!(!checking.contains("Verified:"));
+
+        let grace_text = details_text(create_service_details_text(&service, false, Some(&grace)));
+        assert!(grace_text.contains("Verification:"));
+        assert!(grace_text.contains("in progress"));
 
         let confirmed = details_text(create_service_details_text(
             &service,
