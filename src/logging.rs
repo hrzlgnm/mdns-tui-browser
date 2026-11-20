@@ -217,10 +217,15 @@ impl RotatingLog {
     }
 
     /// Append one line, rotating first when it would exceed the cap, so
-    /// the live file stays bounded.
+    /// the live file stays bounded. A failed rotation leaves no handle;
+    /// the live file is reopened so records fitting the remaining space
+    /// are not silently dropped.
     fn write_line(&mut self, line: &str) -> std::io::Result<()> {
         if self.written + line.len() as u64 > self.max_bytes {
             self.rotate()?;
+        }
+        if self.file.is_none() {
+            self.file = Some(Self::append(&self.path)?);
         }
         if let Some(f) = self.file.as_mut() {
             f.write_all(line.as_bytes())?;
@@ -273,6 +278,39 @@ mod tests {
         for n in 1..=keep {
             let _ = std::fs::remove_file(backup_path(path, n));
         }
+    }
+
+    #[test]
+    fn test_write_line_recovers_after_failed_rotation() {
+        let path = temp_log_path("recover");
+        let backup = backup_path(&path, 1);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&backup);
+        let mut log = RotatingLog::open(&path, 12, 1).unwrap();
+        log.write_line("first\n").unwrap();
+
+        // Block the only backup name so the rotation fails.
+        std::fs::create_dir_all(&backup).unwrap();
+        assert!(log.write_line("second line too long\n").is_err());
+
+        // A record fitting the remaining space must not be silently
+        // dropped while no handle is live: the live file is reopened.
+        log.write_line("x\n").unwrap();
+        assert!(
+            std::fs::read_to_string(&path).unwrap().ends_with("x\n"),
+            "record lost after failed rotation"
+        );
+
+        // Once the rename is possible again, rotation recovers fully.
+        std::fs::remove_dir_all(&backup).unwrap();
+        log.write_line("third line longest\n").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "third line longest\n"
+        );
+        assert_eq!(std::fs::read_to_string(&backup).unwrap(), "first\nx\n");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&backup);
     }
 
     #[test]

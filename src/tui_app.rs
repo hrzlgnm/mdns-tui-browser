@@ -3148,7 +3148,7 @@ fn configure_interfaces(
 ///     let service_types = HashSet::new();
 ///
 ///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), None, None, false, false, None, None, None).await;
+///     run_tui(service_types.clone(), None, false, false, None, None, None).await;
 ///
 ///     // Use specific interfaces
 ///     run_tui(
