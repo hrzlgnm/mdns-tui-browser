@@ -296,6 +296,11 @@ fn iso_timestamp_to_micros(timestamp: &str) -> u64 {
 #[derive(Clone, Debug)]
 pub struct ServiceEntry {
     pub fullname: String,
+    /// Fullname exactly as the mdns-sd daemon reports it: escaped
+    /// instance name and wire-case service type. Required to address
+    /// the instance in daemon calls such as `ServiceDaemon::verify`;
+    /// absent for entries rebuilt from a state dump.
+    pub wire_fullname: Option<String>,
     pub host: String,
     pub service_type: String,
     pub subtype: Option<String>,
@@ -508,6 +513,7 @@ impl From<ResolvedService> for ServiceEntry {
         let current_timestamp = current_timestamp_micros();
         Self {
             fullname: display_fullname(resolved_service.get_fullname()),
+            wire_fullname: Some(resolved_service.get_fullname().to_string()),
             host: resolved_service.get_hostname().to_string(),
             service_type: resolved_service.ty_domain.to_ascii_lowercase(),
             subtype: resolved_service
@@ -622,6 +628,9 @@ impl From<&SerializableServiceEntry> for ServiceEntry {
 
         Self {
             fullname: entry.fullname.clone(),
+            // Dumps do not carry the daemon-reported fullname; a loaded
+            // entry can therefore not be verified against the daemon.
+            wire_fullname: None,
             host: entry.host.clone(),
             // Older dumps may hold mixed-case types; use lowercase canonical.
             service_type: entry.service_type.to_ascii_lowercase(),
@@ -742,6 +751,7 @@ pub mod tests {
         let addr: IpAddr = format!("192.168.1.{}", last_octet).parse().unwrap();
         ServiceEntry {
             fullname: format!("{}.{}", name, service_type),
+            wire_fullname: None,
             host: format!("{}.local.", name),
             service_type: service_type.to_string(),
             subtype: None,
@@ -1401,6 +1411,36 @@ pub mod tests {
 
         let entry = ServiceEntry::from(resolved);
         assert_eq!(entry.fullname, "foo.bar._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_service_entry_from_resolved_service_keeps_wire_fullname() {
+        let info = mdns_sd::ServiceInfo::new(
+            "_http._tcp.local.",
+            "foo.bar",
+            "host.local.",
+            "192.168.1.1",
+            80,
+            None::<std::collections::HashMap<String, String>>,
+        )
+        .unwrap();
+        let resolved = info.as_resolved_service();
+        let wire_fullname = resolved.get_fullname().to_string();
+
+        let entry = ServiceEntry::from(resolved);
+        // The daemon keys its caches by the escaped wire name, so it must
+        // be kept verbatim next to the unescaped display fullname.
+        assert_eq!(entry.wire_fullname.as_deref(), Some(wire_fullname.as_str()));
+        assert_eq!(wire_fullname, r"foo\.bar._http._tcp.local.");
+    }
+
+    #[test]
+    fn test_service_entry_from_state_dump_has_no_wire_fullname() {
+        let dumped = create_test_service("test", "_http._tcp.local.", 80);
+        let serializable = SerializableServiceEntry::from(&dumped);
+
+        let entry = ServiceEntry::from(&serializable);
+        assert_eq!(entry.wire_fullname, None);
     }
 
     #[test]

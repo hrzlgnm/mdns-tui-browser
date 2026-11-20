@@ -587,6 +587,7 @@ pub fn generate_help_content() -> Vec<Line<'static>> {
         Line::from(
             "   Enter             - Open service URL in browser (_http._tcp or URL from TXT)",
         ),
+        Line::from("   v                 - Verify selected service (5s timeout)"),
         Line::from("   d                 - Remove offline services"),
         Line::from("   D                 - Clear stale service types"),
         Line::from("   m                 - Show daemon status and metrics"),
@@ -990,6 +991,17 @@ mod tests {
             content
                 .iter()
                 .any(|line| line.to_string().contains("Help Popup Controls"))
+        );
+    }
+
+    #[test]
+    fn test_generate_help_content_lists_verify_key() {
+        let content = generate_help_content();
+        assert!(
+            content_text(&content)
+                .iter()
+                .any(|line| line.contains("Verify selected service")),
+            "help must document the v key"
         );
     }
 

@@ -40,6 +40,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
   - [Add Service Type Mode](#add-service-type-mode)
   - [Local Device Highlight](#local-device-highlight)
   - [Opening Service URLs](#opening-service-urls)
+  - [Verifying Services](#verifying-services)
   - [Service Addresses](#service-addresses)
   - [Monochrome Mode (NO_COLOR)](#monochrome-mode-no_color)
 - [Architecture](#architecture)
@@ -64,6 +65,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
 - 🖥️ **Interactive TUI**: Full terminal UI with keyboard navigation
 - 📊 **Service Details**: Display IP address with interface info, port, and TXT records
 - 🔄 **Real-time Updates**: Async architecture for live service discovery
+- ✅ **On-demand Verification**: Reconfirm a selected service with the mDNS daemon's verify query (RFC 6762 §10.4)
 - 📈 **Live Metrics & Daemon Health**: ServiceDaemon and application metrics, socket and multicast-join status per interface, with a warning when binding or joining fails
 - 🎛️ **Service Type Filtering**: Browse different service types separately
 - 🔍 **Quick Filter**: Typo-tolerant fuzzy search across all service fields, plus status keywords
@@ -291,6 +293,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>b</kbd>/<kbd>f</kbd> or <kbd>Space</kbd> - Scroll services list by page
 - <kbd>Home</kbd>/<kbd>End</kbd> - Jump to first/last service in list
 - <kbd>Enter</kbd> - Open service URL in browser (shows selection popup when multiple URLs exist)
+- <kbd>v</kbd> - Verify the selected service (queries the instance with a 5s timeout)
 - <kbd>s</kbd> - Cycle sort field forward (Host → Type → Name → Port → Addr → Time)
 - <kbd>S</kbd> - Cycle sort field backward (Time → Addr → Port → Name → Type → Host)
 - <kbd>o</kbd> - Toggle sort direction (↑/↓)
@@ -382,6 +385,16 @@ Behavior depends on how many URLs are found:
 - One URL: opened directly in the browser.
 - Multiple URLs: `Select URL` popup with <kbd>↑</kbd>/<kbd>↓</kbd> to navigate, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> or any other key to cancel.
 
+### Verifying Services
+
+Press <kbd>v</kbd> on the selected service to verify it (RFC 6762 §10.4 record reconfirmation): the mdns-sd daemon re-queries the instance's SRV and address records with a 5-second timeout. There is no separate response event; the outcome reads off the service itself, shown in the services list and details pane:
+
+- While the window is open, the service shows a `↻` prefix in the list and `Verification: in progress` in the details pane.
+- A service still online when the window closes answered the daemon's queries: it shows a `✓` prefix and a `Verified: <local time>` line in the details pane. The indication stays until the service goes offline or is verified again.
+- A service that does not respond loses its records when the window closes: the daemon flushes them and the service goes offline like a regular removal.
+- Multiple services can be verified at the same time; each shows its own marker and resolves independently.
+- Verification needs a live daemon and an online service: it is unavailable in view-only mode (`--load-state`) and for offline entries.
+
 ### Service Addresses
 
 The details pane shows which interface each address was seen on (live browsing):
@@ -398,7 +411,7 @@ Set the `NO_COLOR` environment variable to any non-empty value (see <https://no-
 
 - Selected rows use reverse video.
 - Offline services stay struck through, flapping services stay underlined.
-- The `◉` local-device marker and the `> ` URL-selection indicator do not depend on color.
+- The `◉` local-device marker, the `↻`/`✓` verification markers, and the `> ` URL-selection indicator do not depend on color.
 
 ## Architecture
 
