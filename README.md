@@ -387,11 +387,12 @@ Behavior depends on how many URLs are found:
 
 ### Verifying Services
 
-Press <kbd>v</kbd> on the selected service to verify it (RFC 6762 §10.4 record reconfirmation): the mdns-sd daemon re-queries the instance's SRV and address records with a 5-second timeout. There is no separate response event; the outcome reads off the service itself:
+Press <kbd>v</kbd> on the selected service to verify it (RFC 6762 §10.4 record reconfirmation): the mdns-sd daemon re-queries the instance's SRV and address records with a 5-second timeout. There is no separate response event; the outcome reads off the service itself, shown in the services list and details pane:
 
 - While the window is open, the service shows a `↻` prefix in the list and `Verification: in progress` in the details pane.
-- A service still online when the window closes answered the daemon's queries: it shows a `✓` prefix and a `Verified: <local time>` line in the details pane, plus a status message naming the instance. The indication stays until the service goes offline or is verified again.
+- A service still online when the window closes answered the daemon's queries: it shows a `✓` prefix and a `Verified: <local time>` line in the details pane. The indication stays until the service goes offline or is verified again.
 - A service that does not respond loses its records when the window closes: the daemon flushes them and the service goes offline like a regular removal.
+- Multiple services can be verified at the same time; each shows its own marker and resolves independently.
 - Verification needs a live daemon and an online service: it is unavailable in view-only mode (`--load-state`) and for offline entries.
 
 ### Service Addresses

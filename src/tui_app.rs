@@ -43,6 +43,12 @@ const BROWSE_RETRY_ATTEMPTS: usize = 100;
 /// Verify window for the `v` key, passed to the daemon's `verify`
 /// call (RFC 6762 section 10.4 record reconfirmation).
 const VERIFY_TIMEOUT: Duration = Duration::from_secs(5);
+/// Extra wait before resolving a verification window, so the daemon's
+/// record flush and the resulting `ServiceRemoved` delivery can land
+/// first; otherwise a service that did not answer could be briefly
+/// called verified.
+const VERIFY_DEADLINE_GRACE: Duration = Duration::from_millis(500);
+const VERIFY_VIEW_ONLY_MESSAGE: &str = "Verify is unavailable in view-only mode";
 
 // Flapping service colors (color-blind friendly)
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
@@ -312,6 +318,8 @@ impl Clone for AppState {
             filter_input: self.filter_input.clone(),
             service_type_input: self.service_type_input.clone(),
             apply_service_type: self.apply_service_type,
+            // The one-shot request must not re-fire in a clone; the
+            // progress map travels with the services it describes.
             verify_request: None,
             verifications: self.verifications.clone(),
             terminal_area: self.terminal_area,
@@ -1374,7 +1382,7 @@ impl AppState {
     fn request_verify_selected_service(&mut self) {
         if self.loaded_from_file {
             if let Ok(mut msg) = self.status_message.try_lock() {
-                *msg = Some("Verify is unavailable in view-only mode".to_string().into());
+                *msg = Some(VERIFY_VIEW_ONLY_MESSAGE.to_string().into());
             }
             return;
         }
@@ -1427,31 +1435,28 @@ impl AppState {
     /// Resolves a verification whose window just closed. There is no
     /// distinct response event: a service still online answered the
     /// daemon's queries and is verified; a service that is gone or
-    /// offline did not answer and keeps no verification. Returns a
-    /// status message naming the service when it became verified.
-    fn note_verification_deadline(
-        &mut self,
-        display_fullname: &str,
-        display_name: &str,
-    ) -> Option<String> {
-        let verification = self.verifications.get(display_fullname)?;
-        if verification.verified_at_micros.is_some() || verification.deadline > Instant::now() {
-            // Already resolved, or superseded by a newer verify press
-            // whose deadline task will resolve this entry.
-            return None;
-        }
+    /// offline did not answer and keeps no verification.
+    fn note_verification_deadline(&mut self, display_fullname: &str) {
         let online = self
             .services
             .iter()
             .any(|s| s.fullname == display_fullname && s.online);
-        if !online {
-            self.verifications.remove(display_fullname);
-            return None;
+        let Some(verification) = self.verifications.get_mut(display_fullname) else {
+            return;
+        };
+        if verification.verified_at_micros.is_some() || verification.deadline > Instant::now() {
+            // Already resolved, or superseded by a newer verify press
+            // whose deadline task will resolve this entry.
+            return;
         }
-        let verification = self.verifications.get_mut(display_fullname)?;
-        verification.verified_at_micros = Some(current_timestamp_micros());
-        self.update_metric("services_verified");
-        Some(format!("✓ {} verified", display_name))
+        if online {
+            verification.verified_at_micros = Some(current_timestamp_micros());
+            self.update_metric("services_verified");
+        } else {
+            // No answer: the daemon dropped the records and the service
+            // went offline (or was never online), so nothing to show.
+            self.verifications.remove(display_fullname);
+        }
     }
 
     /// Drops verification state that can no longer matter: entries
@@ -2084,35 +2089,26 @@ async fn handle_verify_request(
     let Some(mdns_ref) = mdns else {
         // AppState already refuses view-only requests; keep a message
         // here so a stray request cannot vanish silently.
-        *state.status_message.lock().await =
-            Some("Verify is unavailable in view-only mode".to_string().into());
+        *state.status_message.lock().await = Some(VERIFY_VIEW_ONLY_MESSAGE.to_string().into());
         return;
     };
     match mdns_ref.verify(target.wire_fullname, VERIFY_TIMEOUT) {
         Ok(()) => {
+            // The list marker and details line are the indication; no
+            // popup, so several services can be verified at once.
             state.begin_verification(&target.display_fullname);
-            *state.status_message.lock().await = Some(
-                format!(
-                    "Verifying {} (up to {}s)",
-                    target.display_name,
-                    VERIFY_TIMEOUT.as_secs()
-                )
-                .into(),
-            );
-            // Resolve the verification when its window closes, and
-            // redraw even if no other event arrives first.
+            // Resolve the verification once its window has closed, and
+            // redraw even if no other event arrives first. The grace
+            // period lets the daemon's flush and the resulting
+            // ServiceRemoved delivery land first, so a service that
+            // did not answer is not momentarily called verified.
             let timer_state = Arc::clone(state_arc);
             let timer_fullname = target.display_fullname;
-            let timer_name = target.display_name;
             let timer_sender = notification_sender.clone();
             tokio::spawn(async move {
-                tokio::time::sleep(VERIFY_TIMEOUT).await;
+                tokio::time::sleep(VERIFY_TIMEOUT + VERIFY_DEADLINE_GRACE).await;
                 let mut state = timer_state.write().await;
-                if let Some(message) =
-                    state.note_verification_deadline(&timer_fullname, &timer_name)
-                {
-                    *state.status_message.lock().await = Some(message.into());
-                }
+                state.note_verification_deadline(&timer_fullname);
                 let _ = timer_sender.send(Notification::ServiceChanged);
             });
         }
@@ -9387,10 +9383,8 @@ mod tests {
         state.verifications.get_mut(fullname).unwrap().deadline =
             Instant::now() - Duration::from_secs(1);
 
-        assert_eq!(
-            state.note_verification_deadline(fullname, "test1"),
-            Some("✓ test1 verified".to_string())
-        );
+        state.note_verification_deadline(fullname);
+
         let verification = state.verifications.get(fullname).expect("kept entry");
         assert!(verification.is_verified());
         assert!(!verification.in_flight());
@@ -9398,7 +9392,7 @@ mod tests {
         assert_eq!(state.metrics.get("services_verified"), Some(&1));
 
         // A second resolution must not verify or count again.
-        assert_eq!(state.note_verification_deadline(fullname, "test1"), None);
+        state.note_verification_deadline(fullname);
         assert_eq!(state.metrics.get("services_verified"), Some(&1));
     }
 
@@ -9415,7 +9409,8 @@ mod tests {
             Instant::now() - Duration::from_secs(1);
         state.services[0].online = false;
 
-        assert_eq!(state.note_verification_deadline(fullname, "test1"), None);
+        state.note_verification_deadline(fullname);
+
         assert!(!state.verifications.contains_key(fullname));
         assert!(!state.metrics.contains_key("services_verified"));
     }
@@ -9432,16 +9427,61 @@ mod tests {
         // A window still open belongs to a newer verify press whose own
         // deadline task will resolve the entry.
         state.begin_verification(fullname);
-        assert_eq!(state.note_verification_deadline(fullname, "test1"), None);
+        state.note_verification_deadline(fullname);
         assert!(state.verifications.get(fullname).unwrap().in_flight());
 
         // Without an entry there is nothing to resolve.
-        assert_eq!(
-            state.note_verification_deadline("gone._http._tcp.local.", "gone"),
-            None
-        );
+        state.note_verification_deadline("gone._http._tcp.local.");
     }
 
+    #[test]
+    fn test_verifications_track_multiple_services_independently() {
+        let mut state = setup_test_state_with_services(vec![
+            create_verifiable_service("test1", "_http._tcp.local.", 80),
+            create_verifiable_service("test2", "_http._tcp.local.", 81),
+        ]);
+
+        // Several services can be verified at the same time, each with
+        // its own window resolving independently.
+        state.begin_verification("test1._http._tcp.local.");
+        state.begin_verification("test2._http._tcp.local.");
+        assert!(
+            state
+                .verifications
+                .get("test1._http._tcp.local.")
+                .unwrap()
+                .in_flight()
+        );
+        assert!(
+            state
+                .verifications
+                .get("test2._http._tcp.local.")
+                .unwrap()
+                .in_flight()
+        );
+
+        state
+            .verifications
+            .get_mut("test1._http._tcp.local.")
+            .unwrap()
+            .deadline = Instant::now() - Duration::from_secs(1);
+        state.note_verification_deadline("test1._http._tcp.local.");
+
+        assert!(
+            state
+                .verifications
+                .get("test1._http._tcp.local.")
+                .unwrap()
+                .is_verified()
+        );
+        assert!(
+            state
+                .verifications
+                .get("test2._http._tcp.local.")
+                .unwrap()
+                .in_flight()
+        );
+    }
     #[test]
     fn test_mark_service_offline_clears_pending_verification() {
         let mut state = setup_test_state_with_services(vec![create_verifiable_service(
