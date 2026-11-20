@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.45.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.44.0...v1.45.0) (2026-11-20)
+
+
+### Features
+
+* replace eprintln diagnostics with rotating file logging ([#833](https://github.com/hrzlgnm/mdns-tui-browser/issues/833)) ([d64ea19](https://github.com/hrzlgnm/mdns-tui-browser/commit/d64ea19a40aabeec5a7ffb23ecfedb9f9186f32a))
+* verify services with the mdns-sd daemon (v key) ([#831](https://github.com/hrzlgnm/mdns-tui-browser/issues/831)) ([fcf88e0](https://github.com/hrzlgnm/mdns-tui-browser/commit/fcf88e0e19bd010f5f570bee71a60d679a414bfd))
+
+
+### Dependencies
+
+* lock file maintenance ([#834](https://github.com/hrzlgnm/mdns-tui-browser/issues/834)) ([36c8340](https://github.com/hrzlgnm/mdns-tui-browser/commit/36c8340111c61d80a505235cf187d96f58c90e8f))
+* update rust crate clap to v4.6.9 ([#828](https://github.com/hrzlgnm/mdns-tui-browser/issues/828)) ([ca00ad6](https://github.com/hrzlgnm/mdns-tui-browser/commit/ca00ad6856741b2425bf46c7ca0d1f539c669a8f))
+
 ## [1.44.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.43.0...v1.44.0) (2026-11-19)
 
 
