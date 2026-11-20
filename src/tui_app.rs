@@ -91,7 +91,7 @@ async fn handle_suspend(
     // Stop the terminal - this restores the alternate screen and disables raw mode
     // Only proceed with suspend if terminal stop succeeds
     if let Err(e) = terminal.stop() {
-        eprintln!("Failed to stop terminal on suspend: {}", e);
+        log::error!("Failed to stop terminal on suspend: {}", e);
         return;
     }
 
@@ -99,13 +99,13 @@ async fn handle_suspend(
     // Use SIGSTOP to suspend (cannot be caught, ignored, or blocked)
     // Log error but continue - we still need to restart terminal on resume
     if let Err(e) = kill(suspend_target(), Signal::SIGSTOP) {
-        eprintln!("Failed to send SIGSTOP: {}", e);
+        log::error!("Failed to send SIGSTOP: {}", e);
     }
 
     // After resume, we continue here
     // Restart the terminal
     if let Err(e) = terminal.start() {
-        eprintln!("Failed to start terminal on resume: {}", e);
+        log::error!("Failed to start terminal on resume: {}", e);
     }
 
     // Clear the terminal to force a full redraw
@@ -286,6 +286,8 @@ struct AppState {
     disable_ipv4: bool,
     disable_ipv6: bool,
     interfaces: Option<Vec<String>>,
+    log_file: Option<String>,
+    log_level: Option<String>,
     loaded_from_file: bool,
     local_addrs: LocalAddrs,
     local_addrs_refreshed_at: Instant,
@@ -333,6 +335,8 @@ impl Clone for AppState {
             disable_ipv4: self.disable_ipv4,
             disable_ipv6: self.disable_ipv6,
             interfaces: self.interfaces.clone(),
+            log_file: self.log_file.clone(),
+            log_level: self.log_level.clone(),
             loaded_from_file: self.loaded_from_file,
             local_addrs: self.local_addrs.clone(),
             local_addrs_refreshed_at: self.local_addrs_refreshed_at,
@@ -346,6 +350,8 @@ impl AppState {
         disable_ipv4: bool,
         disable_ipv6: bool,
         interfaces: Option<Vec<String>>,
+        log_file: Option<String>,
+        log_level: Option<String>,
     ) -> Self {
         let mut state = Self {
             services: Vec::new(),
@@ -382,6 +388,8 @@ impl AppState {
             disable_ipv4,
             disable_ipv6,
             interfaces,
+            log_file,
+            log_level,
             loaded_from_file: false,
             local_addrs: local_interface_addrs(),
             local_addrs_refreshed_at: Instant::now(),
@@ -617,6 +625,8 @@ impl AppState {
                 disable_ipv4: self.disable_ipv4,
                 disable_ipv6: self.disable_ipv6,
                 interfaces: self.interfaces.clone(),
+                log_file: self.log_file.clone(),
+                log_level: self.log_level.clone(),
             },
             filters: FilterInfo {
                 query: self.filter_input.text().to_string(),
@@ -687,6 +697,8 @@ impl AppState {
             self.disable_ipv4 = dump.options.disable_ipv4;
             self.disable_ipv6 = dump.options.disable_ipv6;
             self.interfaces = dump.options.interfaces;
+            self.log_file = dump.options.log_file;
+            self.log_level = dump.options.log_level;
         }
 
         self.sort_field = dump.sorting.field;
@@ -901,6 +913,13 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.refresh_local_addrs();
         self.prune_verifications();
+        // Surface a retained log write failure terminal-safely (the
+        // status message, not stderr, so the TUI is not corrupted).
+        if let Some(log_failure) = crate::logging::take_log_error()
+            && let Ok(mut msg) = self.status_message.try_lock()
+        {
+            *msg = Some(log_failure.into());
+        }
         self.validate_selected_type();
 
         // Ensure filtered cache is up to date before computing layout
@@ -2021,7 +2040,9 @@ async fn browse_with_retry(
                 tokio::time::sleep(BROWSE_RETRY_DELAY).await;
             }
             Err(e) => {
-                eprintln!("[mdns] giving up browsing {service_type} after {attempts} retries: {e}");
+                log::warn!(
+                    "[mdns] giving up browsing {service_type} after {attempts} retries: {e}"
+                );
                 return Err(e);
             }
         }
@@ -2045,7 +2066,7 @@ fn spawn_service_type_browse(
         )
         .await
         {
-            eprintln!("[mdns] giving up browsing {service_type}: {e}");
+            log::warn!("[mdns] giving up browsing {service_type}: {e}");
             let mut state = state.write().await;
             handle_browse_failure(
                 &service_type,
@@ -2123,9 +2144,8 @@ fn handle_verify_request(
         }
         Err(e) => {
             // Verify feedback stays out of the status popup (issue
-            // #830), including errors; log like the browse failure
-            // path instead of consuming the next key press.
-            eprintln!("[mdns] failed to verify {}: {}", target.display_name, e);
+            // #830), including errors; the log file records them.
+            log::error!("[mdns] failed to verify {}: {}", target.display_name, e);
         }
     }
 }
@@ -3115,6 +3135,8 @@ fn configure_interfaces(
 /// * `disable_ipv4` - Whether to disable IPv4 mDNS discovery
 /// * `disable_ipv6` - Whether to disable IPv6 mDNS discovery
 /// * `loaded_state` - Optional JSON string to load state from file (view-only mode)
+/// * `log_file` - Optional override of the default log file path
+/// * `log_level` - Optional minimum level recorded to the log file
 ///
 /// # Example
 /// ```no_run
@@ -3124,7 +3146,7 @@ fn configure_interfaces(
 ///     let service_types = HashSet::new();
 ///
 ///     // Use default interfaces (all available)
-///     run_tui(service_types.clone(), None, None, false, false, None).await;
+///     run_tui(service_types.clone(), None, None, false, false, None, None, None).await;
 ///
 ///     // Use specific interfaces
 ///     run_tui(
@@ -3132,6 +3154,8 @@ fn configure_interfaces(
 ///         Some(vec!["eth0".into()]),
 ///         false,
 ///         false,
+///         None,
+///         None,
 ///         None,
 ///     )
 ///     .await
@@ -3146,6 +3170,8 @@ pub async fn run_tui(
     disable_ipv4: bool,
     disable_ipv6: bool,
     loaded_state: Option<String>,
+    log_file: Option<String>,
+    log_level: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if disable_ipv4 && disable_ipv6 {
         return Err("Cannot disable both IPv4 and IPv6. At least one must be enabled.".into());
@@ -3195,6 +3221,8 @@ pub async fn run_tui(
         disable_ipv4,
         disable_ipv6,
         interfaces.clone(),
+        log_file,
+        log_level,
     )));
 
     // Load state from file if provided
@@ -3385,14 +3413,14 @@ pub async fn run_tui(
                         match event::read() {
                             Ok(event) => Some(event),
                             Err(e) => {
-                                eprintln!("Error reading event: {}", e);
+                                log::warn!("Error reading event: {}", e);
                                 None
                             }
                         }
                     }
                     Ok(false) => None,
                     Err(e) => {
-                        eprintln!("Error polling for events: {}", e);
+                        log::warn!("Error polling for events: {}", e);
                         None
                     }
                 }
@@ -3539,7 +3567,7 @@ pub async fn run_tui(
                     Ok(area) => area,
                     Err(e) => {
                         let err_msg = format!("Failed to get terminal area: {}", e);
-                        eprintln!("{}", err_msg);
+                        log::error!("{}", err_msg);
                         break Err(err_msg.into());
                     }
                 };
@@ -3548,7 +3576,7 @@ pub async fn run_tui(
                     state.prepare_for_rendering(terminal_area);
                     if let Err(e) = terminal.draw(|f| ui(f, &state)) {
                         let err_msg = format!("Failed to draw terminal: {}", e);
-                        eprintln!("{}", err_msg);
+                        log::error!("{}", err_msg);
                         break Err(err_msg.into());
                     }
                 }
@@ -3612,13 +3640,13 @@ mod tests {
 
     /// Helper to create AppState for testing
     fn create_test_app_state() -> AppState {
-        AppState::new(HashSet::new(), false, false, None)
+        AppState::new(HashSet::new(), false, false, None, None, None)
     }
 
     fn create_test_app_state_with_user_service_types(
         user_service_types: HashSet<String>,
     ) -> AppState {
-        AppState::new(user_service_types, false, false, None)
+        AppState::new(user_service_types, false, false, None, None, None)
     }
 
     fn create_flapping_sessions() -> Vec<ServiceSession> {
@@ -3711,7 +3739,7 @@ mod tests {
     fn setup_test_state_with_user_types(user_types: Vec<&str>) -> AppState {
         let user_types_set: HashSet<String> =
             user_types.into_iter().map(|s| s.to_string()).collect();
-        AppState::new(user_types_set, false, false, None)
+        AppState::new(user_types_set, false, false, None, None, None)
     }
 
     // Common assertion helper functions
@@ -4993,7 +5021,7 @@ mod tests {
     // AppState initialization tests
     #[test]
     fn test_appstate_new() {
-        let state = AppState::new(HashSet::new(), false, false, None);
+        let state = AppState::new(HashSet::new(), false, false, None, None, None);
         assert_eq!(state.services.len(), 0);
         assert_eq!(state.service_types.len(), 0);
         assert_eq!(state.selected_service, 0);
@@ -6325,7 +6353,7 @@ mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
         service.addrs = vec![ScopedIp::from(sentinel)];
 
-        let mut state = AppState::new(HashSet::new(), false, false, None);
+        let mut state = AppState::new(HashSet::new(), false, false, None, None, None);
 
         // Fresh cache is left alone.
         state.local_addrs = LocalAddrs::single_global(sentinel);
@@ -6342,7 +6370,7 @@ mod tests {
 
     #[test]
     fn test_local_addrs_stale_predicate() {
-        let mut state = AppState::new(HashSet::new(), false, false, None);
+        let mut state = AppState::new(HashSet::new(), false, false, None, None, None);
 
         state.local_addrs_refreshed_at = Instant::now();
         assert!(!state.local_addrs_stale());
@@ -8416,7 +8444,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_daemon_snapshot_announces_problem_and_recovery_once() {
-        let mut state = AppState::new(HashSet::new(), false, false, None);
+        let mut state = AppState::new(HashSet::new(), false, false, None, None, None);
 
         assert!(
             state
@@ -8454,7 +8482,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_daemon_snapshot_healthy_start_stays_silent() {
-        let mut state = AppState::new(HashSet::new(), false, false, None);
+        let mut state = AppState::new(HashSet::new(), false, false, None, None, None);
         assert!(
             state
                 .update_daemon_snapshot(daemon_with_ipv6_bind_error(None))
@@ -8466,7 +8494,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_daemon_snapshot_disabled_ipv6_bind_error_silent() {
-        let mut state = AppState::new(HashSet::new(), false, true, None);
+        let mut state = AppState::new(HashSet::new(), false, true, None, None, None);
         state
             .update_daemon_snapshot(daemon_with_ipv6_bind_error(Some("nope")))
             .await;
@@ -8476,7 +8504,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_state_dump() {
         let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
-        let mut state = AppState::new(user_types.clone(), true, false, None);
+        let mut state = AppState::new(user_types.clone(), true, false, None, None, None);
 
         // Add some test data
         state.add_service_type("_http._tcp.local.");
@@ -8570,7 +8598,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_dump_file_creation() {
         let user_types: HashSet<String> = ["_test._tcp.local.".to_string()].into_iter().collect();
-        let mut state = AppState::new(user_types.clone(), false, true, None);
+        let mut state = AppState::new(user_types.clone(), false, true, None, None, None);
 
         // Add minimal test data
         state.add_service_type("_test._tcp.local.");
@@ -8632,7 +8660,7 @@ mod tests {
     #[tokio::test]
     async fn test_load_state_from_json() {
         let user_types: HashSet<String> = ["_http._tcp.local.".to_string()].into_iter().collect();
-        let mut state = AppState::new(user_types.clone(), true, false, None);
+        let mut state = AppState::new(user_types.clone(), true, false, None, None, None);
 
         state.add_service_type("_http._tcp.local.");
         state
@@ -8655,7 +8683,7 @@ mod tests {
 
         let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
 
-        let mut loaded_state = AppState::new(HashSet::new(), false, false, None);
+        let mut loaded_state = AppState::new(HashSet::new(), false, false, None, None, None);
         loaded_state.load_from_state_dump(state_dump);
 
         assert_eq!(loaded_state.services.len(), 1);
@@ -8667,6 +8695,83 @@ mod tests {
         assert!(loaded_state.disable_ipv4);
         assert!(!loaded_state.disable_ipv6);
         assert!(loaded_state.interfaces.is_none());
+    }
+
+    #[test]
+    fn test_prepare_for_rendering_surfaces_log_write_failure_once() {
+        let mut state = create_test_app_state();
+        crate::logging::set_log_error_for_test("log write failed: boom");
+
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 80, 24));
+
+        let surfaced_text = {
+            let msg = state.status_message.try_lock().unwrap();
+            msg.as_ref()
+                .expect("failure surfaced as status message")
+                .text
+                .clone()
+        };
+        assert_eq!(surfaced_text, "log write failed: boom");
+        assert!(
+            crate::logging::take_log_error().is_none(),
+            "surfacing takes the retained failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_log_options_round_trip() {
+        let mut state = create_test_app_state();
+        state.log_file = Some("/tmp/mdns-tui-browser.log".to_string());
+        state.log_level = Some("debug".to_string());
+
+        let json_str = state.dump_state_to_json().unwrap();
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Should be valid JSON");
+        let options = &parsed["options"];
+        assert_eq!(options["logFile"], "/tmp/mdns-tui-browser.log");
+        assert_eq!(options["logLevel"], "debug");
+
+        let state_dump: StateDump = serde_json::from_str(&json_str).expect("Should be valid JSON");
+        let mut loaded_state = create_test_app_state();
+        loaded_state.load_from_state_dump(state_dump);
+
+        assert_eq!(
+            loaded_state.log_file.as_deref(),
+            Some("/tmp/mdns-tui-browser.log")
+        );
+        assert_eq!(loaded_state.log_level.as_deref(), Some("debug"));
+    }
+
+    #[test]
+    fn test_load_old_state_dump_without_log_options_defaults_none() {
+        let old_dump_json = r#"{
+            "metadata": {
+                "dumpTimestamp": "2026-11-20T16:00:00.000000Z",
+                "applicationName": "mdns-tui-browser",
+                "version": "1.44.0"
+            },
+            "services": [],
+            "serviceTypes": [],
+            "metrics": {},
+            "options": {
+                "serviceTypes": [],
+                "disableIpv4": false,
+                "disableIpv6": false,
+                "interfaces": null
+            },
+            "filters": {"query": ""},
+            "sorting": {"field": "Host", "direction": "Ascending"}
+        }"#;
+        let dump: StateDump = serde_json::from_str(old_dump_json).expect("old dump parses");
+        let mut state = create_test_app_state();
+        state.log_file = Some("stale".to_string());
+        state.log_level = Some("trace".to_string());
+
+        state.load_from_state_dump(dump);
+
+        assert_eq!(state.log_file, None, "absent logFile loads as none");
+        assert_eq!(state.log_level, None, "absent logLevel loads as none");
     }
 
     #[tokio::test]
@@ -9157,6 +9262,8 @@ mod tests {
                 disable_ipv4: false,
                 disable_ipv6: false,
                 interfaces: None,
+                log_file: None,
+                log_level: None,
             },
             filters: FilterInfo {
                 query: String::new(),
@@ -9197,6 +9304,8 @@ mod tests {
                 disable_ipv4: false,
                 disable_ipv6: false,
                 interfaces: None,
+                log_file: None,
+                log_level: None,
             },
             filters: FilterInfo {
                 query: String::new(),

@@ -52,6 +52,7 @@ strip = true
 
 [dependencies]
 mdns-sd = "0.22"
+log = "0.4"
 tokio = { version = "1.0", features = ["full"] }
 ratatui = "0.30"
 crossterm = "0.29"
