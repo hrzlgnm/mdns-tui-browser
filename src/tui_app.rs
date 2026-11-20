@@ -913,12 +913,18 @@ impl AppState {
         self.terminal_area = terminal_area;
         self.refresh_local_addrs();
         self.prune_verifications();
-        // Surface a retained log write failure terminal-safely (the
-        // status message, not stderr, so the TUI is not corrupted).
-        // Take only with the message lock held, so a momentarily
-        // contended status message cannot silently discard the notice.
-        if let Ok(mut msg) = self.status_message.try_lock() {
-            surface_log_failure(&mut msg, crate::logging::take_log_error());
+        {
+            // Surface a retained log write failure terminal-safely (the
+            // status message, not stderr, so the TUI is not corrupted).
+            // Take only with the message lock held, so a momentarily
+            // contended status message cannot silently discard the
+            // notice. In test builds the drain serializes against
+            // logging tests asserting on the retained failure.
+            #[cfg(test)]
+            let _retained_guard = crate::logging::retained_log_error_guard();
+            if let Ok(mut msg) = self.status_message.try_lock() {
+                surface_log_failure(&mut msg, crate::logging::take_log_error());
+            }
         }
         self.validate_selected_type();
 

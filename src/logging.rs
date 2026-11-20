@@ -72,6 +72,24 @@ pub fn take_log_error() -> Option<String> {
     LAST_LOG_ERROR.lock().ok().and_then(|mut e| e.take())
 }
 
+/// Serializes producers and consumers of the retained log write
+/// failure in test builds: a threaded `cargo test` run (the AUR check
+/// path) could otherwise have one test's rendering consume a failure
+/// another test is about to assert on. Holders must not render while
+/// holding, or they deadlock against the render-side guard.
+#[cfg(test)]
+static RETAINED_LOG_ERROR_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Takes the retained-failure guard in test builds; see the lock.
+/// Poison-tolerant because a failing test must not break the guard
+/// for the rest of the run.
+#[cfg(test)]
+pub(crate) fn retained_log_error_guard() -> std::sync::MutexGuard<'static, ()> {
+    RETAINED_LOG_ERROR_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         LOGGER_STATE
@@ -362,6 +380,10 @@ mod tests {
     #[test]
     fn test_log_write_failure_is_retained_for_surfacing() {
         let _guard = TEST_LOG_LOCK.lock().unwrap();
+        // Held across populate-and-assert: without it, a threaded
+        // `cargo test` run could have a parallel rendering test consume
+        // the retained failure between the write and the assertions.
+        let _retained_guard = retained_log_error_guard();
         let path = temp_log_path("logfail");
         let backup = backup_path(&path, 1);
         let _ = std::fs::remove_file(&path);
