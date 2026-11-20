@@ -3487,8 +3487,12 @@ pub async fn run_tui(
                                         }
                                     }
                                 }
-                                if let Some(verify_target) = state.take_verify_request()
-                                    && let Some(mdns_ref) = mdns.as_ref()
+                                // A verify request only exists in live mode,
+                                // where the daemon is present; checking the
+                                // daemon first keeps a stray request pending
+                                // rather than silently dropping it.
+                                if let Some(mdns_ref) = mdns.as_ref()
+                                    && let Some(verify_target) = state.take_verify_request()
                                 {
                                     handle_verify_request(
                                         mdns_ref,
