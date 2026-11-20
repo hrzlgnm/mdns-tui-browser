@@ -40,12 +40,16 @@ const SERVICES_LIST_SCALE_THRESHOLD: u16 = 40;
 const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.3;
 const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
 const BROWSE_RETRY_ATTEMPTS: usize = 100;
+/// Verify window for the `v` key, passed to the daemon's `verify`
+/// call (RFC 6762 section 10.4 record reconfirmation).
+const VERIFY_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Flapping service colors (color-blind friendly)
 const FLAPPING_COLOR_SELECTED: Color = Color::Rgb(100, 100, 100);
 const FLAPPING_COLOR_NORMAL: Color = Color::Rgb(60, 60, 60);
 const FLAPPING_FOREGROUND_COLOR: Color = Color::White;
 const LOCAL_DEVICE_COLOR: Color = Color::Green;
+const VERIFIED_COLOR: Color = Color::Green;
 
 /// kill target for suspend: suspend_pid() applied to the live ids.
 #[cfg(unix)]
@@ -189,6 +193,45 @@ fn get_visible_items<'a, T>(items: &'a [T], scroll_state: &ScrollState) -> &'a [
     &items[start..end]
 }
 
+/// A verification of one service started with the daemon's `verify`
+/// call, keyed by the service's display fullname.
+#[derive(Debug, Clone)]
+struct ServiceVerification {
+    /// When the verify window closes; the daemon flushes the
+    /// instance's records at this point if it did not respond,
+    /// which marks the service offline.
+    deadline: Instant,
+    /// When the window closed with the service still online, i.e. it
+    /// answered the daemon's queries, in microseconds since the Unix
+    /// epoch.
+    verified_at_micros: Option<u64>,
+}
+
+impl ServiceVerification {
+    /// Whether the verify query is still awaiting resolution.
+    fn in_flight(&self) -> bool {
+        self.verified_at_micros.is_none() && self.deadline > Instant::now()
+    }
+
+    /// Whether the window closed with the service still online.
+    fn is_verified(&self) -> bool {
+        self.verified_at_micros.is_some()
+    }
+}
+
+/// A verify request passed from the `v` key handler to the run loop,
+/// which owns the daemon handle.
+#[derive(Debug)]
+struct VerifyTarget {
+    /// Escaped, wire-case fullname exactly as the daemon's caches
+    /// key the instance.
+    wire_fullname: String,
+    /// Display fullname keying the verification state.
+    display_fullname: String,
+    /// Short instance name for status messages.
+    display_name: String,
+}
+
 struct AppState {
     services: Vec<ServiceEntry>,
     service_types: Vec<String>,
@@ -218,6 +261,11 @@ struct AppState {
     filter_input: InputState,
     service_type_input: InputState,
     apply_service_type: bool,
+    /// Verify target requested with `v`; the run loop consumes it
+    /// because only it holds the daemon handle.
+    verify_request: Option<VerifyTarget>,
+    /// Verification progress per service, keyed by display fullname.
+    verifications: BTreeMap<String, ServiceVerification>,
     terminal_area: ratatui::layout::Rect,
     user_service_types: HashSet<String>,
     pending_service_types: HashSet<String>,
@@ -264,6 +312,8 @@ impl Clone for AppState {
             filter_input: self.filter_input.clone(),
             service_type_input: self.service_type_input.clone(),
             apply_service_type: self.apply_service_type,
+            verify_request: None,
+            verifications: self.verifications.clone(),
             terminal_area: self.terminal_area,
             user_service_types: self.user_service_types.clone(),
             pending_service_types: self.pending_service_types.clone(),
@@ -311,6 +361,8 @@ impl AppState {
             ),
             service_type_input: InputState::new("Add Service Type (Enter to add, Esc to cancel)"),
             apply_service_type: false,
+            verify_request: None,
+            verifications: BTreeMap::new(),
             terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24), // Default, will be updated in UI
             user_service_types,
             pending_service_types: HashSet::new(),
@@ -837,6 +889,7 @@ impl AppState {
     fn prepare_for_rendering(&mut self, terminal_area: ratatui::layout::Rect) {
         self.terminal_area = terminal_area;
         self.refresh_local_addrs();
+        self.prune_verifications();
         self.validate_selected_type();
 
         // Ensure filtered cache is up to date before computing layout
@@ -1147,6 +1200,12 @@ impl AppState {
                 true
             }
 
+            // Verify the selected service (RFC 6762 section 10.4)
+            KeyCode::Char('v') => {
+                self.request_verify_selected_service();
+                true
+            }
+
             // Sorting
             KeyCode::Char('s') => {
                 self.cycle_sort_field(true);
@@ -1247,6 +1306,7 @@ impl AppState {
                 || existing.online != service_entry.online; // Include online in significant changes
 
             existing.updated_at_micros = service_entry.updated_at_micros; // Always update timestamp
+            existing.wire_fullname = service_entry.wire_fullname; // Keep the daemon name current
 
             if significant_fields_changed {
                 // Handle service coming back online
@@ -1300,11 +1360,112 @@ impl AppState {
             }
             self.services[idx].go_offline_at(current_timestamp_micros());
             self.services[idx].update_flapping_status();
+            // A service that went offline is no longer verified.
+            self.verifications.remove(&fullname);
             self.invalidate_cache_and_validate();
             true
         } else {
             false
         }
+    }
+
+    /// Records a verify request for the selected service; the run loop
+    /// consumes it because only it holds the daemon handle.
+    fn request_verify_selected_service(&mut self) {
+        if self.loaded_from_file {
+            if let Ok(mut msg) = self.status_message.try_lock() {
+                *msg = Some("Verify is unavailable in view-only mode".to_string().into());
+            }
+            return;
+        }
+        let selected_service_idx = self.selected_service;
+        let Some(&service_idx) = self.get_filtered_services().get(selected_service_idx) else {
+            return;
+        };
+        let Some(service) = self.services.get(service_idx) else {
+            return;
+        };
+        if !service.online {
+            // The daemon flushed the instance's records when it went
+            // offline, so there is nothing left to query.
+            if let Ok(mut msg) = self.status_message.try_lock() {
+                *msg = Some("Cannot verify an offline service".to_string().into());
+            }
+            return;
+        }
+        let Some(wire_fullname) = service.wire_fullname.clone() else {
+            // Only entries rebuilt from a state dump lack a wire name,
+            // and view-only mode returned above; live resolutions
+            // always carry one.
+            return;
+        };
+        let display_name =
+            strip_service_type_suffix(&service.fullname, &service.service_type).to_string();
+        self.verify_request = Some(VerifyTarget {
+            wire_fullname,
+            display_fullname: service.fullname.clone(),
+            display_name,
+        });
+    }
+
+    /// Takes the pending verify request, if any.
+    fn take_verify_request(&mut self) -> Option<VerifyTarget> {
+        self.verify_request.take()
+    }
+
+    /// Marks a verify query as in flight for `display_fullname`.
+    fn begin_verification(&mut self, display_fullname: &str) {
+        self.verifications.insert(
+            display_fullname.to_string(),
+            ServiceVerification {
+                deadline: Instant::now() + VERIFY_TIMEOUT,
+                verified_at_micros: None,
+            },
+        );
+    }
+
+    /// Resolves a verification whose window just closed. There is no
+    /// distinct response event: a service still online answered the
+    /// daemon's queries and is verified; a service that is gone or
+    /// offline did not answer and keeps no verification. Returns a
+    /// status message naming the service when it became verified.
+    fn note_verification_deadline(
+        &mut self,
+        display_fullname: &str,
+        display_name: &str,
+    ) -> Option<String> {
+        let verification = self.verifications.get(display_fullname)?;
+        if verification.verified_at_micros.is_some() || verification.deadline > Instant::now() {
+            // Already resolved, or superseded by a newer verify press
+            // whose deadline task will resolve this entry.
+            return None;
+        }
+        let online = self
+            .services
+            .iter()
+            .any(|s| s.fullname == display_fullname && s.online);
+        if !online {
+            self.verifications.remove(display_fullname);
+            return None;
+        }
+        let verification = self.verifications.get_mut(display_fullname)?;
+        verification.verified_at_micros = Some(current_timestamp_micros());
+        self.update_metric("services_verified");
+        Some(format!("✓ {} verified", display_name))
+    }
+
+    /// Drops verification state that can no longer matter: entries
+    /// whose service is gone or offline. In-flight entries are kept
+    /// until their deadline task resolves them.
+    fn prune_verifications(&mut self) {
+        let known: HashSet<&str> = self
+            .services
+            .iter()
+            .filter(|s| s.online)
+            .map(|s| s.fullname.as_str())
+            .collect();
+        self.verifications
+            .retain(|fullname, _| known.contains(fullname.as_str()));
     }
 
     fn navigate_services_up(&mut self) {
@@ -1570,8 +1731,11 @@ impl AppState {
         if let Some(&service_idx) = filtered_indices.get(selected_service_idx)
             && let Some(service) = self.services.get(service_idx)
         {
-            let details_lines =
-                create_service_details_text(service, self.is_local_service(service));
+            let details_lines = create_service_details_text(
+                service,
+                self.is_local_service(service),
+                self.verifications.get(&service.fullname),
+            );
             let total_lines = details_lines.len();
 
             if total_lines > 0 && self.details_scroll.visible_items > 0 {
@@ -1906,6 +2070,59 @@ async fn handle_browse_failure(
     let _ = notification_sender.send(Notification::ServiceChanged);
 }
 
+/// Runs a verify request against the daemon and tracks its window in
+/// the state. While the window is open the service shows as being
+/// verified; when it closes, a service still online is verified and a
+/// service that did not respond goes offline via the daemon's flush.
+async fn handle_verify_request(
+    mdns: &Option<ServiceDaemon>,
+    state: &mut AppState,
+    state_arc: &Arc<RwLock<AppState>>,
+    notification_sender: &flume::Sender<Notification>,
+    target: VerifyTarget,
+) {
+    let Some(mdns_ref) = mdns else {
+        // AppState already refuses view-only requests; keep a message
+        // here so a stray request cannot vanish silently.
+        *state.status_message.lock().await =
+            Some("Verify is unavailable in view-only mode".to_string().into());
+        return;
+    };
+    match mdns_ref.verify(target.wire_fullname, VERIFY_TIMEOUT) {
+        Ok(()) => {
+            state.begin_verification(&target.display_fullname);
+            *state.status_message.lock().await = Some(
+                format!(
+                    "Verifying {} (up to {}s)",
+                    target.display_name,
+                    VERIFY_TIMEOUT.as_secs()
+                )
+                .into(),
+            );
+            // Resolve the verification when its window closes, and
+            // redraw even if no other event arrives first.
+            let timer_state = Arc::clone(state_arc);
+            let timer_fullname = target.display_fullname;
+            let timer_name = target.display_name;
+            let timer_sender = notification_sender.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(VERIFY_TIMEOUT).await;
+                let mut state = timer_state.write().await;
+                if let Some(message) =
+                    state.note_verification_deadline(&timer_fullname, &timer_name)
+                {
+                    *state.status_message.lock().await = Some(message.into());
+                }
+                let _ = timer_sender.send(Notification::ServiceChanged);
+            });
+        }
+        Err(e) => {
+            *state.status_message.lock().await =
+                Some(format!("Failed to verify {}: {}", target.display_name, e).into());
+        }
+    }
+}
+
 fn ui(f: &mut Frame, app_state: &AppState) {
     let (layout, visible_counts) = AppState::prepare_layout_and_counts(app_state, f.area());
 
@@ -2190,8 +2407,9 @@ fn render_services_list(
         .map(|(i, &service_idx)| {
             let service = &services_clone[service_idx];
             let is_local = app_state.is_local_service(service);
+            let verification = app_state.verifications.get(&service.fullname);
             let style = create_service_list_item_style(i, selected_service_idx, service, is_local);
-            let display_text = format_service_for_display(service, is_local);
+            let display_text = format_service_for_display(service, is_local, verification);
             ListItem::new(Line::from(Span::styled(display_text, style)))
         })
         .collect();
@@ -2286,8 +2504,9 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
         .map(|&idx| &services_clone[idx]);
 
     if let Some(service) = selected_service {
+        let verification = app_state.verifications.get(&service.fullname);
         let details_lines =
-            create_service_details_text(service, app_state.is_local_service(service));
+            create_service_details_text(service, app_state.is_local_service(service), verification);
 
         // Apply scroll offset
         let clamped_offset = if details_lines.is_empty() {
@@ -2453,7 +2672,11 @@ fn create_service_list_item_style(
     style
 }
 
-fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String {
+fn format_service_for_display(
+    service: &ServiceEntry,
+    is_local: bool,
+    verification: Option<&ServiceVerification>,
+) -> String {
     let display_name = strip_service_type_suffix(&service.fullname, &service.service_type);
     let display_host = service
         .host
@@ -2464,9 +2687,19 @@ fn format_service_for_display(service: &ServiceEntry, is_local: bool) -> String 
         .first()
         .map(format_ip_for_display)
         .unwrap_or_else(|| "<no-addr>".into());
-    // The marker survives monochrome terminals; it also keeps the flag
+    // The markers survive monochrome terminals; they also keep the flags
     // visible when a long row is truncated on the right.
-    let marker = if is_local { "◉ " } else { "" };
+    let mut marker = String::new();
+    if is_local {
+        marker.push_str("◉ ");
+    }
+    match verification {
+        Some(verification) if verification.is_verified() => marker.push_str("✓ "),
+        // In-flight while the verify window is open; a closed window
+        // keeps showing ↻ until its deadline task resolves the entry.
+        Some(_) => marker.push_str("↻ "),
+        None => {}
+    }
     format!(
         "{}{} - {} - {}:{}",
         marker, display_name, display_host, address, service.port
@@ -2617,7 +2850,11 @@ fn get_session_history(service: &ServiceEntry) -> String {
     timeline.join("\n")
 }
 
-fn create_service_details_text(service: &ServiceEntry, is_local: bool) -> Vec<Line<'static>> {
+fn create_service_details_text(
+    service: &ServiceEntry,
+    is_local: bool,
+    verification: Option<&ServiceVerification>,
+) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     if is_local {
@@ -2717,6 +2954,31 @@ fn create_service_details_text(service: &ServiceEntry, is_local: bool) -> Vec<Li
             Span::styled("Went offline at:   ", Style::default()),
             Span::raw(offline_timestamp),
         ]));
+    }
+
+    // Verification outcome, when the user ran a verify on this service.
+    if let Some(verification) = verification {
+        if let Some(verified_at) = verification.verified_at_micros {
+            lines.push(Line::from(vec![
+                Span::styled("Verified:          ", Style::default()),
+                Span::styled(
+                    format_timestamp_micros(verified_at),
+                    Style::default()
+                        .fg(VERIFIED_COLOR)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        } else if verification.in_flight() {
+            lines.push(Line::from(vec![
+                Span::styled("Verification:      ", Style::default()),
+                Span::styled(
+                    format!("in progress (up to {}s)", VERIFY_TIMEOUT.as_secs()),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
     }
 
     // Empty line for spacing
@@ -3233,6 +3495,16 @@ pub async fn run_tui(
                                             });
                                         }
                                     }
+                                }
+                                if let Some(verify_target) = state.take_verify_request() {
+                                    handle_verify_request(
+                                        &mdns,
+                                        &mut state,
+                                        &state_arc,
+                                        &notification_sender,
+                                        verify_target,
+                                    )
+                                    .await;
                                 }
                                 let _ = notification_sender.send(Notification::UserInput);
                             } else {
@@ -5825,7 +6097,7 @@ mod tests {
     #[test]
     fn test_format_service_for_display() {
         let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
-        let display = format_service_for_display(&service, false);
+        let display = format_service_for_display(&service, false, None);
         println!("Display string: {}", display);
         assert!(display.contains("MyPrinter"));
         assert!(display.contains("192.168.1.64"));
@@ -5836,6 +6108,7 @@ mod tests {
     fn test_format_service_for_display_no_address() {
         let service = ServiceEntry {
             fullname: "test._http._tcp.local.".to_string(),
+            wire_fullname: None,
             host: "testhost.local.".to_string(),
             service_type: "_http._tcp.local.".to_string(),
             subtype: None,
@@ -5851,7 +6124,7 @@ mod tests {
             is_flapping: false,
         };
 
-        let display = format_service_for_display(&service, false);
+        let display = format_service_for_display(&service, false, None);
         assert!(display.contains("test"));
         assert!(display.contains("testhost"));
         assert!(display.contains("<no-addr>"));
@@ -5882,7 +6155,7 @@ mod tests {
         service.service_type = "_http._tcp.local.".to_string();
         service.addrs.clear();
 
-        let display = format_service_for_display(&service, false);
+        let display = format_service_for_display(&service, false, None);
         assert!(
             display.starts_with("Test - "),
             "unexpected display: {display}"
@@ -5905,7 +6178,7 @@ mod tests {
         service.addrs.clear(); // Test with empty addresses
         service.host = "offlinehost.local.".to_string(); // Override host for test
 
-        let display = format_service_for_display(&service, false);
+        let display = format_service_for_display(&service, false, None);
         assert!(display.contains("OfflineService"));
         assert!(display.contains("offlinehost"));
         assert!(display.contains("80"));
@@ -5916,7 +6189,7 @@ mod tests {
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
         service.addrs.clear(); // Test with empty addresses
 
-        let display = format_service_for_display(&service, false);
+        let display = format_service_for_display(&service, false, None);
         assert!(display.contains("<no-addr>"));
     }
 
@@ -5924,10 +6197,10 @@ mod tests {
     fn test_format_service_for_display_local_marker() {
         let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
 
-        let remote = format_service_for_display(&service, false);
+        let remote = format_service_for_display(&service, false, None);
         assert!(!remote.starts_with("◉ "));
 
-        let local = format_service_for_display(&service, true);
+        let local = format_service_for_display(&service, true, None);
         assert!(local.starts_with("◉ "));
         assert!(local.contains("MyPrinter"));
     }
@@ -5945,7 +6218,7 @@ mod tests {
         service.last_online_micros = Some(1000000000);
         service.last_offline_micros = None;
 
-        let details_lines = create_service_details_text(&service, false);
+        let details_lines = create_service_details_text(&service, false, None);
         let details_text: String = details_lines
             .iter()
             .map(|line| {
@@ -5974,7 +6247,7 @@ mod tests {
     fn test_create_service_details_text_online_service() {
         let service = create_test_service("test", "_http._tcp.local.", 80);
 
-        let details_lines = create_service_details_text(&service, false);
+        let details_lines = create_service_details_text(&service, false, None);
         let details_text: String = details_lines
             .iter()
             .map(|line| {
@@ -5996,7 +6269,7 @@ mod tests {
     fn test_create_service_details_text_offline_service() {
         let mut service = create_test_service("test", "_http._tcp.local.", 80);
         service.online = false;
-        let details_lines = create_service_details_text(&service, false);
+        let details_lines = create_service_details_text(&service, false, None);
         let details_text: String = details_lines
             .iter()
             .map(|line| {
@@ -6015,14 +6288,14 @@ mod tests {
     fn test_create_service_details_text_local_device() {
         let service = create_test_service("test", "_http._tcp.local.", 80);
 
-        let remote_lines = create_service_details_text(&service, false);
+        let remote_lines = create_service_details_text(&service, false, None);
         let remote_text: String = remote_lines
             .iter()
             .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
             .collect();
         assert!(!remote_text.contains("Advertised by this device"));
 
-        let local_lines = create_service_details_text(&service, true);
+        let local_lines = create_service_details_text(&service, true, None);
         let local_text: String = local_lines
             .iter()
             .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
@@ -8988,6 +9261,375 @@ mod tests {
         assert_eq!(
             state.active_browse_keys,
             HashSet::from(["_http._tcp.local.".to_string()])
+        );
+    }
+
+    fn create_verifiable_service(name: &str, service_type: &str, port: u16) -> ServiceEntry {
+        let mut service = create_test_service(name, service_type, port);
+        service.wire_fullname = Some(format!("{}.{}", name, service_type));
+        service
+    }
+
+    #[test]
+    fn test_v_key_sets_verify_request_for_selected_service() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('v'))));
+        let target = state.take_verify_request().expect("verify request pending");
+        assert_eq!(target.wire_fullname, "test1._http._tcp.local.");
+        assert_eq!(target.display_fullname, "test1._http._tcp.local.");
+        assert_eq!(target.display_name, "test1");
+    }
+
+    #[test]
+    fn test_v_key_in_view_only_mode_shows_message_without_request() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        state.loaded_from_file = true;
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('v'))));
+        assert!(state.take_verify_request().is_none());
+        assert_eq!(
+            state
+                .status_message
+                .try_lock()
+                .unwrap()
+                .as_ref()
+                .map(|m| &m.text),
+            Some(&"Verify is unavailable in view-only mode".to_string())
+        );
+    }
+
+    #[test]
+    fn test_v_key_without_selected_service_is_noop() {
+        let mut state = create_test_app_state();
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('v'))));
+        assert!(state.take_verify_request().is_none());
+    }
+
+    #[test]
+    fn test_v_key_without_wire_fullname_is_noop() {
+        // Entries without a daemon-reported fullname cannot be verified.
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('v'))));
+        assert!(state.take_verify_request().is_none());
+    }
+
+    #[test]
+    fn test_v_key_on_offline_service_shows_message_without_request() {
+        let mut offline_service = create_verifiable_service("test1", "_http._tcp.local.", 80);
+        offline_service.online = false;
+        let mut state = setup_test_state_with_services(vec![offline_service]);
+
+        assert!(state.handle_key_event(KeyEvent::from(KeyCode::Char('v'))));
+        assert!(state.take_verify_request().is_none());
+        assert_eq!(
+            state
+                .status_message
+                .try_lock()
+                .unwrap()
+                .as_ref()
+                .map(|m| &m.text),
+            Some(&"Cannot verify an offline service".to_string())
+        );
+    }
+
+    #[test]
+    fn test_take_verify_request_returns_target_once() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        state.request_verify_selected_service();
+
+        assert!(state.take_verify_request().is_some());
+        assert!(state.take_verify_request().is_none());
+    }
+
+    #[test]
+    fn test_begin_verification_marks_window_in_flight() {
+        let mut state = create_test_app_state();
+
+        state.begin_verification("test1._http._tcp.local.");
+
+        let verification = state
+            .verifications
+            .get("test1._http._tcp.local.")
+            .expect("verification tracked");
+        assert!(verification.in_flight());
+        assert!(!verification.is_verified());
+    }
+
+    #[test]
+    fn test_note_verification_deadline_marks_online_service_verified() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        let fullname = "test1._http._tcp.local.";
+        state.begin_verification(fullname);
+        // Force the window closed as the deadline task would observe it.
+        state.verifications.get_mut(fullname).unwrap().deadline =
+            Instant::now() - Duration::from_secs(1);
+
+        assert_eq!(
+            state.note_verification_deadline(fullname, "test1"),
+            Some("✓ test1 verified".to_string())
+        );
+        let verification = state.verifications.get(fullname).expect("kept entry");
+        assert!(verification.is_verified());
+        assert!(!verification.in_flight());
+        assert!(verification.verified_at_micros.is_some());
+        assert_eq!(state.metrics.get("services_verified"), Some(&1));
+
+        // A second resolution must not verify or count again.
+        assert_eq!(state.note_verification_deadline(fullname, "test1"), None);
+        assert_eq!(state.metrics.get("services_verified"), Some(&1));
+    }
+
+    #[test]
+    fn test_note_verification_deadline_removes_entry_for_offline_service() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        let fullname = "test1._http._tcp.local.";
+        state.begin_verification(fullname);
+        state.verifications.get_mut(fullname).unwrap().deadline =
+            Instant::now() - Duration::from_secs(1);
+        state.services[0].online = false;
+
+        assert_eq!(state.note_verification_deadline(fullname, "test1"), None);
+        assert!(!state.verifications.contains_key(fullname));
+        assert!(!state.metrics.contains_key("services_verified"));
+    }
+
+    #[test]
+    fn test_note_verification_deadline_ignores_open_window_and_missing_entry() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        let fullname = "test1._http._tcp.local.";
+
+        // A window still open belongs to a newer verify press whose own
+        // deadline task will resolve the entry.
+        state.begin_verification(fullname);
+        assert_eq!(state.note_verification_deadline(fullname, "test1"), None);
+        assert!(state.verifications.get(fullname).unwrap().in_flight());
+
+        // Without an entry there is nothing to resolve.
+        assert_eq!(
+            state.note_verification_deadline("gone._http._tcp.local.", "gone"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_mark_service_offline_clears_pending_verification() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        state.begin_verification("test1._http._tcp.local.");
+
+        assert!(state.mark_service_offline("test1._http._tcp.local."));
+        assert!(!state.verifications.contains_key("test1._http._tcp.local."));
+    }
+
+    #[test]
+    fn test_prune_verifications_drops_entries_for_gone_or_offline_services() {
+        let mut offline_service = create_verifiable_service("test3", "_http._tcp.local.", 83);
+        offline_service.online = false;
+        let mut state = setup_test_state_with_services(vec![
+            create_verifiable_service("test1", "_http._tcp.local.", 80),
+            create_verifiable_service("test2", "_http._tcp.local.", 81),
+            offline_service,
+        ]);
+
+        // Verified for a listed online service: kept.
+        state.verifications.insert(
+            "test1._http._tcp.local.".to_string(),
+            ServiceVerification {
+                deadline: Instant::now(),
+                verified_at_micros: Some(1),
+            },
+        );
+        // In-flight and past its window for a listed online service:
+        // kept, its deadline task resolves it.
+        state.verifications.insert(
+            "test2._http._tcp.local.".to_string(),
+            ServiceVerification {
+                deadline: Instant::now() - Duration::from_secs(1),
+                verified_at_micros: None,
+            },
+        );
+        // In-flight for a service that no longer exists: dropped.
+        state.verifications.insert(
+            "gone._http._tcp.local.".to_string(),
+            ServiceVerification {
+                deadline: Instant::now() + VERIFY_TIMEOUT,
+                verified_at_micros: None,
+            },
+        );
+        // Entry for an offline service: dropped.
+        state.verifications.insert(
+            "test3._http._tcp.local.".to_string(),
+            ServiceVerification {
+                deadline: Instant::now() + VERIFY_TIMEOUT,
+                verified_at_micros: Some(1),
+            },
+        );
+
+        state.prune_verifications();
+
+        assert!(state.verifications.contains_key("test1._http._tcp.local."));
+        assert!(state.verifications.contains_key("test2._http._tcp.local."));
+        assert!(!state.verifications.contains_key("gone._http._tcp.local."));
+        assert!(!state.verifications.contains_key("test3._http._tcp.local."));
+        assert_eq!(state.verifications.len(), 2);
+    }
+
+    #[test]
+    fn test_prepare_for_rendering_prunes_orphaned_verifications() {
+        let mut state = setup_test_state_with_services(vec![create_verifiable_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        // In-flight entry whose service still exists: kept, the
+        // deadline task owns resolving it.
+        state.verifications.insert(
+            "test1._http._tcp.local.".to_string(),
+            ServiceVerification {
+                deadline: Instant::now() - Duration::from_secs(1),
+                verified_at_micros: None,
+            },
+        );
+        // Entry for a service that no longer exists: dropped.
+        state.verifications.insert(
+            "gone._http._tcp.local.".to_string(),
+            ServiceVerification {
+                deadline: Instant::now() + VERIFY_TIMEOUT,
+                verified_at_micros: None,
+            },
+        );
+
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 80, 24));
+
+        assert!(state.verifications.contains_key("test1._http._tcp.local."));
+        assert!(!state.verifications.contains_key("gone._http._tcp.local."));
+    }
+
+    #[test]
+    fn test_format_service_for_display_verification_markers() {
+        let service = create_test_service("MyPrinter", "_printer._tcp.local.", 63);
+        let in_flight = ServiceVerification {
+            deadline: Instant::now() + VERIFY_TIMEOUT,
+            verified_at_micros: None,
+        };
+        let verified = ServiceVerification {
+            deadline: Instant::now(),
+            verified_at_micros: Some(1),
+        };
+
+        let checking = format_service_for_display(&service, false, Some(&in_flight));
+        assert!(checking.starts_with("↻ "), "unexpected display: {checking}");
+
+        let confirmed = format_service_for_display(&service, false, Some(&verified));
+        assert!(
+            confirmed.starts_with("✓ "),
+            "unexpected display: {confirmed}"
+        );
+
+        let local_confirmed = format_service_for_display(&service, true, Some(&verified));
+        assert!(
+            local_confirmed.starts_with("◉ ✓ "),
+            "unexpected display: {local_confirmed}"
+        );
+
+        let plain = format_service_for_display(&service, false, None);
+        assert!(
+            plain.starts_with("MyPrinter"),
+            "unexpected display: {plain}"
+        );
+    }
+
+    #[test]
+    fn test_create_service_details_text_verification_lines() {
+        let service = create_test_service("test", "_http._tcp.local.", 80);
+        let in_flight = ServiceVerification {
+            deadline: Instant::now() + VERIFY_TIMEOUT,
+            verified_at_micros: None,
+        };
+        let verified = ServiceVerification {
+            deadline: Instant::now(),
+            verified_at_micros: Some(1_600_000_000_000_000),
+        };
+
+        let details_text = |lines: Vec<Line<'static>>| -> String {
+            lines
+                .iter()
+                .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
+                .collect()
+        };
+
+        let checking = details_text(create_service_details_text(
+            &service,
+            false,
+            Some(&in_flight),
+        ));
+        assert!(checking.contains("Verification:"));
+        assert!(checking.contains("in progress"));
+        assert!(!checking.contains("Verified:"));
+
+        let confirmed = details_text(create_service_details_text(
+            &service,
+            false,
+            Some(&verified),
+        ));
+        assert!(confirmed.contains("Verified:"));
+        assert!(!confirmed.contains("in progress"));
+
+        let plain = details_text(create_service_details_text(&service, false, None));
+        assert!(!plain.contains("Verification:"));
+        assert!(!plain.contains("Verified:"));
+    }
+
+    #[test]
+    fn test_add_or_update_service_refreshes_wire_fullname() {
+        let mut state = setup_test_state_with_services(vec![create_test_service(
+            "test1",
+            "_http._tcp.local.",
+            80,
+        )]);
+        assert_eq!(state.services[0].wire_fullname, None);
+
+        let mut resolved = create_test_service("test1", "_http._tcp.local.", 80);
+        resolved.wire_fullname = Some(r"test1._HTTP._tcp.local.".to_string());
+        state.add_or_update_service(resolved);
+
+        assert_eq!(
+            state.services[0].wire_fullname.as_deref(),
+            Some(r"test1._HTTP._tcp.local.")
         );
     }
 }

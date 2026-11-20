@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-11-19" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-11-20" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -82,6 +82,8 @@ PageUp/PageDown or b/f or Space - Scroll services list by page
 Home/End               - Jump to first/last service
 .br
 Enter                 - Open service URL in browser (shows selection popup when multiple URLs exist)
+.br
+v                      - Verify the selected service (5s timeout)
 .br
 Shift+↑/↓ or J/K       - Scroll service details
 .TP
@@ -204,6 +206,9 @@ Services whose resolved address matches one of this device's network interface a
 
 .SH OPENING SERVICE URLS
 Press \fBEnter\fR on a service to open its URL. URLs come from TXT records (any key=value with an http:// or https:// value) and, for service types containing \(lqhttp\(rq, constructed scheme://host:port/path URLs for the hostname plus every resolved IP (IPv6 bracketed, link-local IPv6 skipped; https scheme when the service type contains \(lqhttps\(rq, path from the path= TXT record). With no URLs a status message is shown; with one URL it opens directly; with multiple URLs a Select URL popup offers the choice.
+
+.SH VERIFYING SERVICES
+Press \fBv\fR on a service to verify it: the mDNS daemon re-queries the instance's SRV and address records with a 5-second timeout (RFC 6762 record reconfirmation). There is no separate response event; the outcome reads off the service itself. While the window is open the service shows a ↻ prefix and the details pane shows \(lqVerification: in progress\(rq. A service still online when the window closes is shown as verified, with a ✓ prefix and a \(lqVerified: <time>\(rq line. A service that does not respond loses its records when the window closes: the daemon flushes them and the service goes offline. Verification is unavailable in view-only mode and for offline services.
 
 .SH SERVICE ADDRESSES
 The details pane shows which interface each address was seen on (live browsing): IPv4 as \(lq192.168.1.10 via eth0\(rq, IPv6 link-local as \(lqfe80::1%eth0\(rq (interface index on Windows), and IPv6 global as \(lq2001:db8::1 via eth0, wlan0\(rq. The services list shows only the first address as a bare IP. State dumps do not preserve interface information, so loaded dumps show bare addresses.
