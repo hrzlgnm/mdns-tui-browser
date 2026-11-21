@@ -181,6 +181,11 @@ impl TuiTerminal {
             enable_raw_mode()?;
 
             if let Err(e) = execute!(self.backend_mut(), EnterAlternateScreen, EnableMouseCapture) {
+                // Roll back everything the failed start may have
+                // applied: release capture, leave the alternate screen,
+                // then raw mode, mirroring `new()`'s rollback.
+                let _ = execute!(self.backend_mut(), DisableMouseCapture);
+                let _ = execute!(self.backend_mut(), LeaveAlternateScreen);
                 let _ = disable_raw_mode();
                 return Err(Box::new(e));
             }
