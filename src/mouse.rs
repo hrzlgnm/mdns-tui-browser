@@ -47,24 +47,30 @@ impl PaneRects {
     }
 }
 
-/// Percentage of `body`'s width at column `col` (0-100).
+/// Percentage of `body`'s width at column `col` (0-100). Rounded half
+/// up so the dragged seam lands under the pointer instead of one cell
+/// short of it; the layout conversion rounds back the same way.
 pub fn pct_from_x(col: u16, body: Rect) -> u16 {
     if body.width == 0 {
         // Degenerate frame: nothing is draggable or grabbable, so the
         // fallback value is arbitrary.
         return 33;
     }
-    (col.saturating_sub(body.x) as u32 * 100 / body.width.max(1) as u32).min(100) as u16
+    let w = body.width.max(1) as u32;
+    ((col.saturating_sub(body.x) as u32 * 100 + w / 2) / w).min(100) as u16
 }
 
-/// Percentage of `column`'s height at row `row` (0-100).
+/// Percentage of `column`'s height at row `row` (0-100). Rounded half
+/// up so the dragged seam lands under the pointer instead of one cell
+/// short of it; the layout conversion rounds back the same way.
 pub fn pct_from_y(row: u16, column: Rect) -> u16 {
     if column.height == 0 {
         // Degenerate frame: nothing is draggable or grabbable, so the
         // fallback value is arbitrary.
         return 34;
     }
-    (row.saturating_sub(column.y) as u32 * 100 / column.height.max(1) as u32).min(100) as u16
+    let h = column.height.max(1) as u32;
+    ((row.saturating_sub(column.y) as u32 * 100 + h / 2) / h).min(100) as u16
 }
 
 /// Percentage band kept for the types panel; the right column always
@@ -110,7 +116,9 @@ pub fn clamp_services_height_pct(
 
 /// Total services-list rows (content + borders) for a stored share of
 /// the right column's height, re-clamped against the absolute floors so
-/// a terminal resize can never collapse either pane.
+/// a terminal resize can never collapse either pane. The share converts
+/// back rounded half up, matching [`pct_from_y`], so the seam follows
+/// the pointer instead of trailing it by a cell.
 pub fn services_height_from_pct(
     pct: u16,
     column_height: u16,
@@ -121,7 +129,7 @@ pub fn services_height_from_pct(
         return min_total_rows;
     }
     let effective = clamp_services_height_pct(pct, column_height, min_total_rows, details_min_rows);
-    let rows = (column_height as u32 * effective as u32 / 100) as u16;
+    let rows = ((column_height as u32 * effective as u32 + 50) / 100) as u16;
     let max_rows = column_height
         .saturating_sub(details_min_rows)
         .max(min_total_rows);
@@ -131,14 +139,16 @@ pub fn services_height_from_pct(
 /// Width of the types panel for a stored share of the body width,
 /// clamped to the same absolute band the content-fit default honors: a
 /// minimum panel width, and a details pane floor of `details_min_width`
-/// columns.
+/// columns. The share converts back rounded half up, matching
+/// [`pct_from_x`], so the seam follows the pointer instead of trailing
+/// it by a cell.
 pub fn types_width_from_pct(
     pct: u16,
     body_width: u16,
     min_width: u16,
     details_min_width: u16,
 ) -> u16 {
-    let raw = (body_width as u32 * clamp_types_width_pct(pct) as u32 / 100) as u16;
+    let raw = ((body_width as u32 * clamp_types_width_pct(pct) as u32 + 50) / 100) as u16;
     let max = body_width.saturating_sub(details_min_width).max(min_width);
     raw.clamp(min_width, max)
 }

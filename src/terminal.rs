@@ -288,6 +288,7 @@ impl TuiTerminal {
 impl Drop for TuiTerminal {
     fn drop(&mut self) {
         if self.active {
+            let _ = execute!(self.backend_mut(), DisableMouseCapture);
             let _ = execute!(self.backend_mut(), LeaveAlternateScreen);
             let _ = disable_raw_mode();
             let _ = self.terminal.show_cursor();

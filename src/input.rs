@@ -10,6 +10,22 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+/// Height of the text input overlay at the bottom of the terminal.
+pub const INPUT_OVERLAY_HEIGHT: u16 = 3;
+
+/// Rect of the text input overlay: the bottom rows of `area`. Shared by
+/// the renderer and the mouse path, so presses aimed at the input do
+/// not fall through to the panes behind it.
+pub fn input_area(area: Rect) -> Rect {
+    let height = area.height.min(INPUT_OVERLAY_HEIGHT);
+    Rect::new(
+        area.x,
+        area.y + area.height.saturating_sub(height),
+        area.width,
+        height,
+    )
+}
+
 #[derive(Clone, Debug)]
 pub struct InputState {
     active: bool,
@@ -75,13 +91,7 @@ pub fn render_input(
     border_style: Style,
     fg_color: Color,
 ) {
-    let height = area.height.min(3);
-    let input_area = Rect::new(
-        area.x,
-        area.y + area.height.saturating_sub(height),
-        area.width,
-        height,
-    );
+    let overlay_area = input_area(area);
 
     let input_text = format!("{}_", input_state.text());
 
@@ -94,5 +104,5 @@ pub fn render_input(
         )
         .style(Style::default().fg(fg_color));
 
-    f.render_widget(input_widget, input_area);
+    f.render_widget(input_widget, overlay_area);
 }

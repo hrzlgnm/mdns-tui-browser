@@ -917,10 +917,11 @@ impl AppState {
         self.filter_input.is_active() || self.service_type_input.is_active()
     }
 
-    /// Whether an overlay currently owns all input: popups and the
-    /// filter / service-type text input cover the panes.
+    /// Whether an overlay currently owns all input: popups cover the
+    /// panes and are modal. The text input overlay only covers the
+    /// bottom rows, so the mouse keeps working beside it.
     fn mouse_input_blocked(&self) -> bool {
-        self.popup_state.any_active() || self.is_input_active()
+        self.popup_state.any_active()
     }
 
     // Mouse handling methods
@@ -948,6 +949,14 @@ impl AppState {
             // are inert, and a drag started before it opened ends here.
             self.drag_divider = mouse::Divider::None;
             self.hover_divider = mouse::Divider::None;
+            return;
+        }
+        // Presses on the text input overlay itself are inert: the input
+        // owns the keyboard, and the panes behind its rows must not
+        // receive a click the user aimed at the input.
+        if self.is_input_active()
+            && mouse::point_in(crate::input::input_area(self.terminal_area), col, row)
+        {
             return;
         }
         // A press dismisses a visible status message, mirroring the
@@ -10300,16 +10309,34 @@ mod tests {
         )
     }
 
-    fn assert_hover_border_cyan(state: &AppState, col: u16, row: u16) {
+    /// Render the state and assert the border cell at (col, row) carries
+    /// the resize highlight when `active`, and nothing of the sort when
+    /// inactive — cyan with colors, reverse video under NO_COLOR.
+    fn assert_border_resize_highlight(state: &AppState, col: u16, row: u16, active: bool) {
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
         terminal.draw(|f| ui(f, state)).unwrap();
-        let cell = &terminal.backend().buffer().content()[(row as usize) * 100 + col as usize];
-        assert!(
-            cell.style().fg == Some(Color::Cyan)
-                || cell.style().add_modifier.contains(Modifier::REVERSED),
-            "border cell ({col}, {row}) must carry the resize highlight"
-        );
+        let style =
+            &terminal.backend().buffer().content()[(row as usize) * 100 + col as usize].style();
+        if active {
+            if colors_disabled() {
+                assert!(
+                    style.add_modifier.contains(Modifier::REVERSED),
+                    "border cell ({col}, {row}) must carry the monochrome resize highlight"
+                );
+            } else {
+                assert_eq!(
+                    style.fg,
+                    Some(Color::Cyan),
+                    "border cell ({col}, {row}) must carry the cyan resize highlight"
+                );
+            }
+        } else {
+            assert!(
+                style.fg != Some(Color::Cyan) && !style.add_modifier.contains(Modifier::REVERSED),
+                "inactive border cell ({col}, {row}) must not carry a resize highlight"
+            );
+        }
     }
 
     #[test]
@@ -10531,14 +10558,9 @@ mod tests {
         state.handle_mouse_event(mouse_event(MouseEventKind::Moved, col, row));
         // Both panes sharing the seam carry the highlight; the types
         // panel, far from it, does not.
-        assert_hover_border_cyan(&state, col, row);
-        assert_hover_border_cyan(&state, col, row + 1);
-        let mut terminal =
-            ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
-        terminal.draw(|f| ui(f, &state)).unwrap();
-        let types_border =
-            &terminal.backend().buffer().content()[20 * 100 + state.pane_rects.types.x as usize];
-        assert_ne!(types_border.style().fg, Some(Color::Cyan));
+        assert_border_resize_highlight(&state, col, row, true);
+        assert_border_resize_highlight(&state, col, row + 1, true);
+        assert_border_resize_highlight(&state, state.pane_rects.types.x, 20, false);
     }
 
     #[test]
@@ -10588,6 +10610,90 @@ mod tests {
         assert_eq!(state.drag_divider, mouse::Divider::None);
         state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
         assert_eq!(state.details_scroll.offset, 0);
+    }
+
+    #[test]
+    fn test_mouse_works_while_text_input_is_open() {
+        let mut state = create_mouse_test_state();
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('/')));
+        assert!(state.is_input_active());
+        // Refresh the geometry: the input overlay shrinks the panes.
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        assert_eq!(
+            state.drag_divider,
+            mouse::Divider::Horizontal,
+            "dragging must keep working while the text input is open"
+        );
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            15,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.services.height, 15);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Up(MouseButton::Left), 2, 2));
+
+        let panes = state.pane_rects;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 1);
+
+        // Presses aimed at the input overlay itself are inert: no drag,
+        // no selection change, no dismissal of the typing session.
+        state.handle_mouse_event(mouse_event(MouseEventKind::Down(MouseButton::Left), 50, 39));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.drag_divider, mouse::Divider::None);
+        assert!(state.is_input_active(), "the input must stay open");
+    }
+
+    #[test]
+    fn test_mouse_drag_lands_seam_under_pointer() {
+        let mut state = create_mouse_test_state();
+
+        // Horizontal seam to an odd row: the seam cells must cover the
+        // pointer row, not trail one row short of it.
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            21,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+        assert_eq!(panes.details.y, 21);
+        assert_eq!(panes.services.y + panes.services.height - 1, 20);
+
+        // Vertical seam to an odd column, same rule.
+        let (col, vrow) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            vrow,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            31,
+            vrow,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+        assert_eq!(panes.services.x, 31);
+        assert_eq!(panes.types.x + panes.types.width - 1, 30);
     }
 
     #[test]
