@@ -333,6 +333,7 @@ selection needs <kbd>Shift</kbd> held.
 - Grabbable borders highlight while pointed at or dragged
 - Click a service or service type to select it
 - Wheel over a pane scrolls it (services and types move the selection, details scrolls the viewport)
+- Wheel scrolls the help and metrics popups while they are open
 - While a popup or text input is open, the mouse does nothing behind it
 
 ### Service Details Controls
