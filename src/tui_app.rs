@@ -1944,7 +1944,9 @@ impl AppState {
     }
 
     fn navigate_service_types_to_first(&mut self) {
-        self.selected_type = None; // "All Types" is the first
+        // "All Types" is the first; the scroll correction runs even when
+        // the selection does not change, while the selection update
+        // itself no-ops at the same target.
         self.types_scroll.reset();
         self.update_service_type_selection(None);
     }
@@ -7255,6 +7257,45 @@ mod tests {
         assert_eq!(state.selected_type, Some(1));
         assert_eq!(state.selected_service, 1);
         assert_eq!(state.details_scroll.offset, 7);
+    }
+
+    #[test]
+    fn test_types_ctrl_home_refreshes_filter_and_selection_from_last_type() {
+        let mut state = create_mouse_test_state();
+        for i in 0..2 {
+            state.services.push(create_test_service(
+                &format!("ssh{i}"),
+                "_ssh._tcp.local.",
+                9000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+
+        // Jump to the last type, select one of its services, then jump
+        // back to "All Types": the filter change must rebuild the list.
+        state.handle_key_event(KeyEvent::new(KeyCode::End, KeyModifiers::CONTROL));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(state.selected_service, 1);
+
+        state.handle_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL));
+        assert_eq!(state.selected_type, None);
+        assert_eq!(
+            state.get_filtered_services().len(),
+            7,
+            "the filter must rebuild back to all services (5 _http + 2 _ssh), not the stale _ssh-only list"
+        );
+        assert_eq!(state.selected_service, 0);
+
+        // Already at "All Types": the update is a no-op for service
+        // state, while the scroll correction still re-pins the view.
+        state.details_scroll.offset = 7;
+        state.handle_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL));
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.details_scroll.offset, 7);
+        assert_eq!(state.types_scroll.offset, 0);
     }
 
     #[test]
