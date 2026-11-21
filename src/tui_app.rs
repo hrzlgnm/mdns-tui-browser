@@ -2925,36 +2925,34 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
 
         let visible_details: Vec<Line> = details_lines.into_iter().skip(clamped_offset).collect();
 
-        // The details pane's left border is part of the vertical seam
-        // and its top border of the horizontal one, so both highlight.
-        let border_style = pane_border_style(
-            app_state,
-            &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
-        );
         let details = Paragraph::new(visible_details)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(border_style)
+                    .border_style(details_border_style(app_state))
                     .title("Service Details (Shift+↑/↓, J/K to scroll)"),
             )
             .wrap(Wrap { trim: true });
         f.render_widget(details, area);
     } else {
-        // The details pane's left border is part of the vertical seam
-        // and its top border of the horizontal one, so both highlight.
-        let border_style = pane_border_style(
-            app_state,
-            &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
-        );
         let details = Paragraph::new("No service selected").block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(border_style)
+                .border_style(details_border_style(app_state))
                 .title("Service Details"),
         );
         f.render_widget(details, area);
     }
+}
+
+/// Border style of the details pane: its left border is part of the
+/// vertical seam and its top border of the horizontal one, so both
+/// highlight.
+fn details_border_style(app_state: &AppState) -> Style {
+    pane_border_style(
+        app_state,
+        &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
+    )
 }
 
 fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
