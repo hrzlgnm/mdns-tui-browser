@@ -100,6 +100,14 @@ impl HelpPopup {
         let help_content = generate_help_content();
         let total_wrapped_lines = calculate_wrapped_line_count(&help_content, inner_area.width) + 1;
 
+        // Terminal growth can lower the maximum below the current
+        // offset (to zero once everything fits): clamp first, like the
+        // metrics step does, or an Up notch would leave a stale offset
+        // rendering blank lines.
+        self.scroll.offset = self
+            .scroll
+            .offset
+            .min(max_scroll_offset(total_wrapped_lines, max_visible_lines));
         handle_popup_scroll(
             key_code,
             &mut self.scroll.offset,

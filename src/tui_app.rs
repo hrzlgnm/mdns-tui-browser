@@ -10875,6 +10875,26 @@ mod tests {
     }
 
     #[test]
+    fn test_help_popup_scroll_clamps_after_terminal_growth() {
+        let mut state = create_mouse_test_state();
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('?')));
+        for _ in 0..5 {
+            state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        }
+        assert!(state.popup_state.help_popup.scroll.offset > 0);
+
+        // Growing the terminal until all help content fits drops the
+        // maximum to zero; the next notch must clamp the stale offset
+        // instead of leaving blank lines above the content.
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 300, 200));
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollUp, 50, 20));
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 0);
+
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 0);
+    }
+
+    #[test]
     fn test_wheel_behind_url_popup_is_swallowed() {
         let mut state = create_mouse_test_state();
         state
