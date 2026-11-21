@@ -39,6 +39,9 @@ const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MIN_SERVICES_LIST_SIZE: usize = 5;
+/// Height of the filter status bar, and of the text input overlay that
+/// covers the same rows.
+const FILTER_STATUS_BAR_HEIGHT: u16 = 3;
 /// Minimum total rows (content plus borders) of the services list once
 /// the user drags its seam: the drag never shrinks the list below the
 /// fixed minimum content rows.
@@ -1136,10 +1139,10 @@ impl AppState {
     ) -> (MainLayout, VisibleCounts) {
         let is_input = app_state.is_input_active();
         let has_filter_status = !is_input && !app_state.filter_input.is_empty();
-        // The pane split happens below the 3-row filter status bar when
-        // one is shown; the text input overlay covers the same rows.
+        // The pane split happens below the filter status bar when one is
+        // shown; the text input overlay covers the same rows.
         let column_height = if is_input || has_filter_status {
-            area.height.saturating_sub(3)
+            area.height.saturating_sub(FILTER_STATUS_BAR_HEIGHT)
         } else {
             area.height
         };
@@ -2582,8 +2585,24 @@ fn create_main_layout(
     has_filter_status: bool,
     splits: PaneSplits,
 ) -> MainLayout {
-    let main_area = if has_filter_status {
-        let remaining_height = area.height.saturating_sub(3);
+    create_pane_layout(area, has_filter_status, has_filter_status, splits)
+}
+
+/// Shared construction of both pane layouts: the body area, split into
+/// the types panel and the right column, and the right column split
+/// into the services list and the details pane.
+///
+/// `strips_bottom_bar` reserves the bottom rows for an overlay (the
+/// filter status bar, or the text input that covers the same rows);
+/// `has_filter_status` additionally renders that bar's rect.
+fn create_pane_layout(
+    area: ratatui::layout::Rect,
+    strips_bottom_bar: bool,
+    has_filter_status: bool,
+    splits: PaneSplits,
+) -> MainLayout {
+    let main_area = if strips_bottom_bar {
+        let remaining_height = area.height.saturating_sub(FILTER_STATUS_BAR_HEIGHT);
         ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
     } else {
         area
@@ -2608,9 +2627,9 @@ fn create_main_layout(
     let filter_status_area = if has_filter_status {
         Some(ratatui::layout::Rect::new(
             area.x,
-            area.y + area.height.saturating_sub(3),
+            area.y + area.height.saturating_sub(FILTER_STATUS_BAR_HEIGHT),
             area.width,
-            3,
+            FILTER_STATUS_BAR_HEIGHT,
         ))
     } else {
         None
@@ -2645,32 +2664,9 @@ fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> Visib
 }
 
 fn create_filter_input_layout(area: ratatui::layout::Rect, splits: PaneSplits) -> MainLayout {
-    let remaining_height = area.height.saturating_sub(3);
-    let main_area = ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height);
-
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(splits.left_panel_width),
-            Constraint::Fill(1),
-        ])
-        .split(main_area);
-
-    let services_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(splits.services_height),
-            Constraint::Fill(1),
-        ])
-        .split(chunks[1]);
-
-    MainLayout {
-        body: main_area,
-        left_panel: chunks[0],
-        services_area: services_chunks[0],
-        details_area: services_chunks[1],
-        filter_status_area: None,
-    }
+    // The text input overlay covers the filter status rows even when no
+    // filter is displayed, so the panes always shrink for it.
+    create_pane_layout(area, true, false, splits)
 }
 
 fn render_service_types_list(

@@ -50,6 +50,8 @@ impl PaneRects {
 /// Percentage of `body`'s width at column `col` (0-100).
 pub fn pct_from_x(col: u16, body: Rect) -> u16 {
     if body.width == 0 {
+        // Degenerate frame: nothing is draggable or grabbable, so the
+        // fallback value is arbitrary.
         return 33;
     }
     (col.saturating_sub(body.x) as u32 * 100 / body.width.max(1) as u32).min(100) as u16
@@ -58,6 +60,8 @@ pub fn pct_from_x(col: u16, body: Rect) -> u16 {
 /// Percentage of `column`'s height at row `row` (0-100).
 pub fn pct_from_y(row: u16, column: Rect) -> u16 {
     if column.height == 0 {
+        // Degenerate frame: nothing is draggable or grabbable, so the
+        // fallback value is arbitrary.
         return 34;
     }
     (row.saturating_sub(column.y) as u32 * 100 / column.height.max(1) as u32).min(100) as u16
