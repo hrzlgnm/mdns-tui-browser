@@ -68,27 +68,7 @@ impl HelpPopup {
     pub fn handle_key_event(&mut self, key: KeyEvent, terminal_area: Rect) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                let popup_area = create_centered_popup(terminal_area, 60, 70);
-                let inner_area = Rect::new(
-                    popup_area.x + 1,
-                    popup_area.y + 1,
-                    popup_area.width.saturating_sub(2),
-                    popup_area.height.saturating_sub(2),
-                );
-                let max_visible_lines = inner_area.height as usize;
-
-                self.scroll.visible_items = max_visible_lines;
-
-                let help_content = generate_help_content();
-                let total_wrapped_lines =
-                    calculate_wrapped_line_count(&help_content, inner_area.width) + 1;
-
-                handle_popup_scroll(
-                    key.code,
-                    &mut self.scroll.offset,
-                    total_wrapped_lines,
-                    max_visible_lines,
-                );
+                self.scroll_one_step(key.code, terminal_area);
                 true
             }
             KeyCode::Char('r') => {
@@ -102,10 +82,10 @@ impl HelpPopup {
         }
     }
 
-    /// Wheel notch while the popup is open: one key-step, saturating at
-    /// both edges. Reuses the arrow-key scroll computation verbatim, so
-    /// the key and wheel limits cannot drift apart.
-    pub fn scroll_by_wheel(&mut self, delta: isize, terminal_area: Rect) {
+    /// One scroll step shared by the arrow keys and the mouse wheel, so
+    /// the key and wheel limits cannot drift apart: the popup geometry,
+    /// the wrapped-line total and the saturation all live here.
+    fn scroll_one_step(&mut self, key_code: KeyCode, terminal_area: Rect) {
         let popup_area = create_centered_popup(terminal_area, 60, 70);
         let inner_area = Rect::new(
             popup_area.x + 1,
@@ -121,14 +101,23 @@ impl HelpPopup {
         let total_wrapped_lines = calculate_wrapped_line_count(&help_content, inner_area.width) + 1;
 
         handle_popup_scroll(
+            key_code,
+            &mut self.scroll.offset,
+            total_wrapped_lines,
+            max_visible_lines,
+        );
+    }
+
+    /// Wheel notch while the popup is open: one key-step, saturating at
+    /// both edges.
+    pub fn scroll_by_wheel(&mut self, delta: isize, terminal_area: Rect) {
+        self.scroll_one_step(
             if delta < 0 {
                 KeyCode::Up
             } else {
                 KeyCode::Down
             },
-            &mut self.scroll.offset,
-            total_wrapped_lines,
-            max_visible_lines,
+            terminal_area,
         );
     }
 
@@ -181,24 +170,7 @@ impl MetricsPopup {
     ) -> bool {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                let (_, inner_area) = metrics_popup_areas(terminal_area);
-                let max_visible_lines = inner_area.height as usize;
-
-                self.scroll.visible_items = max_visible_lines;
-
-                let metrics_content = generate_metrics_content(metrics, daemon);
-                let total_wrapped_lines = metrics_content_height(&metrics_content, inner_area);
-
-                self.scroll.offset = self
-                    .scroll
-                    .offset
-                    .min(max_scroll_offset(total_wrapped_lines, max_visible_lines));
-                handle_popup_scroll(
-                    key.code,
-                    &mut self.scroll.offset,
-                    total_wrapped_lines,
-                    max_visible_lines,
-                );
+                self.scroll_one_step(key.code, terminal_area, metrics, daemon);
                 true
             }
             _ => {
@@ -209,24 +181,12 @@ impl MetricsPopup {
         }
     }
 
-    pub fn render(
-        &self,
-        f: &mut Frame,
-        terminal_area: Rect,
-        metrics: &BTreeMap<String, u64>,
-        daemon: Option<&DaemonSnapshot>,
-    ) {
-        if self.active {
-            render_metrics_popup(f, terminal_area, self.scroll.offset, metrics, daemon);
-        }
-    }
-
-    /// Wheel notch while the popup is open: one key-step, saturating at
-    /// both edges. Reuses the arrow-key scroll computation verbatim, so
-    /// the key and wheel limits cannot drift apart.
-    pub fn scroll_by_wheel(
+    /// One scroll step shared by the arrow keys and the mouse wheel, so
+    /// the key and wheel limits cannot drift apart: the popup geometry,
+    /// the content-height maximum and the saturation all live here.
+    fn scroll_one_step(
         &mut self,
-        delta: isize,
+        key_code: KeyCode,
         terminal_area: Rect,
         metrics: &BTreeMap<String, u64>,
         daemon: Option<&DaemonSnapshot>,
@@ -244,14 +204,43 @@ impl MetricsPopup {
             .offset
             .min(max_scroll_offset(total_wrapped_lines, max_visible_lines));
         handle_popup_scroll(
+            key_code,
+            &mut self.scroll.offset,
+            total_wrapped_lines,
+            max_visible_lines,
+        );
+    }
+
+    pub fn render(
+        &self,
+        f: &mut Frame,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
+        if self.active {
+            render_metrics_popup(f, terminal_area, self.scroll.offset, metrics, daemon);
+        }
+    }
+
+    /// Wheel notch while the popup is open: one key-step, saturating at
+    /// both edges.
+    pub fn scroll_by_wheel(
+        &mut self,
+        delta: isize,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
+        self.scroll_one_step(
             if delta < 0 {
                 KeyCode::Up
             } else {
                 KeyCode::Down
             },
-            &mut self.scroll.offset,
-            total_wrapped_lines,
-            max_visible_lines,
+            terminal_area,
+            metrics,
+            daemon,
         );
     }
 }
