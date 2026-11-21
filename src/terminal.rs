@@ -142,11 +142,18 @@ impl TuiTerminal {
     ///
     /// # Errors
     /// Returns an error if enabling raw mode or entering alternate screen fails.
+    /// On failure, capture is released, the alternate screen is left and raw
+    /// mode is disabled before returning, mirroring `start()`'s rollback.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         enable_raw_mode()?;
 
         let mut stdout = std::io::stdout();
         if let Err(e) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+            // Roll back everything the failed setup may have applied:
+            // release capture, leave the alternate screen, then raw
+            // mode, mirroring `start()`'s rollback below.
+            let _ = execute!(stdout, DisableMouseCapture);
+            let _ = execute!(stdout, LeaveAlternateScreen);
             let _ = disable_raw_mode();
             return Err(Box::new(e));
         }
