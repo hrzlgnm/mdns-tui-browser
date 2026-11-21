@@ -102,6 +102,36 @@ impl HelpPopup {
         }
     }
 
+    /// Wheel notch while the popup is open: one key-step, saturating at
+    /// both edges. Reuses the arrow-key scroll computation verbatim, so
+    /// the key and wheel limits cannot drift apart.
+    pub fn scroll_by_wheel(&mut self, delta: isize, terminal_area: Rect) {
+        let popup_area = create_centered_popup(terminal_area, 60, 70);
+        let inner_area = Rect::new(
+            popup_area.x + 1,
+            popup_area.y + 1,
+            popup_area.width.saturating_sub(2),
+            popup_area.height.saturating_sub(2),
+        );
+        let max_visible_lines = inner_area.height as usize;
+
+        self.scroll.visible_items = max_visible_lines;
+
+        let help_content = generate_help_content();
+        let total_wrapped_lines = calculate_wrapped_line_count(&help_content, inner_area.width) + 1;
+
+        handle_popup_scroll(
+            if delta < 0 {
+                KeyCode::Up
+            } else {
+                KeyCode::Down
+            },
+            &mut self.scroll.offset,
+            total_wrapped_lines,
+            max_visible_lines,
+        );
+    }
+
     pub fn render(&self, f: &mut Frame) {
         if self.active {
             render_help_popup(f, self.scroll.offset);
@@ -189,6 +219,40 @@ impl MetricsPopup {
         if self.active {
             render_metrics_popup(f, terminal_area, self.scroll.offset, metrics, daemon);
         }
+    }
+
+    /// Wheel notch while the popup is open: one key-step, saturating at
+    /// both edges. Reuses the arrow-key scroll computation verbatim, so
+    /// the key and wheel limits cannot drift apart.
+    pub fn scroll_by_wheel(
+        &mut self,
+        delta: isize,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) {
+        let (_, inner_area) = metrics_popup_areas(terminal_area);
+        let max_visible_lines = inner_area.height as usize;
+
+        self.scroll.visible_items = max_visible_lines;
+
+        let metrics_content = generate_metrics_content(metrics, daemon);
+        let total_wrapped_lines = metrics_content_height(&metrics_content, inner_area);
+
+        self.scroll.offset = self
+            .scroll
+            .offset
+            .min(max_scroll_offset(total_wrapped_lines, max_visible_lines));
+        handle_popup_scroll(
+            if delta < 0 {
+                KeyCode::Up
+            } else {
+                KeyCode::Down
+            },
+            &mut self.scroll.offset,
+            total_wrapped_lines,
+            max_visible_lines,
+        );
     }
 }
 
@@ -416,6 +480,34 @@ impl PopupState {
         } else {
             false
         }
+    }
+
+    /// Wheel routing while a popup is open, in the same priority order
+    /// as [`PopupState::handle_key_event`]: URL selection owns the wheel
+    /// silently, help and metrics scroll one key-step per notch. The
+    /// wheel scrolls the popup wherever the pointer is; presses, drags,
+    /// and motion behind the popup are unaffected. Returns whether a
+    /// popup consumed the event.
+    pub fn handle_mouse_wheel(
+        &mut self,
+        delta: isize,
+        terminal_area: Rect,
+        metrics: &BTreeMap<String, u64>,
+        daemon: Option<&DaemonSnapshot>,
+    ) -> bool {
+        if self.url_selection_popup.is_active() {
+            return true;
+        }
+        if self.help_popup.is_active() {
+            self.help_popup.scroll_by_wheel(delta, terminal_area);
+            return true;
+        }
+        if self.metrics_popup.is_active() {
+            self.metrics_popup
+                .scroll_by_wheel(delta, terminal_area, metrics, daemon);
+            return true;
+        }
+        false
     }
 
     pub fn render(

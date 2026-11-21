@@ -1122,7 +1122,17 @@ impl AppState {
     /// same step its navigation keys take. The app has no pane focus,
     /// so what scrolls is what the pointer points at.
     fn mouse_wheel(&mut self, col: u16, row: u16, delta: isize) {
+        // While a popup is open it owns the wheel: one key-step per
+        // notch, wherever the pointer is (the help and metrics popups
+        // scroll; the URL selection stays keyboard-only). Everything
+        // else behind the popup stays inert.
         if self.mouse_input_blocked() {
+            self.popup_state.handle_mouse_wheel(
+                delta,
+                self.terminal_area,
+                &self.metrics,
+                self.daemon_snapshot.as_ref(),
+            );
             return;
         }
         let panes = self.pane_rects;
@@ -10804,6 +10814,80 @@ mod tests {
         assert_eq!(state.drag_divider, mouse::Divider::None);
         state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
         assert_eq!(state.details_scroll.offset, 0);
+    }
+
+    #[test]
+    fn test_help_popup_wheel_scrolls_and_saturates() {
+        let mut state = create_mouse_test_state();
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('?')));
+        assert!(state.popup_state.any_active());
+
+        // One notch, one key-step, wherever the pointer is.
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 1);
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 5, 35));
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 2);
+
+        // Wheeling to the bottom saturates and never closes the popup.
+        for _ in 0..200 {
+            state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        }
+        let at_bottom = state.popup_state.help_popup.scroll.offset;
+        assert!(at_bottom > 0, "the help content must be scrollable");
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        assert_eq!(state.popup_state.help_popup.scroll.offset, at_bottom);
+        assert!(state.popup_state.any_active());
+
+        // Wheeling back up saturates at the top.
+        for _ in 0..300 {
+            state.handle_mouse_event(mouse_event(MouseEventKind::ScrollUp, 50, 20));
+        }
+        assert_eq!(state.popup_state.help_popup.scroll.offset, 0);
+        assert!(state.popup_state.any_active());
+    }
+
+    #[test]
+    fn test_metrics_popup_wheel_scrolls_and_saturates() {
+        let mut state = create_mouse_test_state();
+        for i in 0..40 {
+            state.update_metric(&format!("metric_{i}"));
+        }
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('m')));
+        assert!(state.popup_state.any_active());
+
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, 1);
+
+        // Wheeling to the bottom saturates at the current content's end
+        // and never closes the popup.
+        for _ in 0..200 {
+            state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        }
+        let at_bottom = state.popup_state.metrics_popup.scroll.offset;
+        assert!(at_bottom > 0, "the metrics content must be scrollable");
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, at_bottom);
+        assert!(state.popup_state.any_active());
+
+        // One notch back up moves one key-step.
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollUp, 50, 20));
+        assert_eq!(state.popup_state.metrics_popup.scroll.offset, at_bottom - 1);
+    }
+
+    #[test]
+    fn test_wheel_behind_url_popup_is_swallowed() {
+        let mut state = create_mouse_test_state();
+        state
+            .popup_state
+            .show_url_selection(vec!["https://a".to_string(), "https://b".to_string()]);
+        assert!(state.popup_state.url_selection_popup.is_active());
+
+        // The URL popup stays keyboard-only: the wheel does nothing.
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollUp, 50, 20));
+        assert!(state.popup_state.url_selection_popup.is_active());
+        assert!(!state.popup_state.help_popup.is_active());
+        assert!(!state.popup_state.metrics_popup.is_active());
     }
 
     #[test]
