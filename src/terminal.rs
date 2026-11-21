@@ -158,6 +158,7 @@ impl TuiTerminal {
                 active: true,
             }),
             Err(e) => {
+                let _ = execute!(std::io::stdout(), DisableMouseCapture);
                 let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
                 let _ = disable_raw_mode();
                 Err(Box::new(e))
@@ -200,6 +201,10 @@ impl TuiTerminal {
     pub fn stop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.active {
             self.active = false;
+            // Attempt every cleanup step even when an earlier one fails:
+            // skipping the rest would leave raw mode or the alternate
+            // screen inconsistent for whoever runs next. The first
+            // error is reported.
             let mut first_error = None;
 
             if let Err(e) = execute!(self.backend_mut(), DisableMouseCapture)
@@ -208,7 +213,9 @@ impl TuiTerminal {
                 first_error = Some(e.into());
             }
 
-            if let Err(e) = execute!(self.backend_mut(), LeaveAlternateScreen) {
+            if let Err(e) = execute!(self.backend_mut(), LeaveAlternateScreen)
+                && first_error.is_none()
+            {
                 first_error = Some(e.into());
             }
 

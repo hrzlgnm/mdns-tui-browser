@@ -108,9 +108,18 @@ async fn handle_suspend(
     use nix::sys::signal::{Signal, kill};
 
     // Stop the terminal - this restores the alternate screen and disables raw mode
-    // Only proceed with suspend if terminal stop succeeds
+    // Only proceed with suspend if terminal stop succeeds. On failure the
+    // TUI is already (partially) torn down, so the event loop must not
+    // keep running in that state: bring the TUI back up before returning,
+    // or the app would keep drawing on the normal screen with cooked input.
     if let Err(e) = terminal.stop() {
         log::error!("Failed to stop terminal on suspend: {}", e);
+        if let Err(start_err) = terminal.start() {
+            log::error!(
+                "Failed to restore terminal after suspend error: {}",
+                start_err
+            );
+        }
         return;
     }
 
@@ -945,6 +954,18 @@ impl AppState {
     }
 
     fn mouse_down(&mut self, col: u16, row: u16) {
+        // A press dismisses a visible status message, mirroring the
+        // any-key dismissal, which also fires while a popup is open:
+        // the notice renders above the popup, so the press is aimed at
+        // it. The dismissing press does nothing else.
+        let dismissed = self
+            .status_message
+            .try_lock()
+            .ok()
+            .and_then(|mut msg| msg.take());
+        if dismissed.is_some() {
+            return;
+        }
         if self.mouse_input_blocked() {
             // The overlay owns all input while open: events behind it
             // are inert, and a drag started before it opened ends here.
@@ -958,16 +979,6 @@ impl AppState {
         if self.is_input_active()
             && mouse::point_in(crate::input::input_area(self.terminal_area), col, row)
         {
-            return;
-        }
-        // A press dismisses a visible status message, mirroring the
-        // any-key dismissal, and does nothing else in that event.
-        let dismissed = self
-            .status_message
-            .try_lock()
-            .ok()
-            .and_then(|mut msg| msg.take());
-        if dismissed.is_some() {
             return;
         }
         match mouse::divider_at(&self.pane_rects, col, row) {
@@ -2914,7 +2925,12 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
 
         let visible_details: Vec<Line> = details_lines.into_iter().skip(clamped_offset).collect();
 
-        let border_style = pane_border_style(app_state, &[mouse::Divider::Horizontal]);
+        // The details pane's left border is part of the vertical seam
+        // and its top border of the horizontal one, so both highlight.
+        let border_style = pane_border_style(
+            app_state,
+            &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
+        );
         let details = Paragraph::new(visible_details)
             .block(
                 Block::default()
@@ -2925,7 +2941,12 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
             .wrap(Wrap { trim: true });
         f.render_widget(details, area);
     } else {
-        let border_style = pane_border_style(app_state, &[mouse::Divider::Horizontal]);
+        // The details pane's left border is part of the vertical seam
+        // and its top border of the horizontal one, so both highlight.
+        let border_style = pane_border_style(
+            app_state,
+            &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
+        );
         let details = Paragraph::new("No service selected").block(
             Block::default()
                 .borders(Borders::ALL)
@@ -10562,6 +10583,14 @@ mod tests {
         assert_border_resize_highlight(&state, col, row, true);
         assert_border_resize_highlight(&state, col, row + 1, true);
         assert_border_resize_highlight(&state, state.pane_rects.types.x, 20, false);
+
+        // The vertical seam borders the left edge of both right-column
+        // panes, so the details pane highlights with them.
+        let (vcol, vrow) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, vcol, vrow));
+        assert_border_resize_highlight(&state, vcol, vrow, true);
+        assert_border_resize_highlight(&state, state.pane_rects.services.x, 3, true);
+        assert_border_resize_highlight(&state, state.pane_rects.details.x, 30, true);
     }
 
     #[test]
@@ -10595,6 +10624,13 @@ mod tests {
             mouse::Divider::None,
             "opening a popup must clear the resize glow"
         );
+
+        // A press dismisses a visible status message even behind a
+        // popup: the notice renders above it, and the any-key
+        // dismissal fires the same way.
+        *state.status_message.try_lock().unwrap() = Some(String::from("notice").into());
+        state.handle_mouse_event(mouse_event(MouseEventKind::Down(MouseButton::Left), 50, 20));
+        assert!(state.status_message.try_lock().unwrap().is_none());
 
         let panes = state.pane_rects;
         state.handle_mouse_event(mouse_event(

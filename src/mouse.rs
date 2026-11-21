@@ -82,24 +82,26 @@ pub fn clamp_types_width_pct(pct: u16) -> u16 {
     pct.clamp(TYPES_WIDTH_MIN_PCT, TYPES_WIDTH_MAX_PCT)
 }
 
-/// Static percentage band for the services share, used when the pane
-/// geometry is unusable; with real geometry the row floors below win.
+/// Static percentage band for the services share, used only when the
+/// pane geometry is unusable; with real geometry the absolute row
+/// minimums below are the band.
 pub const SERVICES_HEIGHT_MIN_PCT: u16 = 10;
 pub const SERVICES_HEIGHT_MAX_PCT: u16 = 90;
 
 /// Drag-time percentage band for the services share: the services list
 /// keeps at least `min_total_rows` (content + borders) and the details
-/// pane keeps at least `details_min_rows`. On tiny columns the band
-/// inverts and the services floor wins, mirroring the default layout.
+/// pane keeps at least `details_min_rows`, and nothing tighter — the
+/// documented minimums are the whole band, so tall terminals can drag
+/// either pane all the way to its floor. On unusable geometry the
+/// static percentage band applies; on tiny columns the band inverts and
+/// the services floor wins, mirroring the default layout.
 fn services_pct_band(column_height: u16, min_total_rows: u16, details_min_rows: u16) -> (u16, u16) {
     if column_height == 0 {
         return (SERVICES_HEIGHT_MIN_PCT, SERVICES_HEIGHT_MAX_PCT);
     }
     let h = column_height as u32;
     let lo = (min_total_rows as u32 * 100).div_ceil(h) as u16;
-    let lo = lo.clamp(SERVICES_HEIGHT_MIN_PCT, 100);
     let hi = (column_height.saturating_sub(details_min_rows) as u32 * 100 / h) as u16;
-    let hi = hi.clamp(SERVICES_HEIGHT_MIN_PCT, SERVICES_HEIGHT_MAX_PCT);
     (lo, hi.max(lo))
 }
 
@@ -307,6 +309,10 @@ mod tests {
         assert_eq!(clamp_services_height_pct(5, 40, 7, 8), 18);
         assert_eq!(clamp_services_height_pct(50, 40, 7, 8), 50);
         assert_eq!(clamp_services_height_pct(97, 40, 7, 8), 80);
+        // Tall column: the documented minimums are the whole band, so
+        // the share is not squeezed into a narrower percentage band.
+        assert_eq!(clamp_services_height_pct(3, 100, 7, 8), 7);
+        assert_eq!(clamp_services_height_pct(97, 100, 7, 8), 92);
         // Degenerate geometry: the static percentage band applies.
         assert_eq!(clamp_services_height_pct(97, 0, 7, 8), 90);
     }
