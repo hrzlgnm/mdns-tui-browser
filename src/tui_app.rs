@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use mdns_sd::{Error, IfKind, ServiceDaemon, ServiceEvent};
 use ratatui::{
     Frame,
@@ -25,6 +27,7 @@ use crate::models::{
     SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, display_fullname,
     format_ip_for_display, format_service_addrs, local_interface_addrs,
 };
+use crate::mouse;
 use crate::popup::PopupState;
 use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
 use crate::scroll::ScrollState;
@@ -36,6 +39,22 @@ const STATUS_ERROR_COLOR: Color = Color::Yellow;
 const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MIN_SERVICES_LIST_SIZE: usize = 5;
+/// Height of the filter status bar, and of the text input overlay that
+/// covers the same rows (input.rs `INPUT_OVERLAY_HEIGHT`); keep the two
+/// in sync.
+const FILTER_STATUS_BAR_HEIGHT: u16 = 3;
+/// Minimum total rows (content plus borders) of the services list once
+/// the user drags its seam: the drag never shrinks the list below the
+/// fixed minimum content rows.
+const SERVICES_PANE_MIN_TOTAL_ROWS: u16 = MIN_SERVICES_LIST_SIZE as u16 + 2;
+/// Minimum total rows (borders included) the details pane keeps when
+/// the services list is dragged taller.
+const DETAILS_PANE_MIN_ROWS: u16 = 8;
+/// Minimum columns the details pane keeps to the right of the types
+/// panel; the content-fit panel width honors the same floor.
+const DETAILS_PANE_MIN_WIDTH: u16 = 30;
+/// Minimum columns of the types panel, matching the content-fit default.
+const MIN_TYPES_PANEL_WIDTH: u16 = 10;
 const SERVICES_LIST_SCALE_THRESHOLD: u16 = 40;
 const SERVICES_LIST_HEIGHT_FRACTION: f32 = 0.3;
 const BROWSE_RETRY_DELAY: Duration = Duration::from_millis(20);
@@ -89,9 +108,18 @@ async fn handle_suspend(
     use nix::sys::signal::{Signal, kill};
 
     // Stop the terminal - this restores the alternate screen and disables raw mode
-    // Only proceed with suspend if terminal stop succeeds
+    // Only proceed with suspend if terminal stop succeeds. On failure the
+    // TUI is already (partially) torn down, so the event loop must not
+    // keep running in that state: bring the TUI back up before returning,
+    // or the app would keep drawing on the normal screen with cooked input.
     if let Err(e) = terminal.stop() {
         log::error!("Failed to stop terminal on suspend: {}", e);
+        if let Err(start_err) = terminal.start() {
+            log::error!(
+                "Failed to restore terminal after suspend error: {}",
+                start_err
+            );
+        }
         return;
     }
 
@@ -291,6 +319,21 @@ struct AppState {
     loaded_from_file: bool,
     local_addrs: LocalAddrs,
     local_addrs_refreshed_at: Instant,
+    /// Active mouse drag on a pane divider; `None` when no button is
+    /// held on a shared border.
+    drag_divider: mouse::Divider,
+    /// Divider under the mouse cursor, for the resize highlight. Kept
+    /// in sync with the last known pointer position; render-only.
+    hover_divider: mouse::Divider,
+    /// Types panel share of the body width once the user dragged its
+    /// seam; `None` keeps the content-fit default.
+    types_width_pct: Option<u16>,
+    /// Services list share of the right column's height once the user
+    /// dragged its seam; `None` keeps the adaptive default.
+    services_height_pct: Option<u16>,
+    /// Last-frame pane geometry, recorded during the per-frame layout
+    /// preparation so mouse hit-testing acts on the frame as drawn.
+    pane_rects: mouse::PaneRects,
 }
 
 // Local interface addresses are re-read at most this often so VPN/DHCP
@@ -340,6 +383,11 @@ impl Clone for AppState {
             loaded_from_file: self.loaded_from_file,
             local_addrs: self.local_addrs.clone(),
             local_addrs_refreshed_at: self.local_addrs_refreshed_at,
+            drag_divider: self.drag_divider,
+            hover_divider: self.hover_divider,
+            types_width_pct: self.types_width_pct,
+            services_height_pct: self.services_height_pct,
+            pane_rects: self.pane_rects,
         }
     }
 }
@@ -393,6 +441,11 @@ impl AppState {
             loaded_from_file: false,
             local_addrs: local_interface_addrs(),
             local_addrs_refreshed_at: Instant::now(),
+            drag_divider: mouse::Divider::None,
+            hover_divider: mouse::Divider::None,
+            types_width_pct: None,
+            services_height_pct: None,
+            pane_rects: mouse::PaneRects::default(),
         };
         state.validate_selected_type();
         state
@@ -710,7 +763,14 @@ impl AppState {
         self.validate_selected_type();
     }
 
+    /// Apply a service type selection. Re-selecting the type that is
+    /// already selected is a no-op: navigation pinned at an endpoint (or
+    /// a click on the selected row) must not reset the service
+    /// selection or the scroll state of unchanged panes.
     fn update_service_type_selection(&mut self, new_type: Option<usize>) {
+        if new_type == self.selected_type {
+            return;
+        }
         self.selected_type = new_type;
         self.selected_service = 0;
         self.services_scroll.reset();
@@ -874,6 +934,219 @@ impl AppState {
         self.filter_input.is_active() || self.service_type_input.is_active()
     }
 
+    /// Whether an overlay currently owns all input: popups cover the
+    /// panes and are modal. The text input overlay only covers the
+    /// bottom rows, so the mouse keeps working beside it.
+    fn mouse_input_blocked(&self) -> bool {
+        self.popup_state.any_active()
+    }
+
+    // Mouse handling methods
+
+    /// Mouse input entrypoint, mirroring `handle_key_event`: divider
+    /// drag-resizing, the hover highlight, click-to-select and wheel
+    /// scrolling.
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => self.mouse_down(mouse.column, mouse.row),
+            MouseEventKind::Drag(MouseButton::Left) => self.mouse_drag(mouse.column, mouse.row),
+            MouseEventKind::Moved => self.mouse_moved(mouse.column, mouse.row),
+            MouseEventKind::Up(MouseButton::Left) => self.mouse_up(mouse.column, mouse.row),
+            MouseEventKind::ScrollUp => self.mouse_wheel(mouse.column, mouse.row, -1),
+            MouseEventKind::ScrollDown => self.mouse_wheel(mouse.column, mouse.row, 1),
+            // Middle/right buttons and the horizontal wheel have
+            // nothing to serve.
+            _ => {}
+        }
+    }
+
+    fn mouse_down(&mut self, col: u16, row: u16) {
+        // A press dismisses a visible status message, mirroring the
+        // any-key dismissal, which also fires while a popup is open:
+        // the notice renders above the popup, so the press is aimed at
+        // it. The dismissing press does nothing else.
+        let dismissed = self
+            .status_message
+            .try_lock()
+            .ok()
+            .and_then(|mut msg| msg.take());
+        if dismissed.is_some() {
+            return;
+        }
+        if self.mouse_input_blocked() {
+            // The overlay owns all input while open: events behind it
+            // are inert, and a drag started before it opened ends here.
+            self.drag_divider = mouse::Divider::None;
+            self.hover_divider = mouse::Divider::None;
+            return;
+        }
+        // Presses on the text input overlay itself are inert: the input
+        // owns the keyboard, and the panes behind its rows must not
+        // receive a click the user aimed at the input.
+        if self.is_input_active()
+            && mouse::point_in(crate::input::input_area(self.terminal_area), col, row)
+        {
+            return;
+        }
+        match mouse::divider_at(&self.pane_rects, col, row) {
+            mouse::Divider::None => self.click_pane(col, row),
+            mode => {
+                self.drag_divider = mode;
+                self.hover_divider = mode;
+            }
+        }
+    }
+
+    fn mouse_drag(&mut self, col: u16, row: u16) {
+        if self.mouse_input_blocked() {
+            return;
+        }
+        match self.drag_divider {
+            mouse::Divider::None => {
+                self.hover_divider = mouse::divider_at(&self.pane_rects, col, row);
+            }
+            mode => {
+                self.apply_drag(mode, col, row);
+                self.hover_divider = mode;
+            }
+        }
+    }
+
+    fn mouse_moved(&mut self, col: u16, row: u16) {
+        if self.mouse_input_blocked() {
+            return;
+        }
+        // Some terminals report drags as plain Moved; keep following
+        // the active divider in that case.
+        if self.drag_divider != mouse::Divider::None {
+            self.mouse_drag(col, row);
+        } else {
+            self.hover_divider = mouse::divider_at(&self.pane_rects, col, row);
+        }
+    }
+
+    fn mouse_up(&mut self, col: u16, row: u16) {
+        if self.mouse_input_blocked() {
+            return;
+        }
+        // Release ends the drag entirely: recompute the hover glow from
+        // the release point, exactly as a plain motion there would.
+        // Without this the glow sticks until the next motion event,
+        // which button-motion-only terminals never send.
+        self.drag_divider = mouse::Divider::None;
+        self.hover_divider = mouse::divider_at(&self.pane_rects, col, row);
+    }
+
+    /// Apply an active drag: move the dragged split to the pointer.
+    fn apply_drag(&mut self, mode: mouse::Divider, col: u16, row: u16) {
+        match mode {
+            mouse::Divider::Vertical => {
+                let pct =
+                    mouse::clamp_types_width_pct(mouse::pct_from_x(col, self.pane_rects.body));
+                self.types_width_pct = Some(pct);
+            }
+            mouse::Divider::Horizontal => {
+                let column = self.pane_rects.right_column();
+                let clamped = mouse::clamp_services_height_pct(
+                    mouse::pct_from_y(row, column),
+                    column.height,
+                    SERVICES_PANE_MIN_TOTAL_ROWS,
+                    DETAILS_PANE_MIN_ROWS,
+                );
+                self.services_height_pct = Some(clamped);
+            }
+            mouse::Divider::None => {}
+        }
+    }
+
+    /// Left press inside a pane: click-to-select where the pane has
+    /// selectable rows. The details pane has nothing clickable; its
+    /// content is navigated with the keyboard or the wheel.
+    fn click_pane(&mut self, col: u16, row: u16) {
+        let panes = self.pane_rects;
+        if mouse::point_in(panes.types, col, row) {
+            self.click_service_type(row);
+        } else if mouse::point_in(panes.services, col, row) {
+            self.click_service(row);
+        }
+    }
+
+    /// Click in the types panel: the first visual row is "All Types",
+    /// the rest map to service types through the scroll offset. Mirrors
+    /// the keyboard navigation's scroll handling.
+    fn click_service_type(&mut self, row: u16) {
+        let area = self.pane_rects.types;
+        if area.height < 3
+            || row <= area.y
+            || row >= area.y.saturating_add(area.height).saturating_sub(1)
+        {
+            return;
+        }
+        let visual = row.saturating_sub(area.y.saturating_add(1)) as usize;
+        let idx = self.types_scroll.offset + visual;
+        // The rendered list is ["All Types", service types...]; clicking
+        // past its last item (blank rows) selects nothing.
+        if idx == 0 {
+            self.types_scroll.reset();
+            self.update_service_type_selection(None);
+        } else if let Some(type_idx) = idx.checked_sub(1).filter(|&i| i < self.service_types.len())
+        {
+            self.types_scroll
+                .update_offset(type_idx, self.service_types.len());
+            self.update_service_type_selection(Some(type_idx));
+        }
+    }
+
+    /// Click in the services list: rows map to filtered services
+    /// through the scroll offset; selecting a new service resets the
+    /// details viewport like keyboard navigation does.
+    fn click_service(&mut self, row: u16) {
+        let area = self.pane_rects.services;
+        if area.height < 3
+            || row <= area.y
+            || row >= area.y.saturating_add(area.height).saturating_sub(1)
+        {
+            return;
+        }
+        let visual = row.saturating_sub(area.y.saturating_add(1)) as usize;
+        let idx = self.services_scroll.offset + visual;
+        let filtered_len = self.get_filtered_services_readonly().len();
+        if idx < filtered_len && idx != self.selected_service {
+            self.selected_service = idx;
+            self.services_scroll.update_offset(idx, filtered_len);
+            self.details_scroll.reset();
+        }
+    }
+
+    /// Wheel notch: exactly one step in the pane under the pointer, the
+    /// same step its navigation keys take. The app has no pane focus,
+    /// so what scrolls is what the pointer points at.
+    fn mouse_wheel(&mut self, col: u16, row: u16, delta: isize) {
+        if self.mouse_input_blocked() {
+            return;
+        }
+        let panes = self.pane_rects;
+        if mouse::point_in(panes.types, col, row) {
+            if delta < 0 {
+                self.navigate_service_types_up();
+            } else {
+                self.navigate_service_types_down();
+            }
+        } else if mouse::point_in(panes.services, col, row) {
+            if delta < 0 {
+                self.navigate_services_up();
+            } else {
+                self.navigate_services_down();
+            }
+        } else if mouse::point_in(panes.details, col, row) {
+            if delta < 0 {
+                self.scroll_details_up();
+            } else {
+                self.scroll_details_down();
+            }
+        }
+    }
+
     fn active_input(&self) -> Option<&InputState> {
         debug_assert!(
             !(self.filter_input.is_active() && self.service_type_input.is_active()),
@@ -892,18 +1165,22 @@ impl AppState {
         app_state: &AppState,
         area: ratatui::layout::Rect,
     ) -> (MainLayout, VisibleCounts) {
-        let left_panel_width = calculate_left_panel_width(&app_state.service_types, area.width);
-        let services_count = app_state.get_filtered_services_readonly().len();
-        let layout = if app_state.is_input_active() {
-            create_filter_input_layout(area, left_panel_width, services_count)
+        let is_input = app_state.is_input_active();
+        let has_filter_status = !is_input && !app_state.filter_input.is_empty();
+        // The pane split happens below the filter status bar when one is
+        // shown; the text input overlay covers the same rows.
+        let column_height = if is_input || has_filter_status {
+            area.height.saturating_sub(FILTER_STATUS_BAR_HEIGHT)
         } else {
-            create_main_layout(
-                area,
-                !app_state.filter_input.is_empty(),
-                left_panel_width,
-                services_count,
-            )
+            area.height
         };
+        let splits = resolve_pane_splits(app_state, area.width, column_height);
+        let layout = if is_input {
+            create_filter_input_layout(area, splits)
+        } else {
+            create_main_layout(area, has_filter_status, splits)
+        };
+        let services_count = app_state.get_filtered_services_readonly().len();
         let visible_counts = calculate_visible_counts(&layout, services_count);
         (layout, visible_counts)
     }
@@ -932,6 +1209,15 @@ impl AppState {
         self.update_filtered_cache();
 
         let (layout, visible_counts) = Self::prepare_layout_and_counts(self, terminal_area);
+
+        // Record last-frame pane geometry so mouse hit-testing acts on
+        // the frame as drawn.
+        self.pane_rects = mouse::PaneRects {
+            body: layout.body,
+            types: layout.left_panel,
+            services: layout.services_area,
+            details: layout.details_area,
+        };
 
         // Update state with current visible counts
         self.types_scroll.visible_items = visible_counts.types;
@@ -971,6 +1257,17 @@ impl AppState {
 
     // Key handling methods
     fn handle_key_event(&mut self, key: KeyEvent) -> bool {
+        let result = self.dispatch_key_event(key);
+        // Overlays own all input while open: drop any active resize so
+        // borders behind them never glow (mirrors the mouse path).
+        if self.mouse_input_blocked() {
+            self.drag_divider = mouse::Divider::None;
+            self.hover_divider = mouse::Divider::None;
+        }
+        result
+    }
+
+    fn dispatch_key_event(&mut self, key: KeyEvent) -> bool {
         // Dismiss status message on any key press if it's displayed
         let dismissed = self
             .status_message
@@ -1647,7 +1944,9 @@ impl AppState {
     }
 
     fn navigate_service_types_to_first(&mut self) {
-        self.selected_type = None; // "All Types" is the first
+        // "All Types" is the first; the scroll correction runs even when
+        // the selection does not change, while the selection update
+        // itself no-ops at the same target.
         self.types_scroll.reset();
         self.update_service_type_selection(None);
     }
@@ -2206,6 +2505,9 @@ fn ui(f: &mut Frame, app_state: &AppState) {
 }
 
 struct MainLayout {
+    /// The area the pane split happens in: the full area minus the
+    /// filter status bar when one is shown.
+    body: ratatui::layout::Rect,
     left_panel: ratatui::layout::Rect,
     services_area: ratatui::layout::Rect,
     details_area: ratatui::layout::Rect,
@@ -2225,6 +2527,22 @@ fn get_border_style(loaded_from_file: bool) -> Style {
     }
 }
 
+/// Border style for a pane: the base style unless one of the seams the
+/// pane borders is hovered or dragged, when the resize highlight takes
+/// over. Overlays own all input while open, so nothing glows behind
+/// them.
+fn pane_border_style(app_state: &AppState, seams: &[mouse::Divider]) -> Style {
+    let active = !app_state.mouse_input_blocked()
+        && seams
+            .iter()
+            .any(|d| *d == app_state.drag_divider || *d == app_state.hover_divider);
+    mouse::resize_border_style(
+        get_border_style(app_state.loaded_from_file),
+        active,
+        colors_disabled(),
+    )
+}
+
 fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 {
     let all_types_width = "All Types".len() as u16;
     let max_type_width = service_types
@@ -2235,13 +2553,125 @@ fn calculate_left_panel_width(service_types: &[String], area_width: u16) -> u16 
 
     let content_width = all_types_width.max(max_type_width);
     let padding = 2;
-    let min_width = 10u16;
-    let max_width_raw = area_width.saturating_sub(30);
-    let max_width = max_width_raw.max(min_width);
 
-    content_width
-        .saturating_add(padding)
-        .clamp(min_width, max_width)
+    content_width.saturating_add(padding).clamp(
+        MIN_TYPES_PANEL_WIDTH,
+        area_width
+            .saturating_sub(DETAILS_PANE_MIN_WIDTH)
+            .max(MIN_TYPES_PANEL_WIDTH),
+    )
+}
+
+/// Resolved pane split sizes for one frame: the content-fit panel width
+/// and the adaptive services height, or the user's dragged shares
+/// converted back to absolute sizes with their floors re-applied.
+#[derive(Clone, Copy, Debug)]
+struct PaneSplits {
+    left_panel_width: u16,
+    services_height: u16,
+}
+
+impl PaneSplits {
+    /// Explicit splits, as the layout tests build them.
+    #[cfg(test)]
+    fn new(left_panel_width: u16, services_height: u16) -> Self {
+        Self {
+            left_panel_width,
+            services_height,
+        }
+    }
+}
+
+fn resolve_pane_splits(app_state: &AppState, body_width: u16, column_height: u16) -> PaneSplits {
+    let left_panel_width = match app_state.types_width_pct {
+        None => calculate_left_panel_width(&app_state.service_types, body_width),
+        Some(pct) => mouse::types_width_from_pct(
+            pct,
+            body_width,
+            MIN_TYPES_PANEL_WIDTH,
+            DETAILS_PANE_MIN_WIDTH,
+        ),
+    };
+    let services_height = match app_state.services_height_pct {
+        None => {
+            let services_count = app_state.get_filtered_services_readonly().len();
+            (services_count.min(max_services_list_size(column_height)) + 2) as u16
+        }
+        Some(pct) => mouse::services_height_from_pct(
+            pct,
+            column_height,
+            SERVICES_PANE_MIN_TOTAL_ROWS,
+            DETAILS_PANE_MIN_ROWS,
+        ),
+    };
+    PaneSplits {
+        left_panel_width,
+        services_height,
+    }
+}
+
+fn create_main_layout(
+    area: ratatui::layout::Rect,
+    has_filter_status: bool,
+    splits: PaneSplits,
+) -> MainLayout {
+    create_pane_layout(area, has_filter_status, has_filter_status, splits)
+}
+
+/// Shared construction of both pane layouts: the body area, split into
+/// the types panel and the right column, and the right column split
+/// into the services list and the details pane.
+///
+/// `strips_bottom_bar` reserves the bottom rows for an overlay (the
+/// filter status bar, or the text input that covers the same rows);
+/// `has_filter_status` additionally renders that bar's rect.
+fn create_pane_layout(
+    area: ratatui::layout::Rect,
+    strips_bottom_bar: bool,
+    has_filter_status: bool,
+    splits: PaneSplits,
+) -> MainLayout {
+    let main_area = if strips_bottom_bar {
+        let remaining_height = area.height.saturating_sub(FILTER_STATUS_BAR_HEIGHT);
+        ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
+    } else {
+        area
+    };
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(splits.left_panel_width),
+            Constraint::Fill(1),
+        ])
+        .split(main_area);
+
+    let services_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(splits.services_height),
+            Constraint::Fill(1),
+        ])
+        .split(chunks[1]);
+
+    let filter_status_area = if has_filter_status {
+        Some(ratatui::layout::Rect::new(
+            area.x,
+            area.y + area.height.saturating_sub(FILTER_STATUS_BAR_HEIGHT),
+            area.width,
+            FILTER_STATUS_BAR_HEIGHT,
+        ))
+    } else {
+        None
+    };
+
+    MainLayout {
+        body: main_area,
+        left_panel: chunks[0],
+        services_area: services_chunks[0],
+        details_area: services_chunks[1],
+        filter_status_area,
+    }
 }
 
 fn max_services_list_size(available_height: u16) -> usize {
@@ -2255,49 +2685,6 @@ fn max_services_list_size(available_height: u16) -> usize {
     adaptive.max(MIN_SERVICES_LIST_SIZE)
 }
 
-fn create_main_layout(
-    area: ratatui::layout::Rect,
-    has_filter_status: bool,
-    left_panel_width: u16,
-    services_count: usize,
-) -> MainLayout {
-    let main_area = if has_filter_status {
-        let remaining_height = area.height.saturating_sub(3);
-        ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height)
-    } else {
-        area
-    };
-
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
-        .split(main_area);
-
-    let services_height = (services_count.min(max_services_list_size(main_area.height)) + 2) as u16;
-    let services_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
-        .split(chunks[1]);
-
-    let filter_status_area = if has_filter_status {
-        Some(ratatui::layout::Rect::new(
-            area.x,
-            area.y + area.height.saturating_sub(3),
-            area.width,
-            3,
-        ))
-    } else {
-        None
-    };
-
-    MainLayout {
-        left_panel: chunks[0],
-        services_area: services_chunks[0],
-        details_area: services_chunks[1],
-        filter_status_area,
-    }
-}
-
 fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> VisibleCounts {
     let available_services_height = (layout.services_area.height as usize).saturating_sub(2);
     VisibleCounts {
@@ -2306,31 +2693,10 @@ fn calculate_visible_counts(layout: &MainLayout, services_count: usize) -> Visib
     }
 }
 
-fn create_filter_input_layout(
-    area: ratatui::layout::Rect,
-    left_panel_width: u16,
-    services_count: usize,
-) -> MainLayout {
-    let remaining_height = area.height.saturating_sub(3);
-    let main_area = ratatui::layout::Rect::new(area.x, area.y, area.width, remaining_height);
-
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(left_panel_width), Constraint::Fill(1)])
-        .split(main_area);
-
-    let services_height = (services_count.min(max_services_list_size(main_area.height)) + 2) as u16;
-    let services_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(services_height), Constraint::Fill(1)])
-        .split(chunks[1]);
-
-    MainLayout {
-        left_panel: chunks[0],
-        services_area: services_chunks[0],
-        details_area: services_chunks[1],
-        filter_status_area: None,
-    }
+fn create_filter_input_layout(area: ratatui::layout::Rect, splits: PaneSplits) -> MainLayout {
+    // The text input overlay covers the filter status rows even when no
+    // filter is displayed, so the panes always shrink for it.
+    create_pane_layout(area, true, false, splits)
 }
 
 fn render_service_types_list(
@@ -2372,7 +2738,7 @@ fn render_service_types_list(
     let visible_type_items: Vec<ListItem> =
         get_visible_items(&type_items, &app_state.types_scroll).to_vec();
 
-    let border_style = get_border_style(app_state.loaded_from_file);
+    let border_style = pane_border_style(app_state, &[mouse::Divider::Vertical]);
     let types_list = List::new(visible_type_items)
         .block(
             Block::default()
@@ -2460,7 +2826,10 @@ fn render_services_list(
 
     let title = services_list_title(app_state, online_count, offline_count, total_count);
 
-    let border_style = get_border_style(app_state.loaded_from_file);
+    let border_style = pane_border_style(
+        app_state,
+        &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
+    );
     let services_list = List::new(visible_service_items)
         .block(
             Block::default()
@@ -2565,26 +2934,34 @@ fn render_service_details(f: &mut Frame, app_state: &AppState, area: ratatui::la
 
         let visible_details: Vec<Line> = details_lines.into_iter().skip(clamped_offset).collect();
 
-        let border_style = get_border_style(app_state.loaded_from_file);
         let details = Paragraph::new(visible_details)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(border_style)
+                    .border_style(details_border_style(app_state))
                     .title("Service Details (Shift+↑/↓, J/K to scroll)"),
             )
             .wrap(Wrap { trim: true });
         f.render_widget(details, area);
     } else {
-        let border_style = get_border_style(app_state.loaded_from_file);
         let details = Paragraph::new("No service selected").block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(border_style)
+                .border_style(details_border_style(app_state))
                 .title("Service Details"),
         );
         f.render_widget(details, area);
     }
+}
+
+/// Border style of the details pane: its left border is part of the
+/// vertical seam and its top border of the horizontal one, so both
+/// highlight.
+fn details_border_style(app_state: &AppState) -> Style {
+    pane_border_style(
+        app_state,
+        &[mouse::Divider::Vertical, mouse::Divider::Horizontal],
+    )
 }
 
 fn render_filter_status(f: &mut Frame, app_state: &AppState, area: ratatui::layout::Rect) {
@@ -3566,6 +3943,11 @@ pub async fn run_tui(
                             }
                         }
                         Event::Resize(_, _) => {
+                            let _ = notification_sender.send(Notification::UserInput);
+                        }
+                        Event::Mouse(mouse) => {
+                            let mut state = state.write().await;
+                            state.handle_mouse_event(mouse);
                             let _ = notification_sender.send(Notification::UserInput);
                         }
                         _ => {}
@@ -6447,7 +6829,7 @@ mod tests {
     #[test]
     fn test_create_main_layout() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false, 20, 10);
+        let layout = create_main_layout(area, false, PaneSplits::new(20, 12));
 
         assert!(layout.left_panel.width > 0);
         assert!(layout.services_area.width > 0);
@@ -6460,7 +6842,7 @@ mod tests {
     #[test]
     fn test_create_main_layout_with_few_services() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false, 20, 3);
+        let layout = create_main_layout(area, false, PaneSplits::new(20, 5));
 
         assert_eq!(layout.services_area.height, 5); // 3 services + 2 for borders
     }
@@ -6488,7 +6870,7 @@ mod tests {
     #[test]
     fn test_calculate_visible_counts() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false, 20, 10);
+        let layout = create_main_layout(area, false, PaneSplits::new(20, 12));
         let counts = calculate_visible_counts(&layout, 10);
 
         assert!(counts.types > 0);
@@ -6501,7 +6883,7 @@ mod tests {
     #[test]
     fn test_calculate_visible_counts_capped() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 50);
-        let layout = create_main_layout(area, false, 20, 20);
+        let layout = create_main_layout(area, false, PaneSplits::new(20, 17));
         let counts = calculate_visible_counts(&layout, 20);
 
         assert_eq!(counts.services, max_services_list_size(50));
@@ -6510,7 +6892,7 @@ mod tests {
     #[test]
     fn test_create_main_layout_narrow_width_expected_constraints() {
         let area = ratatui::layout::Rect::new(0, 0, 15, 50);
-        let layout = create_main_layout(area, false, 10, 5);
+        let layout = create_main_layout(area, false, PaneSplits::new(10, 7));
 
         assert!(layout.left_panel.width > 0);
         assert!(layout.services_area.width > 0);
@@ -6523,7 +6905,8 @@ mod tests {
     #[test]
     fn test_create_main_layout_cramped_height_expected_counts() {
         let area = ratatui::layout::Rect::new(0, 0, 100, 10);
-        let layout = create_main_layout(area, false, 20, 20);
+        // The adaptive default for this height: 5 content rows + borders.
+        let layout = create_main_layout(area, false, PaneSplits::new(20, 7));
 
         let counts = calculate_visible_counts(&layout, 20);
 
@@ -6763,6 +7146,156 @@ mod tests {
         state.update_service_type_selection(Some(1));
         assert_eq!(state.selected_service, 0);
         assert_eq!(state.services_scroll.offset, 0);
+    }
+
+    #[test]
+    fn test_update_service_type_selection_reselecting_same_type_is_noop() {
+        let mut state = create_test_app_state();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        for i in 0..5 {
+            state.services.push(create_test_service(
+                &format!("test{i}"),
+                "_http._tcp.local.",
+                80 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+
+        // Navigate to type 0, then move the service selection away from
+        // the top: re-selecting the same type must leave it alone.
+        state.update_service_type_selection(Some(0));
+        state.selected_service = 2;
+        state.details_scroll.offset = 4;
+
+        state.update_service_type_selection(Some(0));
+        assert_eq!(state.selected_type, Some(0));
+        assert_eq!(state.selected_service, 2);
+        assert_eq!(state.details_scroll.offset, 4);
+    }
+
+    #[test]
+    fn test_types_wheel_at_endpoint_keeps_service_state() {
+        // Two _ssh services make the last type's pane non-empty, so the
+        // saturated wheel has service state worth protecting.
+        let mut state = create_mouse_test_state();
+        for i in 0..2 {
+            state.services.push(create_test_service(
+                &format!("ssh{i}"),
+                "_ssh._tcp.local.",
+                9000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 1);
+        state.details_scroll.offset = 7;
+
+        // Saturated notch at the last type: nothing changes.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.details_scroll.offset, 7);
+    }
+
+    #[test]
+    fn test_types_keyboard_navigation_at_endpoint_keeps_service_state() {
+        let mut state = create_mouse_test_state();
+        for i in 0..2 {
+            state.services.push(create_test_service(
+                &format!("ssh{i}"),
+                "_ssh._tcp.local.",
+                9000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        assert_eq!(state.selected_type, Some(0));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(state.selected_service, 1);
+        state.details_scroll.offset = 7;
+
+        // Pinned at the last type: 'l' changes nothing at all.
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        assert_eq!(state.selected_type, Some(1));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.details_scroll.offset, 7);
+
+        // Clicking the already-selected type row is equally inert.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.types.x + 2,
+            panes.types.y + 3,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.details_scroll.offset, 7);
+    }
+
+    #[test]
+    fn test_types_ctrl_home_refreshes_filter_and_selection_from_last_type() {
+        let mut state = create_mouse_test_state();
+        for i in 0..2 {
+            state.services.push(create_test_service(
+                &format!("ssh{i}"),
+                "_ssh._tcp.local.",
+                9000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+
+        // Jump to the last type, select one of its services, then jump
+        // back to "All Types": the filter change must rebuild the list.
+        state.handle_key_event(KeyEvent::new(KeyCode::End, KeyModifiers::CONTROL));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(state.selected_service, 1);
+
+        state.handle_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL));
+        assert_eq!(state.selected_type, None);
+        assert_eq!(
+            state.get_filtered_services().len(),
+            7,
+            "the filter must rebuild back to all services (5 _http + 2 _ssh), not the stale _ssh-only list"
+        );
+        assert_eq!(state.selected_service, 0);
+
+        // Already at "All Types": the update is a no-op for service
+        // state, while the scroll correction still re-pins the view.
+        state.details_scroll.offset = 7;
+        state.handle_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL));
+        assert_eq!(state.selected_type, None);
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.details_scroll.offset, 7);
+        assert_eq!(state.types_scroll.offset, 0);
     }
 
     #[test]
@@ -9897,5 +10430,629 @@ mod tests {
             state.services[0].wire_fullname.as_deref(),
             Some(r"test1._HTTP._tcp.local.")
         );
+    }
+
+    // Mouse pane management tests: everything drives the mouse entrypoint
+    // after a real 100x40 layout preparation, so hit-testing acts on the
+    // pane geometry the frame was drawn with.
+
+    /// App state with two service types and five services, prepared for
+    /// a 100x40 terminal so mouse hit-testing sees real pane geometry.
+    fn create_mouse_test_state() -> AppState {
+        create_mouse_test_state_with_services(5)
+    }
+
+    /// [`create_mouse_test_state`] with a configurable service count, so
+    /// tests can build lists shorter than the viewport (blank rows) or
+    /// longer ones.
+    fn create_mouse_test_state_with_services(service_count: usize) -> AppState {
+        let mut state = create_test_app_state();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        for i in 0..service_count {
+            state.services.push(create_test_service(
+                &format!("svc{i}"),
+                "_http._tcp.local.",
+                8000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        state
+    }
+
+    fn mouse_event(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    /// Grab cell on the types panel | right column seam: the right
+    /// border cell of the types panel, in a row clear of the horizontal
+    /// seam.
+    fn vertical_seam(state: &AppState) -> (u16, u16) {
+        let panes = state.pane_rects;
+        (panes.types.x + panes.types.width - 1, 20)
+    }
+
+    /// Grab cell on the services | details seam: the services list's
+    /// bottom border cell, right of the vertical seam crossing.
+    fn horizontal_seam(state: &AppState) -> (u16, u16) {
+        let panes = state.pane_rects;
+        (
+            panes.services.x + 5,
+            panes.services.y + panes.services.height - 1,
+        )
+    }
+
+    /// Render the state and assert the border cell at (col, row) carries
+    /// the resize highlight when `active`, and nothing of the sort when
+    /// inactive — cyan with colors, reverse video under NO_COLOR.
+    fn assert_border_resize_highlight(state: &AppState, col: u16, row: u16, active: bool) {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
+        terminal.draw(|f| ui(f, state)).unwrap();
+        let style =
+            &terminal.backend().buffer().content()[(row as usize) * 100 + col as usize].style();
+        if active {
+            if colors_disabled() {
+                assert!(
+                    style.add_modifier.contains(Modifier::REVERSED),
+                    "border cell ({col}, {row}) must carry the monochrome resize highlight"
+                );
+            } else {
+                assert_eq!(
+                    style.fg,
+                    Some(Color::Cyan),
+                    "border cell ({col}, {row}) must carry the cyan resize highlight"
+                );
+            }
+        } else {
+            assert!(
+                style.fg != Some(Color::Cyan) && !style.add_modifier.contains(Modifier::REVERSED),
+                "inactive border cell ({col}, {row}) must not carry a resize highlight"
+            );
+        }
+    }
+
+    #[test]
+    fn test_mouse_down_on_seam_starts_drag_and_up_ends_it() {
+        let mut state = create_mouse_test_state();
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        assert_eq!(state.drag_divider, mouse::Divider::Horizontal);
+        assert_eq!(state.hover_divider, mouse::Divider::Horizontal);
+
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            row + 6,
+        ));
+        assert!(
+            state.services_height_pct.is_some(),
+            "dragging must take over the split"
+        );
+        // Refresh the geometry the drag just moved, then release off
+        // every seam: the drag ends and the glow goes with it.
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        state.handle_mouse_event(mouse_event(MouseEventKind::Up(MouseButton::Left), 2, 2));
+        assert_eq!(state.drag_divider, mouse::Divider::None);
+        assert_eq!(state.hover_divider, mouse::Divider::None);
+    }
+
+    #[test]
+    fn test_mouse_hover_follows_pointer_motion() {
+        let mut state = create_mouse_test_state();
+        let (hcol, hrow) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, hcol, hrow));
+        assert_eq!(state.hover_divider, mouse::Divider::Horizontal);
+
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, 50, 20));
+        assert_eq!(state.hover_divider, mouse::Divider::None);
+
+        let (vcol, vrow) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, vcol, vrow));
+        assert_eq!(state.hover_divider, mouse::Divider::Vertical);
+    }
+
+    #[test]
+    fn test_mouse_horizontal_drag_moves_services_split_with_clamp() {
+        let mut state = create_mouse_test_state();
+        // Default: 5 services at the fixed minimum of 5 content rows.
+        assert_eq!(state.pane_rects.services.height, 7);
+
+        // Drag the seam down: the services list grows to half the column.
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            20,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.services.height, 20);
+        assert_eq!(state.pane_rects.details.height, 20);
+
+        // Slammed to the column bottom: services pins at 32 rows so the
+        // details pane keeps its 8-row floor.
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            39,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.services.height, 32);
+        assert_eq!(state.pane_rects.details.height, 8);
+
+        // Slammed to the top: services keeps its 7-row minimum.
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(MouseEventKind::Drag(MouseButton::Left), col, 0));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.services.height, 7);
+    }
+
+    #[test]
+    fn test_mouse_vertical_drag_moves_types_width_with_clamp() {
+        let mut state = create_mouse_test_state();
+        let default_width = state.pane_rects.types.width;
+
+        let (col, row) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col + 20,
+            row,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.types.width, col + 20);
+
+        // Slammed to the right edge: the details pane keeps 30 columns.
+        let (col, row) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            99,
+            row,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.types.width, 70);
+
+        // Slammed to the left edge: the panel keeps 15%.
+        let (col, _) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            20,
+        ));
+        state.handle_mouse_event(mouse_event(MouseEventKind::Drag(MouseButton::Left), 0, 20));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.types.width, 15);
+        assert!(
+            state.pane_rects.types.width != default_width || default_width == 15,
+            "dragging must move the panel away from its default width"
+        );
+    }
+
+    #[test]
+    fn test_mouse_split_overrides_scale_with_terminal_resize() {
+        let mut state = create_mouse_test_state();
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            20,
+        ));
+        let (vcol, vrow) = vertical_seam(&state);
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            vcol,
+            vrow,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            50,
+            vrow,
+        ));
+
+        // Half of a 20-row column: proportions survive the resize, and
+        // the 8-row details floor holds on the smaller terminal.
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 20));
+        assert_eq!(state.pane_rects.services.height, 10);
+        assert_eq!(state.pane_rects.details.height, 10);
+        assert_eq!(state.pane_rects.types.width, 50);
+    }
+
+    #[test]
+    fn test_mouse_press_on_seam_does_not_change_selection() {
+        let mut state = create_mouse_test_state();
+        let (hcol, hrow) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            hcol,
+            hrow,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Up(MouseButton::Left),
+            hcol,
+            hrow,
+        ));
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.selected_type, None);
+
+        let (vcol, vrow) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            vcol,
+            vrow,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Up(MouseButton::Left),
+            vcol,
+            vrow,
+        ));
+        assert_eq!(state.selected_service, 0);
+        assert_eq!(state.selected_type, None);
+    }
+
+    #[test]
+    fn test_mouse_hover_highlights_seam_borders() {
+        let mut state = create_mouse_test_state();
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, col, row));
+        // Both panes sharing the seam carry the highlight; the types
+        // panel, far from it, does not.
+        assert_border_resize_highlight(&state, col, row, true);
+        assert_border_resize_highlight(&state, col, row + 1, true);
+        assert_border_resize_highlight(&state, state.pane_rects.types.x, 20, false);
+
+        // The vertical seam borders the left edge of both right-column
+        // panes, so the details pane highlights with them.
+        let (vcol, vrow) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, vcol, vrow));
+        assert_border_resize_highlight(&state, vcol, vrow, true);
+        assert_border_resize_highlight(&state, state.pane_rects.services.x, 3, true);
+        assert_border_resize_highlight(&state, state.pane_rects.details.x, 30, true);
+    }
+
+    #[test]
+    fn test_mouse_press_dismisses_status_message_without_selecting() {
+        let mut state = create_mouse_test_state();
+        *state.status_message.try_lock().unwrap() = Some(String::from("notice").into());
+        let panes = state.pane_rects;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert!(state.status_message.try_lock().unwrap().is_none());
+        assert_eq!(
+            state.selected_service, 0,
+            "the dismissal press must not also select"
+        );
+    }
+
+    #[test]
+    fn test_mouse_events_behind_open_popup_are_ignored() {
+        let mut state = create_mouse_test_state();
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Moved, col, row));
+        assert_eq!(state.hover_divider, mouse::Divider::Horizontal);
+
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('?')));
+        assert!(state.popup_state.any_active());
+        assert_eq!(
+            state.hover_divider,
+            mouse::Divider::None,
+            "opening a popup must clear the resize glow"
+        );
+
+        // A press dismisses a visible status message even behind a
+        // popup: the notice renders above it, and the any-key
+        // dismissal fires the same way.
+        *state.status_message.try_lock().unwrap() = Some(String::from("notice").into());
+        state.handle_mouse_event(mouse_event(MouseEventKind::Down(MouseButton::Left), 50, 20));
+        assert!(state.status_message.try_lock().unwrap().is_none());
+
+        let panes = state.pane_rects;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 0);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            row,
+        ));
+        assert_eq!(state.drag_divider, mouse::Divider::None);
+        state.handle_mouse_event(mouse_event(MouseEventKind::ScrollDown, 50, 20));
+        assert_eq!(state.details_scroll.offset, 0);
+    }
+
+    #[test]
+    fn test_mouse_works_while_text_input_is_open() {
+        let mut state = create_mouse_test_state();
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('/')));
+        assert!(state.is_input_active());
+        // Refresh the geometry: the input overlay shrinks the panes.
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        assert_eq!(
+            state.drag_divider,
+            mouse::Divider::Horizontal,
+            "dragging must keep working while the text input is open"
+        );
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            15,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        assert_eq!(state.pane_rects.services.height, 15);
+        state.handle_mouse_event(mouse_event(MouseEventKind::Up(MouseButton::Left), 2, 2));
+
+        let panes = state.pane_rects;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 1);
+
+        // Presses aimed at the input overlay itself are inert: no drag,
+        // no selection change, no dismissal of the typing session.
+        state.handle_mouse_event(mouse_event(MouseEventKind::Down(MouseButton::Left), 50, 39));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.drag_divider, mouse::Divider::None);
+        assert!(state.is_input_active(), "the input must stay open");
+    }
+
+    #[test]
+    fn test_mouse_drag_lands_seam_under_pointer() {
+        let mut state = create_mouse_test_state();
+
+        // Horizontal seam to an odd row: the seam cells must cover the
+        // pointer row, not trail one row short of it.
+        let (col, row) = horizontal_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            row,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            col,
+            21,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+        assert_eq!(panes.details.y, 21);
+        assert_eq!(panes.services.y + panes.services.height - 1, 20);
+
+        // Vertical seam to an odd column, same rule.
+        let (col, vrow) = vertical_seam(&state);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            col,
+            vrow,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Drag(MouseButton::Left),
+            31,
+            vrow,
+        ));
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+        assert_eq!(panes.services.x, 31);
+        assert_eq!(panes.types.x + panes.types.width - 1, 30);
+    }
+
+    #[test]
+    fn test_mouse_click_selects_service_and_resets_details_scroll() {
+        let mut state = create_mouse_test_state();
+        let panes = state.pane_rects;
+        state.details_scroll.offset = 5;
+
+        // Click the third visible row: it selects, and the details
+        // viewport resets like a keyboard selection change does.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.services.x + 2,
+            panes.services.y + 1 + 2,
+        ));
+        assert_eq!(state.selected_service, 2);
+        assert_eq!(state.details_scroll.offset, 0);
+
+        // Clicking the already-selected row keeps the viewport where it is.
+        state.details_scroll.offset = 5;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.services.x + 2,
+            panes.services.y + 1 + 2,
+        ));
+        assert_eq!(state.selected_service, 2);
+        assert_eq!(state.details_scroll.offset, 5);
+
+        // A list shorter than the viewport: clicks on blank rows below
+        // the last item select nothing.
+        let mut state = create_mouse_test_state_with_services(2);
+        let panes = state.pane_rects;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.services.x + 2,
+            panes.services.y + 1 + 3,
+        ));
+        assert_eq!(state.selected_service, 0);
+    }
+
+    #[test]
+    fn test_mouse_click_selects_service_type() {
+        let mut state = create_mouse_test_state();
+        let panes = state.pane_rects;
+
+        // First content row is "All Types".
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.types.x + 2,
+            panes.types.y + 1,
+        ));
+        assert_eq!(state.selected_type, None);
+
+        // Second content row is the first service type.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(0));
+
+        // Blank rows below the list select nothing.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.types.x + 2,
+            panes.types.y + 6,
+        ));
+        assert_eq!(state.selected_type, Some(0));
+    }
+
+    #[test]
+    fn test_mouse_wheel_moves_selection_in_list_panes() {
+        let mut state = create_mouse_test_state();
+        let panes = state.pane_rects;
+
+        // Services list: one notch, one step, saturating at the edges.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 1);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollUp,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollUp,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 0);
+
+        // Types panel: h/l semantics, saturating at both ends.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(0));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollUp,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollUp,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, None);
+    }
+
+    #[test]
+    fn test_mouse_wheel_scrolls_details_pane_with_saturation() {
+        let mut state = create_mouse_test_state();
+        // A long TXT record list makes the details content scrollable.
+        state.services[0].txt = (0..20).map(|i| format!("key{i}=value{i}")).collect();
+        let panes = state.pane_rects;
+
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.details.x + 2,
+            panes.details.y + 2,
+        ));
+        assert_eq!(state.details_scroll.offset, 1);
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollUp,
+            panes.details.x + 2,
+            panes.details.y + 2,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollUp,
+            panes.details.x + 2,
+            panes.details.y + 2,
+        ));
+        assert_eq!(state.details_scroll.offset, 0);
+
+        // Wheeling past the content bottom saturates instead of wrapping.
+        for _ in 0..40 {
+            state.handle_mouse_event(mouse_event(
+                MouseEventKind::ScrollDown,
+                panes.details.x + 2,
+                panes.details.y + 2,
+            ));
+        }
+        let at_bottom = state.details_scroll.offset;
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.details.x + 2,
+            panes.details.y + 2,
+        ));
+        assert_eq!(state.details_scroll.offset, at_bottom);
     }
 }

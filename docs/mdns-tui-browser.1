@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-11-20" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-11-21" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -122,6 +122,20 @@ Ctrl+Z                 - Suspend the application (Unix only)
 ?                      - Toggle help popup
 .br
 q or Ctrl+c            - Quit the application
+.TP
+.B Mouse
+.br
+Drag border between panes - Resize panes (service types panel width, services list height)
+.br
+Hover or drag a border  - Border highlights while pointed at or dragged
+.br
+Click service or type   - Select it
+.br
+Wheel over a pane       - Scroll it (services and types move the selection, details scrolls the viewport)
+.br
+Shift+mouse             - Bypass capture for the terminal's native selection
+.br
+While a popup or text input is open, the mouse does nothing behind it
 .TP
 .B URL Selection Popup
 .br

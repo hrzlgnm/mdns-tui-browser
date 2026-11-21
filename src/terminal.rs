@@ -5,6 +5,7 @@
 use std::io::Stdout;
 
 use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -135,15 +136,24 @@ pub struct TuiTerminal {
 impl TuiTerminal {
     /// Creates a new terminal in TUI mode.
     ///
-    /// Enables raw mode and enters the alternate screen.
+    /// Enables raw mode, enters the alternate screen and captures the
+    /// mouse, so borders are draggable and clicks and wheel reach the
+    /// app. Capture is released again on [`TuiTerminal::stop`].
     ///
     /// # Errors
     /// Returns an error if enabling raw mode or entering alternate screen fails.
+    /// On failure, capture is released, the alternate screen is left and raw
+    /// mode is disabled before returning, mirroring `start()`'s rollback.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         enable_raw_mode()?;
 
         let mut stdout = std::io::stdout();
-        if let Err(e) = execute!(stdout, EnterAlternateScreen) {
+        if let Err(e) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+            // Roll back everything the failed setup may have applied:
+            // release capture, leave the alternate screen, then raw
+            // mode, mirroring `start()`'s rollback below.
+            let _ = execute!(stdout, DisableMouseCapture);
+            let _ = execute!(stdout, LeaveAlternateScreen);
             let _ = disable_raw_mode();
             return Err(Box::new(e));
         }
@@ -155,6 +165,7 @@ impl TuiTerminal {
                 active: true,
             }),
             Err(e) => {
+                let _ = execute!(std::io::stdout(), DisableMouseCapture);
                 let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
                 let _ = disable_raw_mode();
                 Err(Box::new(e))
@@ -164,18 +175,25 @@ impl TuiTerminal {
 
     /// Starts (or restarts) the TUI mode.
     ///
-    /// Re-enables raw mode and re-enters the alternate screen if currently stopped.
+    /// Re-enables raw mode, re-enters the alternate screen and
+    /// re-captures the mouse if currently stopped.
     /// This is useful for pausing and resuming the TUI.
     ///
     /// # Errors
     /// Returns an error if enabling raw mode or entering alternate screen fails.
-    /// If an error occurs, raw mode is disabled before returning.
+    /// On failure, capture is released, the alternate screen is left and raw
+    /// mode is disabled before returning, mirroring `new()`'s rollback.
     #[cfg(unix)]
     pub fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if !self.active {
             enable_raw_mode()?;
 
-            if let Err(e) = execute!(self.backend_mut(), EnterAlternateScreen) {
+            if let Err(e) = execute!(self.backend_mut(), EnterAlternateScreen, EnableMouseCapture) {
+                // Roll back everything the failed start may have
+                // applied: release capture, leave the alternate screen,
+                // then raw mode, mirroring `new()`'s rollback.
+                let _ = execute!(self.backend_mut(), DisableMouseCapture);
+                let _ = execute!(self.backend_mut(), LeaveAlternateScreen);
                 let _ = disable_raw_mode();
                 return Err(Box::new(e));
             }
@@ -187,17 +205,30 @@ impl TuiTerminal {
 
     /// Stops the TUI mode, restoring the normal terminal state.
     ///
-    /// Leaves the alternate screen, disables raw mode, and shows the cursor.
-    /// After calling `stop()`, the terminal can be restarted with `start()`.
+    /// Leaves the alternate screen, releases mouse capture, disables raw
+    /// mode, and shows the cursor. After calling `stop()`, the terminal
+    /// can be restarted with `start()`.
     ///
     /// # Errors
     /// Returns an error if any cleanup operation fails.
     pub fn stop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.active {
             self.active = false;
+            // Attempt every cleanup step even when an earlier one fails:
+            // skipping the rest would leave raw mode or the alternate
+            // screen inconsistent for whoever runs next. The first
+            // error is reported.
             let mut first_error = None;
 
-            if let Err(e) = execute!(self.backend_mut(), LeaveAlternateScreen) {
+            if let Err(e) = execute!(self.backend_mut(), DisableMouseCapture)
+                && first_error.is_none()
+            {
+                first_error = Some(e.into());
+            }
+
+            if let Err(e) = execute!(self.backend_mut(), LeaveAlternateScreen)
+                && first_error.is_none()
+            {
                 first_error = Some(e.into());
             }
 
@@ -277,6 +308,7 @@ impl TuiTerminal {
 impl Drop for TuiTerminal {
     fn drop(&mut self) {
         if self.active {
+            let _ = execute!(self.backend_mut(), DisableMouseCapture);
             let _ = execute!(self.backend_mut(), LeaveAlternateScreen);
             let _ = disable_raw_mode();
             let _ = self.terminal.show_cursor();

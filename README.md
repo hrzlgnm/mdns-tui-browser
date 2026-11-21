@@ -324,6 +324,17 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details
 - <kbd>q</kbd> or <kbd>Ctrl</kbd>+<kbd>c</kbd> - Quit the application
 
+### Mouse
+The app captures the mouse while it runs, so the terminal's own text
+selection needs <kbd>Shift</kbd> held.
+
+- Drag the border between the service types panel and the panes to its right - resize the panel
+- Drag the border between the services list and the details pane - resize the services list
+- Grabbable borders highlight while pointed at or dragged
+- Click a service or service type to select it
+- Wheel over a pane scrolls it (services and types move the selection, details scrolls the viewport)
+- While a popup or text input is open, the mouse does nothing behind it
+
 ### Service Details Controls
 - <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details
 
