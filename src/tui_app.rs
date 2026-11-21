@@ -763,7 +763,14 @@ impl AppState {
         self.validate_selected_type();
     }
 
+    /// Apply a service type selection. Re-selecting the type that is
+    /// already selected is a no-op: navigation pinned at an endpoint (or
+    /// a click on the selected row) must not reset the service
+    /// selection or the scroll state of unchanged panes.
     fn update_service_type_selection(&mut self, new_type: Option<usize>) {
+        if new_type == self.selected_type {
+            return;
+        }
         self.selected_type = new_type;
         self.selected_service = 0;
         self.services_scroll.reset();
@@ -7137,6 +7144,117 @@ mod tests {
         state.update_service_type_selection(Some(1));
         assert_eq!(state.selected_service, 0);
         assert_eq!(state.services_scroll.offset, 0);
+    }
+
+    #[test]
+    fn test_update_service_type_selection_reselecting_same_type_is_noop() {
+        let mut state = create_test_app_state();
+        state.add_service_type("_http._tcp.local.");
+        state.add_service_type("_ssh._tcp.local.");
+        for i in 0..5 {
+            state.services.push(create_test_service(
+                &format!("test{i}"),
+                "_http._tcp.local.",
+                80 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+
+        // Navigate to type 0, then move the service selection away from
+        // the top: re-selecting the same type must leave it alone.
+        state.update_service_type_selection(Some(0));
+        state.selected_service = 2;
+        state.details_scroll.offset = 4;
+
+        state.update_service_type_selection(Some(0));
+        assert_eq!(state.selected_type, Some(0));
+        assert_eq!(state.selected_service, 2);
+        assert_eq!(state.details_scroll.offset, 4);
+    }
+
+    #[test]
+    fn test_types_wheel_at_endpoint_keeps_service_state() {
+        // Two _ssh services make the last type's pane non-empty, so the
+        // saturated wheel has service state worth protecting.
+        let mut state = create_mouse_test_state();
+        for i in 0..2 {
+            state.services.push(create_test_service(
+                &format!("ssh{i}"),
+                "_ssh._tcp.local.",
+                9000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.services.x + 2,
+            panes.services.y + 2,
+        ));
+        assert_eq!(state.selected_service, 1);
+        state.details_scroll.offset = 7;
+
+        // Saturated notch at the last type: nothing changes.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::ScrollDown,
+            panes.types.x + 2,
+            panes.types.y + 2,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.details_scroll.offset, 7);
+    }
+
+    #[test]
+    fn test_types_keyboard_navigation_at_endpoint_keeps_service_state() {
+        let mut state = create_mouse_test_state();
+        for i in 0..2 {
+            state.services.push(create_test_service(
+                &format!("ssh{i}"),
+                "_ssh._tcp.local.",
+                9000 + i as u16,
+            ));
+        }
+        state.mark_cache_dirty();
+        state.prepare_for_rendering(ratatui::layout::Rect::new(0, 0, 100, 40));
+        let panes = state.pane_rects;
+
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        assert_eq!(state.selected_type, Some(0));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        assert_eq!(state.selected_type, Some(1));
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(state.selected_service, 1);
+        state.details_scroll.offset = 7;
+
+        // Pinned at the last type: 'l' changes nothing at all.
+        state.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        assert_eq!(state.selected_type, Some(1));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.details_scroll.offset, 7);
+
+        // Clicking the already-selected type row is equally inert.
+        state.handle_mouse_event(mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panes.types.x + 2,
+            panes.types.y + 3,
+        ));
+        assert_eq!(state.selected_type, Some(1));
+        assert_eq!(state.selected_service, 1);
+        assert_eq!(state.details_scroll.offset, 7);
     }
 
     #[test]
