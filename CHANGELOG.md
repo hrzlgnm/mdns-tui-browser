@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.47.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.46.0...v1.47.0) (2026-11-21)
+
+
+### Features
+
+* scroll help and metrics popups with the mouse wheel ([#842](https://github.com/hrzlgnm/mdns-tui-browser/issues/842)) ([f46d203](https://github.com/hrzlgnm/mdns-tui-browser/commit/f46d203cf8c4352bf0f68317c5f2cdcac6fbe9d8))
+
 ## [1.46.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.45.0...v1.46.0) (2026-11-21)
 
 
