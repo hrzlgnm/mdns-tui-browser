@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.45.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.45.0...v1.45.1) (2026-11-21)
+
+
+### Dependencies
+
+* update rust crate url to v2.5.9 ([#835](https://github.com/hrzlgnm/mdns-tui-browser/issues/835)) ([7991f0b](https://github.com/hrzlgnm/mdns-tui-browser/commit/7991f0b2490372326fa3e75ec9ff9fefcb061172))
+
 ## [1.45.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.44.0...v1.45.0) (2026-11-20)
 
 
