@@ -11,6 +11,9 @@ use ratatui::{
 };
 
 /// Height of the text input overlay at the bottom of the terminal.
+/// Covers the same rows as the filter status bar, whose height is
+/// `FILTER_STATUS_BAR_HEIGHT` in `tui_app`; keep the two in sync or the
+/// mouse will aim presses at rows the overlay does not cover.
 pub const INPUT_OVERLAY_HEIGHT: u16 = 3;
 
 /// Rect of the text input overlay: the bottom rows of `area`. Shared by

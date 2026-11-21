@@ -56,7 +56,7 @@ pub fn pct_from_x(col: u16, body: Rect) -> u16 {
         // fallback value is arbitrary.
         return 33;
     }
-    let w = body.width.max(1) as u32;
+    let w = body.width as u32;
     ((col.saturating_sub(body.x) as u32 * 100 + w / 2) / w).min(100) as u16
 }
 
@@ -69,7 +69,7 @@ pub fn pct_from_y(row: u16, column: Rect) -> u16 {
         // fallback value is arbitrary.
         return 34;
     }
-    let h = column.height.max(1) as u32;
+    let h = column.height as u32;
     ((row.saturating_sub(column.y) as u32 * 100 + h / 2) / h).min(100) as u16
 }
 

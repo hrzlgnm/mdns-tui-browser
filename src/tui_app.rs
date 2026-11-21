@@ -40,7 +40,8 @@ const UI_CONTROLS_COLOR: Color = Color::Cyan;
 const VIEW_ONLY_BORDER_COLOR: Color = Color::DarkGray;
 const MIN_SERVICES_LIST_SIZE: usize = 5;
 /// Height of the filter status bar, and of the text input overlay that
-/// covers the same rows.
+/// covers the same rows (input.rs `INPUT_OVERLAY_HEIGHT`); keep the two
+/// in sync.
 const FILTER_STATUS_BAR_HEIGHT: u16 = 3;
 /// Minimum total rows (content plus borders) of the services list once
 /// the user drags its seam: the drag never shrinks the list below the
