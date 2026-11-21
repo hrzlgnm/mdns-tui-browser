@@ -6,6 +6,7 @@ mod daemon_status;
 mod input;
 mod logging;
 mod models;
+mod mouse;
 mod popup;
 mod quick_filter;
 mod scroll;

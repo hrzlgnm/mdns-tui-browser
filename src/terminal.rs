@@ -5,6 +5,7 @@
 use std::io::Stdout;
 
 use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -135,7 +136,9 @@ pub struct TuiTerminal {
 impl TuiTerminal {
     /// Creates a new terminal in TUI mode.
     ///
-    /// Enables raw mode and enters the alternate screen.
+    /// Enables raw mode, enters the alternate screen and captures the
+    /// mouse, so borders are draggable and clicks and wheel reach the
+    /// app. Capture is released again on [`TuiTerminal::stop`].
     ///
     /// # Errors
     /// Returns an error if enabling raw mode or entering alternate screen fails.
@@ -143,7 +146,7 @@ impl TuiTerminal {
         enable_raw_mode()?;
 
         let mut stdout = std::io::stdout();
-        if let Err(e) = execute!(stdout, EnterAlternateScreen) {
+        if let Err(e) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
             let _ = disable_raw_mode();
             return Err(Box::new(e));
         }
@@ -164,7 +167,8 @@ impl TuiTerminal {
 
     /// Starts (or restarts) the TUI mode.
     ///
-    /// Re-enables raw mode and re-enters the alternate screen if currently stopped.
+    /// Re-enables raw mode, re-enters the alternate screen and
+    /// re-captures the mouse if currently stopped.
     /// This is useful for pausing and resuming the TUI.
     ///
     /// # Errors
@@ -175,7 +179,7 @@ impl TuiTerminal {
         if !self.active {
             enable_raw_mode()?;
 
-            if let Err(e) = execute!(self.backend_mut(), EnterAlternateScreen) {
+            if let Err(e) = execute!(self.backend_mut(), EnterAlternateScreen, EnableMouseCapture) {
                 let _ = disable_raw_mode();
                 return Err(Box::new(e));
             }
@@ -187,8 +191,9 @@ impl TuiTerminal {
 
     /// Stops the TUI mode, restoring the normal terminal state.
     ///
-    /// Leaves the alternate screen, disables raw mode, and shows the cursor.
-    /// After calling `stop()`, the terminal can be restarted with `start()`.
+    /// Leaves the alternate screen, releases mouse capture, disables raw
+    /// mode, and shows the cursor. After calling `stop()`, the terminal
+    /// can be restarted with `start()`.
     ///
     /// # Errors
     /// Returns an error if any cleanup operation fails.
@@ -196,6 +201,12 @@ impl TuiTerminal {
         if self.active {
             self.active = false;
             let mut first_error = None;
+
+            if let Err(e) = execute!(self.backend_mut(), DisableMouseCapture)
+                && first_error.is_none()
+            {
+                first_error = Some(e.into());
+            }
 
             if let Err(e) = execute!(self.backend_mut(), LeaveAlternateScreen) {
                 first_error = Some(e.into());
