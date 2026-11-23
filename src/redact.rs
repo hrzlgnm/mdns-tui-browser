@@ -36,9 +36,9 @@ fn shannon_entropy(s: &str) -> f64 {
 
 /// Whether a TXT value looks like a token/key/hash: long, single-token
 /// charset (hex/base64/UUID-style, no spaces), and dense. Short values
-/// and human-readable text never match. The 3.2 floor also catches
-/// repetitive hex device IDs, which carry less entropy but are
-/// fingerprints all the same.
+/// and human-readable text never match. The 3.2-bit floor sits low
+/// enough to include repetitive hex device IDs, which carry less entropy
+/// than random tokens but are fingerprints all the same.
 fn is_high_entropy_value(v: &str) -> bool {
     v.len() >= 20
         && v.chars()
@@ -121,8 +121,8 @@ fn is_public_url(v: &str) -> bool {
 /// for debugging; `None` for anything else. Global unicast addresses are
 /// stable device fingerprints; link-local, unique-local, loopback,
 /// multicast and IPv4 stay visible. A `%scope` suffix is ignored.
-fn masked_public_ipv6(v: &str) -> Option<String> {
-    let unscoped = v.trim().split('%').next().unwrap_or("");
+fn masked_public_ipv6(addr: &str) -> Option<String> {
+    let unscoped = addr.trim().split('%').next().unwrap_or("");
     match unscoped.parse::<IpAddr>() {
         Ok(ip @ IpAddr::V6(v6)) if is_public_ip(&ip) => {
             let s = v6.segments();
