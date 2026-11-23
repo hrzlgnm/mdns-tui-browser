@@ -12,6 +12,8 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 
+use crate::models::SerializableServiceEntry;
+
 /// Shannon entropy in bits per character.
 fn shannon_entropy(s: &str) -> f64 {
     let mut counts = HashMap::new();
@@ -132,7 +134,7 @@ fn masked_public_ipv6(v: &str) -> Option<String> {
 
 /// Redact a bare public IPv6 literal (see `masked_public_ipv6`);
 /// anything else passes through unchanged.
-pub fn redact_ip_literal(addr: &str) -> String {
+fn redact_ip_literal(addr: &str) -> String {
     masked_public_ipv6(addr).unwrap_or_else(|| addr.to_string())
 }
 
@@ -140,7 +142,7 @@ pub fn redact_ip_literal(addr: &str) -> String {
 /// comparable: high-entropy tokens and publicly reachable URLs become
 /// `key=*REDACTED*`, public IPv6 literals keep their first and last
 /// hextet. Pairs without `=` or with ordinary values pass through.
-pub fn redact_txt_value(pair: &str) -> String {
+fn redact_txt_value(pair: &str) -> String {
     let Some((k, v)) = pair.split_once('=') else {
         return pair.to_string();
     };
@@ -150,6 +152,18 @@ pub fn redact_txt_value(pair: &str) -> String {
         format!("{k}={masked}")
     } else {
         pair.to_string()
+    }
+}
+
+/// Redact a dumped service in place so the dump is safe to share in bug
+/// reports: TXT pairs go through `redact_txt_value`, addresses through
+/// `redact_ip_literal`. Everything else is left untouched.
+pub fn redact_service_entry(entry: &mut SerializableServiceEntry) {
+    for txt in &mut entry.txt_records {
+        *txt = redact_txt_value(txt);
+    }
+    for addr in &mut entry.addresses {
+        *addr = redact_ip_literal(addr);
     }
 }
 

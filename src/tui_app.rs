@@ -667,15 +667,8 @@ impl AppState {
                 .services
                 .iter()
                 .map(|s: &ServiceEntry| {
-                    // Dumps get shared in bug reports: mask fingerprints
-                    // and public addresses.
                     let mut dumped = SerializableServiceEntry::from(s);
-                    for txt in &mut dumped.txt_records {
-                        *txt = redact::redact_txt_value(txt);
-                    }
-                    for addr in &mut dumped.addresses {
-                        *addr = redact::redact_ip_literal(addr);
-                    }
+                    redact::redact_service_entry(&mut dumped);
                     dumped
                 })
                 .collect(),
