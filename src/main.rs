@@ -9,6 +9,7 @@ mod models;
 mod mouse;
 mod popup;
 mod quick_filter;
+mod redact;
 mod scroll;
 mod status_message;
 mod terminal;

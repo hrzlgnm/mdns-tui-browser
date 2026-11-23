@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-11-21" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-11-23" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -156,6 +156,8 @@ r                      - Open release notes in browser
 Any other key          - Close help popup
 .PP
 \fBNote:\fR When loading a state file with \fB\-\-load-state\fR, the application runs in view-only mode (no browsing). The border color changes to a darker color to indicate this mode.
+.PP
+\fBNote:\fR State dumps are redacted so they are safe to share: TXT values that look like tokens, keys or hashes, and URLs pointing at public hosts, become \(lqkey=*REDACTED*\(rq; public IPv6 addresses keep only their first and last hextet (\(lq2003:*REDACTED*:7927\(rq). LAN addresses, LAN URLs and IPv4 addresses stay visible. Loading a redacted dump omits the masked addresses.
 
 .SH QUICK FILTER
 The quickfilter feature allows searching across all service fields using typo-tolerant fuzzy matching and status keywords.

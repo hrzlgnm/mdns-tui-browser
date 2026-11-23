@@ -30,6 +30,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
     - [Load State Argument](#load-state-argument---load-state-l)
 - [JSON State Dump](#json-state-dump)
   - [Usage](#usage)
+  - [Redaction](#redaction)
   - [JSON Structure](#json-structure)
 - [Controls](#controls)
   - [Service Details Controls](#service-details-controls)
@@ -234,6 +235,16 @@ mdns-tui-browser -l state-dump.json
 ```
 
 When loading a state file, no mDNS browsing is performed. The border color changes to a darker color to indicate view-only mode.
+
+### Redaction
+
+State dumps are redacted so they are safe to attach to bug reports:
+
+- TXT values that look like tokens, keys or hashes (long, dense, single-token strings such as device IDs, public keys or UUIDs) become `key=*REDACTED*`; the key is kept.
+- TXT values that are URLs pointing at a publicly reachable host become `key=*REDACTED*`. LAN URLs (private IPv4, link-local IPv6, `.local`, `.home.arpa`, `fritz.box`, …) stay visible.
+- Public IPv6 addresses, in TXT values and in the address list, keep only their first and last hextet: `2003:*REDACTED*:7927`.
+
+IPv4 addresses and link-local, unique-local, loopback and multicast IPv6 addresses are never redacted, and the live TUI always shows the full data. Loading a redacted dump with `--load-state` omits the masked addresses, since they are no longer valid IP addresses.
 
 ### JSON Structure
 
