@@ -2,7 +2,7 @@
 
 ## Workflow
 
-- Work on a typed branch (`feat/...`, `fix/...`, `chore/...`, `refactor/...`, `docs/...`, etc.) and land changes through a pull request; direct pushes to `main` are blocked.
+- Start every task in its own fresh worktree on a new typed branch (`feat/...`, `fix/...`, `chore/...`, `refactor/...`, `docs/...`, etc.) cut from `origin/main`: run `git fetch origin`, then `git worktree add -b <branch> <path> origin/main`, before making any change. Leave the primary checkout untouched. Land changes through a pull request; direct pushes to `main` are blocked.
 - Treat every task as authorizing commits and a pull request unless the user opts out. Commit each complete logical unit as soon as its applicable checks pass.
 - Do not consider work complete until Validation and the two-axis Code Review (see below) have both passed; pushing or opening a PR without the review is a violation. Once review is clean, push the branch and open the pull request without waiting to be asked; pull requests are squash-merged.
 - Pause for genuine forks: design tradeoffs, scope cuts, and UX or performance changes. Present the viable options and a recommendation; proceed without asking when a choice is mechanical and has one sensible answer.
