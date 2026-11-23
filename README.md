@@ -238,7 +238,7 @@ When loading a state file, no mDNS browsing is performed. The border color chang
 
 ### Redaction
 
-State dumps are redacted so they are safe to attach to bug reports:
+State dumps are redacted to make them easier to attach to bug reports. Redaction is heuristic: it leaves hostnames, instance names, interface names and the log file path untouched and can miss unusual fingerprints, so review a dump before sharing it.
 
 - TXT values that look like tokens, keys or hashes (long, dense, single-token strings such as device IDs, public keys or UUIDs) become `key=*REDACTED*`; the key is kept.
 - TXT values that are URLs pointing at a publicly reachable host become `key=*REDACTED*`. LAN URLs (private IPv4, link-local IPv6, `.local`, `.home.arpa`, `fritz.box`, …) stay visible.
@@ -330,7 +330,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>d</kbd> - Remove offline services
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show daemon status (sockets, interfaces, multicast joins) and metrics
-- <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file
+- <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file (redaction is heuristic, review before sharing)
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> - Suspend the application (Unix only)
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details

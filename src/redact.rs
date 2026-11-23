@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 #![forbid(unsafe_code)]
 
-//! Redaction policy that makes JSON state dumps safe to share.
+//! Heuristic redaction policy for JSON state dumps, so they can be shared
+//! after review.
 //!
 //! Device fingerprints (tokens, keys, hashes), publicly reachable URLs and
 //! public IPv6 addresses are masked; LAN data stays visible because it is
@@ -155,8 +156,8 @@ fn redact_txt_value(pair: &str) -> String {
     }
 }
 
-/// Redact a dumped service in place so the dump is safe to share in bug
-/// reports: TXT pairs go through `redact_txt_value`, addresses through
+/// Redact a dumped service in place before it is shared in bug reports:
+/// TXT pairs go through `redact_txt_value`, addresses through
 /// `redact_ip_literal`. Values that become identical once masked are kept
 /// once, in first-seen order. Everything else is left untouched.
 pub fn redact_service_entry(entry: &mut SerializableServiceEntry) {
