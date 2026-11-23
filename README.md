@@ -243,6 +243,7 @@ State dumps are redacted so they are safe to attach to bug reports:
 - TXT values that look like tokens, keys or hashes (long, dense, single-token strings such as device IDs, public keys or UUIDs) become `key=*REDACTED*`; the key is kept.
 - TXT values that are URLs pointing at a publicly reachable host become `key=*REDACTED*`. LAN URLs (private IPv4, link-local IPv6, `.local`, `.home.arpa`, `fritz.box`, …) stay visible.
 - Public IPv6 addresses, in TXT values and in the address list, keep only their first and last hextet: `2003:*REDACTED*:7927`.
+- Values that become identical once masked are listed only once.
 
 IPv4 addresses and link-local, unique-local, loopback and multicast IPv6 addresses are never redacted, and the live TUI always shows the full data. Loading a redacted dump with `--load-state` omits the masked addresses, since they are no longer valid IP addresses.
 

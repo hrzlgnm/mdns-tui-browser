@@ -9,7 +9,7 @@
 //! what a dump is meant to help debug. Markers match mex so dumps from both
 //! tools read alike.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 
 use crate::models::SerializableServiceEntry;
@@ -157,14 +157,20 @@ fn redact_txt_value(pair: &str) -> String {
 
 /// Redact a dumped service in place so the dump is safe to share in bug
 /// reports: TXT pairs go through `redact_txt_value`, addresses through
-/// `redact_ip_literal`. Everything else is left untouched.
+/// `redact_ip_literal`. Values that become identical once masked are kept
+/// once, in first-seen order. Everything else is left untouched.
 pub fn redact_service_entry(entry: &mut SerializableServiceEntry) {
-    for txt in &mut entry.txt_records {
-        *txt = redact_txt_value(txt);
-    }
-    for addr in &mut entry.addresses {
-        *addr = redact_ip_literal(addr);
-    }
+    entry.txt_records = redact_unique(&entry.txt_records, redact_txt_value);
+    entry.addresses = redact_unique(&entry.addresses, redact_ip_literal);
+}
+
+fn redact_unique(values: &[String], redact: fn(&str) -> String) -> Vec<String> {
+    let mut seen = HashSet::new();
+    values
+        .iter()
+        .map(|v| redact(v))
+        .filter(|v| seen.insert(v.clone()))
+        .collect()
 }
 
 #[cfg(test)]

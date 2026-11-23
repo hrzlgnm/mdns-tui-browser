@@ -9356,6 +9356,37 @@ mod tests {
     }
 
     #[test]
+    fn test_json_state_dump_collapses_values_identical_after_redaction() {
+        let mut state = create_test_app_state();
+        let mut service = create_test_service("device", "_http._tcp.local.", 80);
+        service.addrs = vec![
+            scoped_ip("2003:e8:bf10:9500:38e1:a9ff:fe2c:7927"),
+            scoped_ip("2003:e8:bf10:9501:38e1:a9ff:fe2c:7927"),
+            scoped_ip("192.168.1.81"),
+        ];
+        service.txt = vec![
+            "id=328FEBD442638273B38340E9AFE1E9CB".to_string(),
+            "id=8CED8754FF25F0C2D5A6E25CCD5E8A5F".to_string(),
+            "fn=Schreibtisch".to_string(),
+        ];
+        state.services.push(service);
+
+        let json: serde_json::Value =
+            serde_json::from_str(&state.dump_state_to_json().expect("dump succeeds"))
+                .expect("dump is valid JSON");
+
+        let service = &json["services"][0];
+        assert_eq!(
+            service["txtRecords"],
+            serde_json::json!(["id=*REDACTED*", "fn=Schreibtisch"])
+        );
+        assert_eq!(
+            service["addresses"],
+            serde_json::json!(["2003:*REDACTED*:7927", "192.168.1.81"])
+        );
+    }
+
+    #[test]
     fn test_json_state_dump_leaves_live_state_unredacted() {
         let mut state = create_test_app_state();
         let service = create_service_with_fingerprints();
