@@ -114,26 +114,26 @@ fn is_public_url(v: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Whether a string is a public IPv6 literal. Global unicast device
-/// addresses are stable fingerprints; link-local, unique-local, loopback
-/// and multicast stay visible.
-fn is_public_ipv6_literal(v: &str) -> bool {
-    matches!(v.trim().parse::<IpAddr>(), Ok(ip @ IpAddr::V6(_)) if is_public_ip(&ip))
+/// The masked form of a public IPv6 literal, keeping the first and last
+/// hextet (`2003:*REDACTED*:7927`) so prefix and host tail stay useful
+/// for debugging; `None` for anything else. Global unicast addresses are
+/// stable device fingerprints; link-local, unique-local, loopback,
+/// multicast and IPv4 stay visible. A `%scope` suffix is ignored.
+fn masked_public_ipv6(v: &str) -> Option<String> {
+    let unscoped = v.trim().split('%').next().unwrap_or("");
+    match unscoped.parse::<IpAddr>() {
+        Ok(ip @ IpAddr::V6(v6)) if is_public_ip(&ip) => {
+            let s = v6.segments();
+            Some(format!("{:x}:*REDACTED*:{:x}", s[0], s[7]))
+        }
+        _ => None,
+    }
 }
 
-/// Redact a bare public IPv6 literal, keeping the first and last hextet
-/// (`2003:*REDACTED*:7927`) so prefix and host tail stay useful for
-/// debugging. A `%scope` suffix is ignored for the decision. Anything
-/// else (including IPv4 and non-public IPv6) passes through unchanged.
+/// Redact a bare public IPv6 literal (see `masked_public_ipv6`);
+/// anything else passes through unchanged.
 pub fn redact_ip_literal(addr: &str) -> String {
-    let unscoped = addr.trim().split('%').next().unwrap_or("");
-    match unscoped.parse::<IpAddr>() {
-        Ok(IpAddr::V6(ip)) if is_public_ip(&IpAddr::V6(ip)) => {
-            let s = ip.segments();
-            format!("{:x}:*REDACTED*:{:x}", s[0], s[7])
-        }
-        _ => addr.to_string(),
-    }
+    masked_public_ipv6(addr).unwrap_or_else(|| addr.to_string())
 }
 
 /// Redact a TXT `key=value` pair, keeping the key so dumps stay
@@ -141,14 +141,15 @@ pub fn redact_ip_literal(addr: &str) -> String {
 /// `key=*REDACTED*`, public IPv6 literals keep their first and last
 /// hextet. Pairs without `=` or with ordinary values pass through.
 pub fn redact_txt_value(pair: &str) -> String {
-    match pair.split_once('=') {
-        Some((k, v)) if is_high_entropy_value(v) || is_public_url(v) => {
-            format!("{k}=*REDACTED*")
-        }
-        Some((k, v)) if is_public_ipv6_literal(v) => {
-            format!("{k}={}", redact_ip_literal(v))
-        }
-        _ => pair.to_string(),
+    let Some((k, v)) = pair.split_once('=') else {
+        return pair.to_string();
+    };
+    if is_high_entropy_value(v) || is_public_url(v) {
+        format!("{k}=*REDACTED*")
+    } else if let Some(masked) = masked_public_ipv6(v) {
+        format!("{k}={masked}")
+    } else {
+        pair.to_string()
     }
 }
 
@@ -229,6 +230,10 @@ mod tests {
     fn test_redact_txt_value_public_ipv6_masked() {
         assert_eq!(
             redact_txt_value("ipv6=2003:e8:bf10:9500:38e1:a9ff:fe2c:7927"),
+            "ipv6=2003:*REDACTED*:7927"
+        );
+        assert_eq!(
+            redact_txt_value("ipv6=2003:e8:bf10:9500:38e1:a9ff:fe2c:7927%eth0"),
             "ipv6=2003:*REDACTED*:7927"
         );
         assert_eq!(
