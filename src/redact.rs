@@ -49,22 +49,22 @@ fn is_high_entropy_value(v: &str) -> bool {
 fn is_public_ip(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(v) => {
-            let o = v.octets();
-            !(o[0] == 10
-                || (o[0] == 172 && (16..32).contains(&o[1]))
-                || (o[0] == 192 && o[1] == 168)
-                || o[0] == 127
-                || (o[0] == 169 && o[1] == 254)
-                || o[0] == 0
-                || o[0] >= 224)
+            let first = v.octets()[0];
+            // 0/8 ("this network") and 240/4 (reserved, broadcast) have
+            // no stable std predicate.
+            !(v.is_private()
+                || v.is_loopback()
+                || v.is_link_local()
+                || v.is_multicast()
+                || first == 0
+                || first >= 240)
         }
         IpAddr::V6(v) => {
-            let s = v.segments();
             !(v.is_loopback()
                 || v.is_unspecified()
-                || (s[0] & 0xffc0) == 0xfe80
-                || (s[0] & 0xfe00) == 0xfc00
-                || (s[0] & 0xff00) == 0xff00)
+                || v.is_unicast_link_local()
+                || v.is_unique_local()
+                || v.is_multicast())
         }
     }
 }
@@ -211,6 +211,8 @@ mod tests {
             redact_txt_value("x=http://[2003:e8::1]:8123/"),
             "x=*REDACTED*"
         );
+        assert_eq!(redact_txt_value("x=http://8.8.8.8/"), "x=*REDACTED*");
+        assert_eq!(redact_txt_value("x=http://172.32.0.1/"), "x=*REDACTED*");
     }
 
     #[test]
@@ -221,6 +223,14 @@ mod tests {
             "x=http://[fe80::1]:8123/",
             "path=http://printer.local.:9100/x",
             "x=http://router.home.arpa/",
+            "x=http://10.0.0.1/",
+            "x=http://172.31.255.1/",
+            "x=http://169.254.1.1/",
+            "x=http://127.0.0.1:8080/",
+            "x=http://0.0.0.0/",
+            "x=http://255.255.255.255/",
+            "x=http://[fd00::1]/",
+            "x=http://[::1]/",
         ] {
             assert_eq!(redact_txt_value(pair), pair);
         }
