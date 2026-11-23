@@ -241,7 +241,7 @@ When loading a state file, no mDNS browsing is performed. The border color chang
 State dumps are redacted to make them easier to attach to bug reports. Redaction is heuristic: it leaves hostnames, instance names, interface names, the filter query and the log file path untouched and can miss unusual fingerprints, so review a dump before sharing it.
 
 - TXT values that look like tokens, keys or hashes (long, dense, single-token strings such as device IDs, public keys or UUIDs) become `key=*REDACTED*`; the key is kept.
-- TXT values that are URLs pointing at a publicly reachable host become `key=*REDACTED*`. LAN URLs (private IPv4, link-local IPv6, `.local`, `.home.arpa`, `fritz.box`, …) stay visible.
+- TXT values that are URLs pointing at a publicly reachable host become `key=*REDACTED*`. LAN URLs (private IPv4, link-local IPv6, `.local`, `.home.arpa`, …) stay visible.
 - Public IPv6 addresses, in TXT values and in the address list, keep only their first and last hextet: `2003:*REDACTED*:7927`.
 - Values that become identical once masked are listed only once.
 

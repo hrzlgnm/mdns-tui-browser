@@ -107,7 +107,6 @@ fn is_public_host(host: &str) -> bool {
         ".lan",
         ".home",
         ".home.arpa",
-        ".box",
         ".repeater",
     ]
     .iter()
@@ -244,13 +243,16 @@ mod tests {
         );
         assert_eq!(redact_txt_value("x=http://8.8.8.8/"), "x=*REDACTED*");
         assert_eq!(redact_txt_value("x=http://172.32.0.1/"), "x=*REDACTED*");
+        assert_eq!(
+            redact_txt_value("external_url=https://nic.box/account"),
+            "external_url=*REDACTED*"
+        );
     }
 
     #[test]
     fn test_redact_txt_value_lan_urls_unchanged() {
         for pair in [
             "internal_url=http://192.168.178.27:8095",
-            "path=http://fritz.box:49000/avmnexusdesc.xml",
             "x=http://[fe80::1]:8123/",
             "path=http://printer.local.:9100/x",
             "x=http://router.home.arpa/",
