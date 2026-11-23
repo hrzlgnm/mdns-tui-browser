@@ -69,8 +69,8 @@ fn is_public_ip(ip: &IpAddr) -> bool {
             }
             let s = v.segments();
             // 2001:db8::/32 (documentation) has no stable std predicate.
-            let documentation = s[0] == 0x2001 && s[1] == 0x0db8;
-            !(documentation
+            let is_documentation = s[0] == 0x2001 && s[1] == 0x0db8;
+            !(is_documentation
                 || v.is_loopback()
                 || v.is_unspecified()
                 || v.is_unicast_link_local()
@@ -129,7 +129,9 @@ fn is_public_url(v: &str) -> bool {
 /// hextet (`2003:*REDACTED*:7927`) so prefix and host tail stay useful
 /// for debugging; `None` for anything else. Global unicast addresses are
 /// stable device fingerprints; link-local, unique-local, loopback,
-/// multicast and IPv4 stay visible. A `%scope` suffix is ignored.
+/// multicast, documentation and plain IPv4 stay visible. An IPv4-mapped
+/// address is masked when its IPv4 part is public. A `%scope` suffix is
+/// ignored.
 fn masked_public_ipv6(addr: &str) -> Option<String> {
     let unscoped = addr.trim().split('%').next().unwrap_or("");
     match unscoped.parse::<IpAddr>() {
@@ -292,6 +294,11 @@ mod tests {
             redact_ip_literal("2003:e8:bf10:9500:38e1:a9ff:fe2c:7927%eth0"),
             "2003:*REDACTED*:7927"
         );
+    }
+
+    #[test]
+    fn test_redact_ip_literal_mapped_public_ipv4_masked() {
+        assert_eq!(redact_ip_literal("::ffff:8.8.8.8"), "0:*REDACTED*:808");
     }
 
     #[test]
