@@ -48,7 +48,8 @@ fn is_high_entropy_value(v: &str) -> bool {
 }
 
 /// Whether an IP address is publicly routable (i.e. not private,
-/// loopback, link-local, unique-local, or multicast).
+/// loopback, link-local, unique-local, multicast, or documentation).
+/// IPv4-mapped IPv6 addresses are judged by their IPv4 part.
 fn is_public_ip(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(v) => {
@@ -63,7 +64,14 @@ fn is_public_ip(ip: &IpAddr) -> bool {
                 || first >= 240)
         }
         IpAddr::V6(v) => {
-            !(v.is_loopback()
+            if let Some(v4) = v.to_ipv4_mapped() {
+                return is_public_ip(&IpAddr::V4(v4));
+            }
+            let s = v.segments();
+            // 2001:db8::/32 (documentation) has no stable std predicate.
+            let documentation = s[0] == 0x2001 && s[1] == 0x0db8;
+            !(documentation
+                || v.is_loopback()
                 || v.is_unspecified()
                 || v.is_unicast_link_local()
                 || v.is_unique_local()
@@ -290,6 +298,8 @@ mod tests {
     fn test_redact_ip_literal_non_public_unchanged() {
         for addr in [
             "::1",
+            "::ffff:192.168.1.1",
+            "2001:db8::1",
             "fe80::1%eth0",
             "fd00::1",
             "ff02::fb",

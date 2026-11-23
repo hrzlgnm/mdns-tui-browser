@@ -245,7 +245,7 @@ State dumps are redacted to make them easier to attach to bug reports. Redaction
 - Public IPv6 addresses, in TXT values and in the address list, keep only their first and last hextet: `2003:*REDACTED*:7927`.
 - Values that become identical once masked are listed only once.
 
-IPv4 addresses and link-local, unique-local, loopback and multicast IPv6 addresses are never redacted, and the live TUI always shows the full data. Loading a redacted dump with `--load-state` omits the masked addresses, since they are no longer valid IP addresses.
+IPv4 addresses (including IPv4-mapped IPv6 forms of private ones) and link-local, unique-local, loopback, multicast and documentation (`2001:db8::/32`) IPv6 addresses are never redacted, and the live TUI always shows the full data. Loading a redacted dump with `--load-state` omits the masked addresses, since they are no longer valid IP addresses.
 
 ### JSON Structure
 
