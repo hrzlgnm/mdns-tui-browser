@@ -2,7 +2,8 @@
 
 ## Workflow
 
-- Start each new task in a fresh worktree of its own on a new typed branch (`feat/...`, `fix/...`, `chore/...`, `refactor/...`, `docs/...`, etc.) cut from `origin/main`: run `git fetch origin`, then `git worktree add -b <branch> ../mdns-tui-browser-wt-<topic> origin/main`, before making any change. Continue an open pull request's branch in the worktree that already holds it, and leave the primary checkout untouched.
+- Start each new task in a worktree created for it, on a new typed branch (`feat/...`, `fix/...`, `chore/...`, `refactor/...`, `docs/...`, etc.) cut from `origin/main`: run `git fetch origin`, then `git worktree add -b <branch> ../mdns-tui-browser-wt-<topic> origin/main`, before making any change.
+- Keep the primary checkout untouched, and continue an open pull request's branch in the worktree created for it.
 - Land changes through a pull request; direct pushes to `main` are blocked.
 - Run every git command that talks to the remote (`fetch`, `pull`, `push`) after `export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes"` in the same shell command: the SSH agent offers hardware security keys first, and those fail without a human at the device.
 - Treat every task as authorizing commits and a pull request unless the user opts out. Commit each complete logical unit as soon as its applicable checks pass.
