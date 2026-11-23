@@ -30,6 +30,7 @@ A terminal-based mDNS service browser built with Rust, using `ratatui` for the T
     - [Load State Argument](#load-state-argument---load-state-l)
 - [JSON State Dump](#json-state-dump)
   - [Usage](#usage)
+  - [Redaction](#redaction)
   - [JSON Structure](#json-structure)
 - [Controls](#controls)
   - [Service Details Controls](#service-details-controls)
@@ -235,6 +236,17 @@ mdns-tui-browser -l state-dump.json
 
 When loading a state file, no mDNS browsing is performed. The border color changes to a darker color to indicate view-only mode.
 
+### Redaction
+
+State dumps are redacted to make them easier to attach to bug reports. Redaction is heuristic: it leaves hostnames, instance names, interface names, the filter query and the log file path untouched and can miss unusual fingerprints, so review a dump before sharing it.
+
+- TXT values that look like tokens, keys or hashes (long, dense, single-token strings such as device IDs, public keys or UUIDs) become `key=*REDACTED*`; the key is kept.
+- TXT values that are URLs pointing at a publicly reachable host become `key=*REDACTED*`. LAN URLs (private IPv4, link-local IPv6, `.local`, `.home.arpa`, …) stay visible.
+- Public IPv6 addresses, in TXT values and in the address list, keep only their first and last hextet: `2003:*REDACTED*:7927`.
+- Values that become identical once masked are listed only once.
+
+Plain IPv4 addresses and link-local, unique-local, loopback, multicast and documentation (`2001:db8::/32`) IPv6 addresses are never redacted. An IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) is masked like other IPv6 addresses when its IPv4 part is public (`::ffff:8.8.8.8` becomes `0:*REDACTED*:808`) and kept when it is private. The live TUI always shows the full data. Loading a redacted dump with `--load-state` omits the masked addresses, since they are no longer valid IP addresses.
+
 ### JSON Structure
 
 The exported JSON contains comprehensive information about the current application state:
@@ -318,7 +330,7 @@ The exported JSON contains comprehensive information about the current applicati
 - <kbd>d</kbd> - Remove offline services
 - <kbd>D</kbd> - Clear stale service types (service types with no services)
 - <kbd>m</kbd> - Show daemon status (sockets, interfaces, multicast joins) and metrics
-- <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file
+- <kbd>Ctrl</kbd>+<kbd>J</kbd> - Dump current state to JSON file (redaction is heuristic, review before sharing)
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> - Suspend the application (Unix only)
 - <kbd>?</kbd> - Toggle help popup
 - <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> or <kbd>J</kbd>/<kbd>K</kbd> - Scroll service details

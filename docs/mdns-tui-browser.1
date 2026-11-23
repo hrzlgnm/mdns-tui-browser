@@ -1,4 +1,4 @@
-.TH mdns-tui-browser 1 "2026-11-21" "mdns-tui-browser" "User Commands"
+.TH mdns-tui-browser 1 "2026-11-23" "mdns-tui-browser" "User Commands"
 
 .SH NAME
 mdns-tui-browser \- terminal-based mDNS service browser
@@ -115,7 +115,7 @@ D                      - Clear stale service types (service types with no servic
 .br
 m                      - Show daemon status and metrics
 .br
-Ctrl+J                 - Dump current state to JSON file
+Ctrl+J                 - Dump current state to JSON file (redaction is heuristic, review before sharing)
 .br
 Ctrl+Z                 - Suspend the application (Unix only)
 .br
@@ -156,6 +156,8 @@ r                      - Open release notes in browser
 Any other key          - Close help popup
 .PP
 \fBNote:\fR When loading a state file with \fB\-\-load-state\fR, the application runs in view-only mode (no browsing). The border color changes to a darker color to indicate this mode.
+.PP
+\fBNote:\fR State dumps mask device fingerprints in TXT records, public URLs and public IPv6 addresses, and loading such a dump omits the masked addresses. Redaction is heuristic; review a dump before sharing it. See the README for details.
 
 .SH QUICK FILTER
 The quickfilter feature allows searching across all service fields using typo-tolerant fuzzy matching and status keywords.

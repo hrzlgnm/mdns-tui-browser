@@ -23,13 +23,14 @@ use tokio::sync::RwLock;
 use crate::daemon_status::{DaemonSnapshot, Problem, problems_transition_message};
 use crate::input::InputState;
 use crate::models::{
-    AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, ServiceEntry,
-    SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros, display_fullname,
-    format_ip_for_display, format_service_addrs, local_interface_addrs,
+    AppOptions, FilterInfo, LocalAddrs, MDNS_SD_META_SERVICE, Metadata, SerializableServiceEntry,
+    ServiceEntry, SortDirection, SortField, SortInfo, StateDump, current_timestamp_micros,
+    display_fullname, format_ip_for_display, format_service_addrs, local_interface_addrs,
 };
 use crate::mouse;
 use crate::popup::PopupState;
 use crate::quick_filter::{QuickFilter, Relevance, SearchFieldCache};
+use crate::redact;
 use crate::scroll::ScrollState;
 use crate::status_message::StatusMessage;
 use crate::terminal::{TuiTerminal, colors_disabled, with_monochrome_selection};
@@ -665,7 +666,11 @@ impl AppState {
             services: self
                 .services
                 .iter()
-                .map(|s: &ServiceEntry| s.into())
+                .map(|s: &ServiceEntry| {
+                    let mut dumped = SerializableServiceEntry::from(s);
+                    redact::redact_service_entry(&mut dumped);
+                    dumped
+                })
                 .collect(),
             service_types: self.service_types.clone(),
             metrics: self.metrics.clone(),
@@ -9301,6 +9306,126 @@ mod tests {
             Some("/tmp/mdns-tui-browser.log")
         );
         assert_eq!(loaded_state.log_level.as_deref(), Some("debug"));
+    }
+
+    fn parse_dump<T: serde::de::DeserializeOwned>(state: &AppState) -> T {
+        serde_json::from_str(&state.dump_state_to_json().expect("dump succeeds"))
+            .expect("dump parses")
+    }
+
+    fn create_service_with_fingerprints() -> ServiceEntry {
+        let mut service = create_test_service("device", "_http._tcp.local.", 80);
+        service.addrs = vec![
+            scoped_ip("2003:e8:bf10:9500:38e1:a9ff:fe2c:7927"),
+            scoped_ip("fe80::38e1:a9ff:fe2c:7927"),
+            scoped_ip("192.168.1.81"),
+        ];
+        service.txt = vec![
+            "id=328FEBD442638273B38340E9AFE1E9CB".to_string(),
+            "external_url=https://ha.example.com".to_string(),
+            "internal_url=http://192.168.178.27:8095".to_string(),
+            "ipv6=2003:e8:bf10:9500:38e1:a9ff:fe2c:7927".to_string(),
+            "fn=Schreibtisch".to_string(),
+        ];
+        service
+    }
+
+    #[test]
+    fn test_json_state_dump_redacts_fingerprints_and_public_addresses() {
+        let mut state = create_test_app_state();
+        state.services.push(create_service_with_fingerprints());
+
+        let json: serde_json::Value = parse_dump(&state);
+
+        let service = &json["services"][0];
+        assert_eq!(
+            service["txtRecords"],
+            serde_json::json!([
+                "id=*REDACTED*",
+                "external_url=*REDACTED*",
+                "internal_url=http://192.168.178.27:8095",
+                "ipv6=2003:*REDACTED*:7927",
+                "fn=Schreibtisch",
+            ])
+        );
+        assert_eq!(
+            service["addresses"],
+            serde_json::json!([
+                "2003:*REDACTED*:7927",
+                "fe80::38e1:a9ff:fe2c:7927",
+                "192.168.1.81",
+            ])
+        );
+    }
+
+    #[test]
+    fn test_json_state_dump_collapses_values_identical_after_redaction() {
+        let mut state = create_test_app_state();
+        let mut service = create_test_service("device", "_http._tcp.local.", 80);
+        service.addrs = vec![
+            scoped_ip("2003:e8:bf10:9500:38e1:a9ff:fe2c:7927"),
+            scoped_ip("2003:e8:bf10:9501:38e1:a9ff:fe2c:7927"),
+            scoped_ip("192.168.1.81"),
+        ];
+        service.txt = vec![
+            "id=328FEBD442638273B38340E9AFE1E9CB".to_string(),
+            "id=8CED8754FF25F0C2D5A6E25CCD5E8A5F".to_string(),
+            "fn=Schreibtisch".to_string(),
+        ];
+        state.services.push(service);
+
+        let json: serde_json::Value = parse_dump(&state);
+
+        let service = &json["services"][0];
+        assert_eq!(
+            service["txtRecords"],
+            serde_json::json!(["id=*REDACTED*", "fn=Schreibtisch"])
+        );
+        assert_eq!(
+            service["addresses"],
+            serde_json::json!(["2003:*REDACTED*:7927", "192.168.1.81"])
+        );
+    }
+
+    #[test]
+    fn test_json_state_dump_leaves_live_state_unredacted() {
+        let mut state = create_test_app_state();
+        let service = create_service_with_fingerprints();
+        state.services.push(service.clone());
+
+        state.dump_state_to_json().expect("dump succeeds");
+
+        assert_eq!(state.services[0].txt, service.txt);
+        assert_eq!(state.services[0].addrs, service.addrs);
+    }
+
+    #[test]
+    fn test_load_redacted_state_dump_drops_masked_addresses() {
+        let mut source = create_test_app_state();
+        source.services.push(create_service_with_fingerprints());
+        let dump: StateDump = parse_dump(&source);
+
+        let mut state = create_test_app_state();
+        state.load_from_state_dump(dump);
+
+        let loaded = &state.services[0];
+        assert_eq!(
+            loaded.addrs,
+            vec![
+                scoped_ip("fe80::38e1:a9ff:fe2c:7927"),
+                scoped_ip("192.168.1.81")
+            ]
+        );
+        assert_eq!(
+            loaded.txt,
+            vec![
+                "id=*REDACTED*",
+                "external_url=*REDACTED*",
+                "internal_url=http://192.168.178.27:8095",
+                "ipv6=2003:*REDACTED*:7927",
+                "fn=Schreibtisch",
+            ]
+        );
     }
 
     #[test]
