@@ -3,7 +3,7 @@
 
 [package]
 name = "mdns-tui-browser"
-version = "1.46.0"
+version = "1.47.0"
 edition = "2024"
 rust-version = "1.89"
 description = "A TUI browser for mDNS service discovery"
