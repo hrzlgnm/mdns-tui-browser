@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.47.0...v1.48.0) (2026-11-23)
+
+
+### Features
+
+* redact fingerprints and public addresses in state dumps ([#848](https://github.com/hrzlgnm/mdns-tui-browser/issues/848)) ([ed991c3](https://github.com/hrzlgnm/mdns-tui-browser/commit/ed991c3552111f68b856499507607c4569622c5c))
+
+
+### Dependencies
+
+* lock file maintenance ([#844](https://github.com/hrzlgnm/mdns-tui-browser/issues/844)) ([5449278](https://github.com/hrzlgnm/mdns-tui-browser/commit/5449278292efe59fc894ae801dac1cd87bf9b2af))
+* lock file maintenance ([#851](https://github.com/hrzlgnm/mdns-tui-browser/issues/851)) ([c94a414](https://github.com/hrzlgnm/mdns-tui-browser/commit/c94a41441db88804850838daac5c1afe0c110dc1))
+* update dependency sccache to v0.20.0 ([#846](https://github.com/hrzlgnm/mdns-tui-browser/issues/846)) ([0c00685](https://github.com/hrzlgnm/mdns-tui-browser/commit/0c0068575e9a893a8d6fd8b4e3d144df557ff01c))
+
+
+### Documentation
+
+* agent worktree workflow and SSH key for remote git calls ([#849](https://github.com/hrzlgnm/mdns-tui-browser/issues/849)) ([44139d9](https://github.com/hrzlgnm/mdns-tui-browser/commit/44139d978395f4b8d8ffd2f89e155822938f6d32))
+* continue a pull request where its branch is checked out ([#850](https://github.com/hrzlgnm/mdns-tui-browser/issues/850)) ([846d38b](https://github.com/hrzlgnm/mdns-tui-browser/commit/846d38bd95e1b2b40807b77f21207a887c5ddbcc))
+
 ## [1.47.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.46.0...v1.47.0) (2026-11-21)
 
 
