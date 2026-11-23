@@ -9308,6 +9308,11 @@ mod tests {
         assert_eq!(loaded_state.log_level.as_deref(), Some("debug"));
     }
 
+    fn parse_dump<T: serde::de::DeserializeOwned>(state: &AppState) -> T {
+        serde_json::from_str(&state.dump_state_to_json().expect("dump succeeds"))
+            .expect("dump parses")
+    }
+
     fn create_service_with_fingerprints() -> ServiceEntry {
         let mut service = create_test_service("device", "_http._tcp.local.", 80);
         service.addrs = vec![
@@ -9330,9 +9335,7 @@ mod tests {
         let mut state = create_test_app_state();
         state.services.push(create_service_with_fingerprints());
 
-        let json: serde_json::Value =
-            serde_json::from_str(&state.dump_state_to_json().expect("dump succeeds"))
-                .expect("dump is valid JSON");
+        let json: serde_json::Value = parse_dump(&state);
 
         let service = &json["services"][0];
         assert_eq!(
@@ -9371,9 +9374,7 @@ mod tests {
         ];
         state.services.push(service);
 
-        let json: serde_json::Value =
-            serde_json::from_str(&state.dump_state_to_json().expect("dump succeeds"))
-                .expect("dump is valid JSON");
+        let json: serde_json::Value = parse_dump(&state);
 
         let service = &json["services"][0];
         assert_eq!(
@@ -9402,9 +9403,7 @@ mod tests {
     fn test_load_redacted_state_dump_drops_masked_addresses() {
         let mut source = create_test_app_state();
         source.services.push(create_service_with_fingerprints());
-        let dump: StateDump =
-            serde_json::from_str(&source.dump_state_to_json().expect("dump succeeds"))
-                .expect("redacted dump parses");
+        let dump: StateDump = parse_dump(&source);
 
         let mut state = create_test_app_state();
         state.load_from_state_dump(dump);
@@ -9417,7 +9416,16 @@ mod tests {
                 scoped_ip("192.168.1.81")
             ]
         );
-        assert_eq!(loaded.txt[0], "id=*REDACTED*");
+        assert_eq!(
+            loaded.txt,
+            vec![
+                "id=*REDACTED*",
+                "external_url=*REDACTED*",
+                "internal_url=http://192.168.178.27:8095",
+                "ipv6=2003:*REDACTED*:7927",
+                "fn=Schreibtisch",
+            ]
+        );
     }
 
     #[test]
