@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.1](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.48.0...v1.48.1) (2026-11-25)
+
+
+### Dependencies
+
+* update anchore/scan-action action to v7.4.3 ([#852](https://github.com/hrzlgnm/mdns-tui-browser/issues/852)) ([7cc54cb](https://github.com/hrzlgnm/mdns-tui-browser/commit/7cc54cb2938402e77e832bc84dbcac42b9896302))
+* update dependency cargo-auditable to v0.7.8 ([#857](https://github.com/hrzlgnm/mdns-tui-browser/issues/857)) ([576d391](https://github.com/hrzlgnm/mdns-tui-browser/commit/576d3911ff3a99f6e16b6e5b2d80e405e92baa72))
+* update dependency sccache to v0.20.1 ([#855](https://github.com/hrzlgnm/mdns-tui-browser/issues/855)) ([e156dbc](https://github.com/hrzlgnm/mdns-tui-browser/commit/e156dbce37b39d1503a39640ed8e3cfab7f82413))
+* update ghcr.io/hrzlgnm/mdns-browser-arch-aur-builder:v1 docker digest to 9b1f812 ([#854](https://github.com/hrzlgnm/mdns-tui-browser/issues/854)) ([c1483bc](https://github.com/hrzlgnm/mdns-tui-browser/commit/c1483bc6d6ce7074d5e1f7acb19d6e312b88fc3e))
+* update rust crate clap to v4.6.10 ([#856](https://github.com/hrzlgnm/mdns-tui-browser/issues/856)) ([c06d454](https://github.com/hrzlgnm/mdns-tui-browser/commit/c06d4541d299b3affee34060f60ccbfadd8cdf54))
+
 ## [1.48.0](https://github.com/hrzlgnm/mdns-tui-browser/compare/v1.47.0...v1.48.0) (2026-11-23)
 
 
